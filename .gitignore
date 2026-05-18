@@ -1,0 +1,25 @@
+# IDE
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# Build
+dist/
+*.spec
+
+# Claude Code
+.claude/
+
+# Data files
+csv/*.csv
+
+# UI state
+.column_widths.json
+
+# OS
+Thumbs.db

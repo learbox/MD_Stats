@@ -27,17 +27,6 @@
 
 
 import sys
-from pathlib import Path
-
-# ---------------------------------------------------------------------------
-# 将项目根目录和 src/ 目录加入 sys.path
-# ---------------------------------------------------------------------------
-# 项目根目录：供 from src.xxx / from ui.xxx 导入
-# src/ 目录：  供 src/ 内部模块互引用（import config、import capture）
-_PROJECT_ROOT = Path(__file__).resolve().parent
-for _p in (_PROJECT_ROOT, _PROJECT_ROOT / "src"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
 
 from PySide6.QtWidgets import QApplication
 from ui.main_window import MainWindow

@@ -7,4 +7,5 @@ dependencies = [
     "numpy>=2.4.5",
     "opencv-python>=4.13.0.92",
     "pyside6>=6.11.1",
+    "pywin32==311",
 ]

@@ -70,7 +70,7 @@ def _find_window_by_title(title_substring: str) -> tuple[int, str] | None:
     Returns:
         (hwnd, window_title) — 窗口句柄和完整标题，未找到时返回 None。
     """
-    # 用于收集匹配结果的闭包容器
+    # 用于收集匹配结果的容器，嵌套回调函数通过引用修改它
     result: list[tuple[int, str]] = []
 
     def enum_callback(hwnd: int, _results: list) -> bool:
@@ -103,6 +103,29 @@ def _find_window_by_title(title_substring: str) -> tuple[int, str] | None:
 
     # 返回第一个匹配项（通常 Z-order 最高的那个）
     return result[0] if result else None
+
+
+def get_window_status(title_substring: str = "masterduel") -> tuple[int | None, tuple[int, int] | None, bool]:
+    """一次 EnumWindows 查询窗口是否存在、客户区尺寸、是否最小化。
+
+    替代分别调用 is_window_minimized + get_client_size（两次遍历），
+    调用方通过一次调用拿到全部信息，避免冗余的窗口枚举。
+
+    Args:
+        title_substring: 窗口标题关键词，默认 "masterduel"。
+
+    Returns:
+        (hwnd, size, is_minimized):
+        - hwnd: 窗口句柄或 None（未找到）
+        - size: (width, height) 或 None（未找到）
+        - is_minimized: 仅 hwnd 非 None 时有效
+    """
+    found = _find_window_by_title(title_substring)
+    if found is None:
+        return None, None, False
+    hwnd, _title = found
+    left, top, right, bottom = win32gui.GetClientRect(hwnd)
+    return hwnd, (right - left, bottom - top), bool(win32gui.IsIconic(hwnd))
 
 
 def is_window_open(title_substring: str = "masterduel") -> bool:

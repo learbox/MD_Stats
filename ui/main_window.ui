@@ -78,6 +78,19 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="btn_lock_deck">
+       <property name="text">
+        <string>修改卡组</string>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>70</width>
+         <height>16777215</height>
+        </size>
+       </property>
+      </widget>
+     </item>
+     <item>
       <spacer name="spacerCtrl2">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
@@ -110,6 +123,19 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
        </property>
        <property name="styleSheet">
         <string>QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 4px 12px; }</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_undo">
+       <property name="text">
+        <string>撤销</string>
+       </property>
+       <property name="visible">
+        <bool>false</bool>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton { background-color: #9E9E9E; color: white; padding: 4px 12px; }</string>
        </property>
       </widget>
      </item>
@@ -160,7 +186,7 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
      <item>
       <widget class="QPushButton" name="btn_copy">
        <property name="text">
-        <string>复制到剪贴板</string>
+        <string>复制统计</string>
        </property>
       </widget>
      </item>
@@ -182,6 +208,43 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
       <widget class="QPushButton" name="btn_reload_config">
        <property name="text">
         <string>重新载入配置</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacerDelete">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeType">
+        <enum>QSizePolicy::Fixed</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_delete_last">
+       <property name="text">
+        <string>删除最后记录</string>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton { background-color: #F44336; color: white; padding: 4px 12px; }
+QPushButton:disabled { background-color: #9E9E9E; }</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_about">
+       <property name="text">
+        <string>关于</string>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton { padding: 4px 12px; }</string>
        </property>
       </widget>
      </item>

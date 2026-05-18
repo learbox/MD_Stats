@@ -26,7 +26,7 @@ confidence_threshold = 0.8
 # ------------------------------------------------------------------------------
 [window]
 # 主窗口宽度（像素）
-width = 790
+width = 895
 # 主窗口高度（像素）
 height = 500
 
@@ -54,4 +54,4 @@ presets = ["炎兽", "闪刀姬", "烙印", "白银城"]
 # 是否启用按日期分文件存储。
 # false: 所有对战数据保存在 csv/data.csv 中（默认）。
 # true:  每天生成独立文件 csv/data-YYYY-MM-DD.csv，启动时自动创建。
-daily_files = false
+daily_files = true
