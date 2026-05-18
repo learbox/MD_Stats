@@ -18,8 +18,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QPoint, QSize
-from PySide6.QtGui import QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QPushButton, QWidget
 
 
 class _TitleBarButton(QPushButton):
@@ -121,13 +121,32 @@ class TitleBar(QWidget):
         layout.addWidget(self._icon_label)
 
         # ---- 标题文字 ----
+        # text_font / text_shadow 是新加的可选字段，主题不提供时回到原始外观，
+        # 不影响 dark / light 主题
         title_color = config.get("text_color", "#cccccc")
         title_size = config.get("text_size", 12)
+        title_font_family = config.get("text_font", "")
         self._title_label = QLabel(title)
-        self._title_label.setStyleSheet(
-            f"color: {title_color}; font-size: {title_size}px; "
-            "font-weight: 600; background: transparent; border: none;"
-        )
+        if title_font_family:
+            self._title_label.setStyleSheet(
+                f"color: {title_color}; font-size: {title_size}px; "
+                f"font-family: {title_font_family}; "
+                "font-weight: 700; letter-spacing: 1px; "
+                "background: transparent; border: none;"
+            )
+        else:
+            self._title_label.setStyleSheet(
+                f"color: {title_color}; font-size: {title_size}px; "
+                "font-weight: 600; background: transparent; border: none;"
+            )
+        # 柔和粉色阴影 — 让标题文字带一点水彩晕染感（仅当主题指定 text_shadow 时启用）
+        shadow_color = config.get("text_shadow", "")
+        if shadow_color:
+            effect = QGraphicsDropShadowEffect(self._title_label)
+            effect.setColor(QColor(shadow_color))
+            effect.setBlurRadius(8)
+            effect.setOffset(0, 1)
+            self._title_label.setGraphicsEffect(effect)
         layout.addWidget(self._title_label)
         layout.addStretch()
 
@@ -167,13 +186,31 @@ class TitleBar(QWidget):
         """主题切换后重新应用标题栏样式。"""
         text_color = config.get("text_color", "#cccccc")
         text_size = config.get("text_size", 12)
+        title_font_family = config.get("text_font", "")
         btn_hover_bg = config.get("btn_hover_bg", "#3a3a5a")
         btn_close_hover = config.get("btn_close_hover", "#e74c3c")
 
-        self._title_label.setStyleSheet(
-            f"color: {text_color}; font-size: {text_size}px; "
-            "font-weight: 600; background: transparent; border: none;"
-        )
+        if title_font_family:
+            self._title_label.setStyleSheet(
+                f"color: {text_color}; font-size: {text_size}px; "
+                f"font-family: {title_font_family}; "
+                "font-weight: 700; letter-spacing: 1px; "
+                "background: transparent; border: none;"
+            )
+        else:
+            self._title_label.setStyleSheet(
+                f"color: {text_color}; font-size: {text_size}px; "
+                "font-weight: 600; background: transparent; border: none;"
+            )
+        shadow_color = config.get("text_shadow", "")
+        if shadow_color:
+            effect = QGraphicsDropShadowEffect(self._title_label)
+            effect.setColor(QColor(shadow_color))
+            effect.setBlurRadius(8)
+            effect.setOffset(0, 1)
+            self._title_label.setGraphicsEffect(effect)
+        else:
+            self._title_label.setGraphicsEffect(None)
         self._btn_min.setStyleSheet(
             "QPushButton { background: transparent; border: 1px solid transparent; "
             "border-radius: 4px; }"

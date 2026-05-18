@@ -17,10 +17,14 @@ name = "马卡龙"
 #   btn_close_hover: 关闭按钮悬停时的背景色（通常用红色系）
 # ==============================================================================
 [titlebar]
-height = 36
-icon_size = 20
-text_color = "#7a6b7e"
-text_size = 12
+height = 40
+icon_size = 22
+text_color = "#9b6b8e"
+text_size = 16
+# Marker Felt（mac）/ Bradley Hand / Chalkboard SE — 手写但端正、可读，
+# 没有 Snell Roundhand 那种花体；Windows 上回退到 Comic Sans MS / 楷体。
+text_font = '"Marker Felt", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", "楷体", "KaiTi", "STKaiti", "Microsoft YaHei"'
+text_shadow = "#fce4ec"
 btn_hover_bg = "#fce4ec"
 btn_close_hover = "#f0a5b5"
 
@@ -53,8 +57,13 @@ btn_close_hover = "#f0a5b5"
 #     └─────────────────┴───────────┴──────┴─────────┴──────────────────────────┘
 # ==============================================================================
 [assets]
-font_family = "Microsoft YaHei"
-font_size   = 13
+# 可爱字体栈 — Qt 按顺序找第一个可用字体，缺字符再回退到下一个
+#   macOS 头三个最有手写感：HanziPen SC（毛笔）/ Hannotate SC（中性手写） / Yuppy SC（圆体）
+#   Chalkboard SE / Comic Sans MS — 英文/数字的圆体替代
+#   Windows: 华文琥珀（厚墩墩可爱）/ 华文新魏（毛笔感）/ 楷体（兜底毛笔风）/ Microsoft YaHei（最终保底）
+# 同一栈在两个系统都奏效，不存在的字体被 Qt 自动跳过
+font_family = '"Yuppy SC", "Hannotate SC", "HanziPen SC", "Chalkboard SE", "Comic Sans MS", "华文琥珀", "STHupo", "华文新魏", "STXinwei", "KaiTi", "楷体", "Microsoft YaHei", "PingFang SC"'
+font_size   = 14
 
 [[assets.fonts]]
 # file = "NotoSansSC-Regular.ttf"
@@ -64,7 +73,7 @@ font_size   = 13
 main_bg      = { file = "main_bg.png", mode = "stretch" }
 panel_bg     = { file = "panel_bg.png", mode = "stretch" }
 table_bg     = { file = "table_bg.png", mode = "stretch" }
-header_bg    = { file = "header_bg.png", mode = "tile" }
+header_bg    = { file = "header_bg.png", mode = "stretch" }
 button_bg    = { file = "button_texture.png", mode = "tile" }
 statusbar_bg = { file = "statusbar_bg .png", mode = "stretch" }
 

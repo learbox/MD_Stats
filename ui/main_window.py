@@ -376,7 +376,48 @@ class MainWindow(QMainWindow):
         return f"#{r:02x}{g:02x}{b:02x}"
 
     def _btn_style(self, bg: str, *, padding: str = "4px 14px") -> str:
-        """生成带 hover 高亮效果的动态按钮样式。"""
+        """生成带 hover 高亮效果的动态按钮样式。
+
+        如果主题用了按钮纹理（macaron 之类），用 bg 作为饱和度更高的实色
+        填充，覆盖底层水彩纹理 —— 让 [启动=绿] [赢硬币=黄] [先攻=蓝] [胜=绿/负=粉]
+        这些按钮在面板中作为彩色音符跳出来，而不是被纹理混成一片粉色。
+        """
+        button_texture = self._pixmap_paths.get("QPushButton") if self._pixmap_paths else None
+
+        if button_texture:
+            text_color = self._readable_on(bg)
+            hover_bg = self._lighter(bg, 0.12)
+            pressed_bg = self._darker(bg, 0.08)
+            border_disabled = self._colors.get("border_disabled", "#f5eef4")
+            text_disabled = self._colors.get("text_disabled", "#d5ccd8")
+            # 关键：用 `background:` 简写而不是 background-color/background-image 分开写，
+            # 因为 Qt QSS 在合并 setStyleSheet 和全局 QSS 时，分写形式有时不会清掉
+            # 全局规则里的 background-image: url(button_texture)，导致整个按钮还显示
+            # 水彩纹理，颜色只露出边框那一圈。`background: <solid color>` 是清除
+            # 所有 background 子属性的唯一可靠方式。
+            return (
+                "QPushButton { "
+                f"background: {bg}; "
+                f"color: {text_color}; font-weight: bold; "
+                f"padding: {padding}; border-radius: 12px; "
+                f"border: 1px solid {bg}; "
+                "} "
+                "QPushButton:hover { "
+                f"background: {hover_bg}; "
+                f"border-color: {hover_bg}; "
+                "} "
+                "QPushButton:pressed { "
+                f"background: {pressed_bg}; "
+                f"border-color: {pressed_bg}; "
+                "} "
+                "QPushButton:disabled { "
+                "background: rgba(245, 238, 244, 220); "
+                f"color: {text_disabled}; "
+                f"border-color: {border_disabled}; "
+                "}"
+            )
+
+        # 默认（dark/light）：保持原来的纯色按钮样式
         border = self._colors.get("border", "#dcdde1")
         hover_bg = self._lighter(bg)
         return (
@@ -389,8 +430,55 @@ class MainWindow(QMainWindow):
             "border-color: #888; }"
         )
 
+    @staticmethod
+    def _darker(hex_color: str, factor: float = 0.15) -> str:
+        """将十六进制颜色向黑色方向加深 factor*100%。"""
+        r = int(hex_color[1:3], 16)
+        g = int(hex_color[3:5], 16)
+        b = int(hex_color[5:7], 16)
+        r = max(0, int(r * (1 - factor)))
+        g = max(0, int(g * (1 - factor)))
+        b = max(0, int(b * (1 - factor)))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _apply_static_button_palette(self) -> None:
+        """给少数语义重要的按钮上色，其余保持水彩纹理底色（参考 Uilbox 目标图）。
+
+        只在主题提供了按钮纹理（macaron）时启用 —— dark/light 主题保持原状。
+        动态按钮（启动/手动 win/lose）由 _update_manual_buttons / _cancel_wait
+        在状态切换时另行调 _btn_style 重新设色。
+
+        着色原则：跟"动作 / 状态变化 / 警告"相关的按钮才上色，
+        像"加载 / 复制 / 打开 / 编辑 / 重新载入 / 关于"这种常规操作保持原色，
+        避免一面墙的彩色按钮淹没主题的水彩气质。
+        """
+        if not (self._pixmap_paths and self._pixmap_paths.get("QPushButton")):
+            return
+        c = self._colors
+
+        # 停止 — 警告色（粉）；删除最后记录 — 同样的警告粉
+        self._btn_stop.setStyleSheet(self._btn_style(c.get("lose", "#f0a5b5")))
+        self._btn_delete_last.setStyleSheet(self._btn_style(c.get("lose", "#f0a5b5")))
+
+    @staticmethod
+    def _readable_on(hex_color: str) -> str:
+        """根据底色亮度返回易读的文字色：浅底用深紫灰，深底用白。"""
+        r = int(hex_color[1:3], 16)
+        g = int(hex_color[3:5], 16)
+        b = int(hex_color[5:7], 16)
+        # 感知亮度 (ITU-R BT.601)
+        luma = (0.299 * r + 0.587 * g + 0.114 * b)
+        return "#4a3a52" if luma > 170 else "#ffffff"
+
     def _apply_table_viewport_palette(self) -> None:
-        """直接给表格和表头的 viewport 设样式，杜绝任何空白变白。"""
+        """直接给表格和表头的 viewport 设样式，杜绝任何空白变白。
+
+        如果主题在 QSS 中用 border-image/url 贴了表格/表头背景（pixmaps 非空），
+        就跳过 setStyleSheet —— stylesheet 会盖过 border-image，导致背景图不显示。
+        """
+        if self._pixmap_paths:
+            return
+
         base = self._colors.get("widget_bg", "#ffffff")
         header_bg = self._colors.get("main_bg", "#f5f6fa")
         # 亮色主题下表头用 statusbar_bg
@@ -409,6 +497,40 @@ class MainWindow(QMainWindow):
             hh = table.horizontalHeader()
             hh.setAutoFillBackground(True)
             hh.setStyleSheet(f"background-color: {header_bg};")
+
+    def _wrap_layouts_in_frames(self, content) -> None:
+        """把 ctrlLayout 和 bottomLayout 各自塞进一个 QFrame，便于 QSS 贴 panel_bg。
+
+        只在主题带资源图（pixmaps 非空）时执行；dark / light 主题没有 panel_bg，
+        让它们的布局保持和原来完全一致，避免 14px 内边距移位。
+        """
+        if not self._pixmap_paths:
+            return
+        root_layout = content.layout()
+        if root_layout is None:
+            return
+
+        for layout_name, frame_name in (("ctrlLayout", "topPanel"),
+                                         ("bottomLayout", "bottomPanel")):
+            layout = content.findChild(QHBoxLayout, layout_name)
+            if layout is None:
+                continue
+            # 找到 layout 在 rootLayout 中的位置
+            idx = -1
+            for i in range(root_layout.count()):
+                if root_layout.itemAt(i).layout() is layout:
+                    idx = i
+                    break
+            if idx < 0:
+                continue
+            root_layout.removeItem(layout)
+            frame = QFrame(content)
+            frame.setObjectName(frame_name)
+            frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            frame.setLayout(layout)
+            # 留一点内边距让 panel_bg 的画笔边缘可见
+            layout.setContentsMargins(14, 6, 14, 6)
+            root_layout.insertWidget(idx, frame)
 
     def __init__(self) -> None:
         """初始化主窗口：加载 .ui 界面文件、配置样式、连接信号、加载数据。"""
@@ -480,6 +602,11 @@ class MainWindow(QMainWindow):
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 
+        # 将顶部控制行与底部按钮行各自包进 QFrame，方便 QSS 给它们贴 panel_bg。
+        # .ui 里 ctrlLayout/bottomLayout 是裸 QHBoxLayout 直接挂在 rootLayout 上，
+        # 没有可绘制的容器；运行时改造一次即可。
+        self._wrap_layouts_in_frames(content)
+
         # 通过 objectName 获取各个控件的引用
         # _require_widget 将 findChild 的 X | None 收窄为 X，消除类型警告
         self._btn_start = _require_widget(content.findChild(QPushButton, "btn_start"), "btn_start")
@@ -505,6 +632,9 @@ class MainWindow(QMainWindow):
             self._config.get("window", {}).get("width", 1100),
             self._config.get("window", {}).get("height", 700),
         )
+
+        # ---- 静态按钮调色板（macaron 主题用，给每个按钮分配不同的语义色） ----
+        self._apply_static_button_palette()
 
         # ---- 信号连接 ----
         self._btn_start.clicked.connect(self._on_start)
@@ -1155,7 +1285,9 @@ class MainWindow(QMainWindow):
             self._titlebar_cfg = theme.titlebar
             self._assets_dir = theme.assets_dir
             self.setStyleSheet(theme.qss)
+            self._apply_theme_pixmaps(theme.pixmaps)
             self._apply_table_viewport_palette()
+            self._apply_static_button_palette()
             self._refresh_stats_table()
             self._update_manual_buttons()
             # 更新标题栏外观

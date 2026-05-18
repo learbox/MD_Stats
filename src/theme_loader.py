@@ -199,8 +199,16 @@ def _build_theme(theme_dir: Path) -> Theme:
         qss = qss.replace("{{color." + key + "}}", val)
 
     # 替换 {{assets.xxx}} 占位符
-    qss = qss.replace("{{assets.font_family}}", f'"{font_family}"')
+    # font_family 既支持单个字体名（"Microsoft YaHei"，自动补引号），
+    # 也支持完整的字体回退栈（'"Yuppy SC", "Comic Sans MS"'，按原样使用）。
+    # 检测：如果已经含逗号或引号则视为已格式化好的 QSS 字体栈，避免双重加引号。
+    ff_value = font_family if ("," in font_family or '"' in font_family) else f'"{font_family}"'
+    qss = qss.replace("{{assets.font_family}}", ff_value)
     qss = qss.replace("{{assets.font_size}}", str(font_size))
+
+    # 替换 {{asset.<image_key>}} 占位符 → 资源文件的绝对路径（POSIX，正斜杠）
+    # QSS 中可以用 border-image: url({{asset.main_bg}}) ... 引用主题图片
+    qss = _substitute_asset_paths(qss, assets_cfg.get("images", {}), assets_dir)
 
     # 收集图片（不注入 QSS，由 main_window 用 QPalette 加载）
     pixmaps = _collect_image_paths(assets_cfg.get("images", {}), theme_dir)
@@ -298,6 +306,24 @@ def _remove_qss_property(qss: str, selector: str, prop: str) -> str:
         block = re.sub(r'\s*' + re.escape(prop) + r'\s*:\s*[^;]+;', '', block)
         return block
     return pattern.sub(_clean, qss)
+
+
+def _substitute_asset_paths(qss: str, images: dict, assets_dir: Path) -> str:
+    """将 {{asset.<key>}} 替换为 assets/<file> 的绝对 POSIX 路径。
+
+    QSS 的 url(...) 在所有平台都需要正斜杠（Windows 的反斜杠会失败）。
+    """
+    for key, cfg in images.items():
+        if not isinstance(cfg, dict):
+            continue
+        file = (cfg.get("file", "") or "").strip()
+        if not file:
+            continue
+        file_path = assets_dir / file
+        # as_posix() 给出正斜杠路径，兼容 Qt 的 url(...) 解析
+        url = file_path.resolve().as_posix()
+        qss = qss.replace("{{asset." + key + "}}", url)
+    return qss
 
 
 def _collect_image_paths(images: dict, theme_dir: Path) -> dict[str, str]:
