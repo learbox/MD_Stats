@@ -41,6 +41,7 @@ compute_stats() 函数将对局记录按"使用卡组"分组，计算每组的:
 
 
 import csv
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -65,8 +66,8 @@ COLUMNS = ["序号", "日期", "时间", "使用卡组", "对方卡组", "赢硬
 # 统计表格列（与 compute_stats 输出的字典键一致）
 STATS_COLUMNS = [
     "卡组", "对局数", "胜", "负", "胜率",
-    "赢硬币次数", "输硬币次数",
-    "赢硬币胜率", "输硬币胜率",
+    "赢硬币次数", "赢硬币胜率",
+    "输硬币次数", "输硬币胜率",
     "先攻次数", "后攻次数", "先攻胜", "后攻胜",
     "先攻胜率", "后攻胜率",
 ]
@@ -215,6 +216,27 @@ def add_record(
     """
     records = load_records()
 
+    # 内部代码 → 中文映射
+    _MAP = {
+        "赢硬币": {"win": "是", "lose": "否"},
+        "先后攻": {"first": "先攻", "second": "后攻"},
+        "结果":   {"win": "胜", "lose": "负"},
+    }
+
+    def _map_or_warn(field: str, raw: str) -> str:
+        if not raw:
+            return ""
+        mapped = _MAP[field].get(raw)
+        if mapped is not None:
+            return mapped
+        known_display = {"是", "否", "先攻", "后攻", "胜", "负"}
+        if raw not in known_display:
+            import logging
+            logging.getLogger("mdstats").warning(
+                "add_record: 未识别的 %s 值 '%s'，已原样写入", field, raw
+            )
+        return raw
+
     now = datetime.now()
     new_record = {
         "序号": str(len(records) + 1),
@@ -222,10 +244,9 @@ def add_record(
         "时间": now.strftime("%H:%M:%S"),
         "使用卡组": deck,
         "对方卡组": opponent_deck,
-        # 将内部英文代码转换为中文显示名
-        "赢硬币": {"win": "是", "lose": "否"}.get(coin_win, coin_win),
-        "先后攻": {"first": "先攻", "second": "后攻"}.get(turn, turn),
-        "结果": {"win": "胜", "lose": "负"}.get(result, result),
+        "赢硬币": _map_or_warn("赢硬币", coin_win),
+        "先后攻": _map_or_warn("先后攻", turn),
+        "结果": _map_or_warn("结果", result),
         "备注": notes,
     }
     records.append(new_record)
@@ -275,8 +296,6 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
             "先攻胜": 0, "后攻胜": 0,
             "先攻胜率": "", "后攻胜率": "",
         }]
-
-    from collections import defaultdict
 
     # ---------- 初始化累加器 ----------
     decks: dict[str, dict] = defaultdict(lambda: {

@@ -103,6 +103,18 @@ class StatsWorker(QThread):
     turn_detected = Signal(str)
     result_detected = Signal(str)
 
+    # 外部阶段编号 → 内部状态名映射（只分配一次）
+    _STAGE_MAP: dict[int, str] = {
+        0: "WAITING_COIN", 1: "WAITING_TURN", 2: "WAITING_RESULT"
+    }
+
+    # 状态 → 状态栏消息
+    _STATE_MSGS: dict[str, str] = {
+        "WAITING_COIN": "正在运行 — 等待识别硬币…",
+        "WAITING_TURN": "正在运行 — 等待识别先后攻…",
+        "WAITING_RESULT": "正在运行 — 等待识别胜负…",
+    }
+
     def __init__(self, parent=None):
         """初始化工作线程。从 config.toml 读取截图间隔和匹配阈值。"""
         super().__init__(parent)
@@ -115,6 +127,19 @@ class StatsWorker(QThread):
     def _skip(self) -> None:
         """休眠一个间隔后继续循环。"""
         self.msleep(int(self._interval * 1000))
+
+    def _handle_pause(self, paused: bool) -> bool:
+        """窗口不可用时的暂停处理：发一次状态消息，休眠，返回 True。
+
+        在主循环中多次出现相同的"检测到窗口不可用 → 发消息 → 休眠"模式，
+        统一提取到此方法中。
+        """
+        if not paused:
+            paused = True
+            if _cap.is_window_minimized("masterduel"):
+                self.status_update.emit("窗口已最小化 — 等待恢复…")
+        self._skip()
+        return paused
 
     def _ensure_templates(self, last_size: tuple[int, int] | None) -> tuple[int, int] | None:
         """检测分辨率变化并刷新模板缓存。返回当前客户区尺寸或 None。
@@ -176,29 +201,19 @@ class StatsWorker(QThread):
             # ---- 第 0 步：每轮更新模板分辨率 ----
             size = self._ensure_templates(_last_resolution)
             if size is None:
-                if not _paused:
-                    _paused = True
-                    if _cap.is_window_minimized("masterduel"):
-                        self.status_update.emit("窗口已最小化 — 等待恢复…")
-                self._skip()
+                _paused = self._handle_pause(_paused)
                 continue
 
             # ---- 第 1 步：检测窗口是否最小化 ----
             if _cap.is_window_minimized("masterduel"):
-                if not _paused:
-                    _paused = True
-                    self.status_update.emit("窗口已最小化 — 等待恢复…")
-                self._skip()
+                _paused = self._handle_pause(_paused)
                 continue
 
             if _paused:
                 _paused = False
-                state_msgs = {
-                    "WAITING_COIN": "正在运行 — 等待识别硬币…",
-                    "WAITING_TURN": "正在运行 — 等待识别先后攻…",
-                    "WAITING_RESULT": "正在运行 — 等待识别胜负…",
-                }
-                self.status_update.emit(state_msgs.get(self._state, "正在运行"))
+                self.status_update.emit(
+                    self._STATE_MSGS.get(self._state, "正在运行")
+                )
             _last_resolution = size
 
             # ---- 第 2 步：截取 Master Duel 窗口 ----
@@ -241,7 +256,7 @@ class StatsWorker(QThread):
                     self._state = "WAITING_COIN"
 
             # ---- 第 4 步：休眠等待下一轮 ----
-            self.msleep(int(self._interval * 1000))
+            self._skip()
 
             # ---- 第 5 步：检测 Master Duel 窗口是否仍在运行 ----
             if not _cap.is_window_open("masterduel"):
@@ -252,13 +267,10 @@ class StatsWorker(QThread):
     def jump_to(self, stage: int) -> None:
         """外部通知阶段跳转 — 手动按钮触发时，主线程调用此方法同步状态。
 
-        主线程不必知道内部 _state 是字符串，由本方法完成映射。
-
         Args:
             stage: 0=等硬币, 1=等先后攻, 2=等胜负。
         """
-        _STATE_MAP = {0: "WAITING_COIN", 1: "WAITING_TURN", 2: "WAITING_RESULT"}
-        self._state = _STATE_MAP[stage]
+        self._state = self._STAGE_MAP[stage]
 
     def stop(self) -> None:
         """停止工作线程。

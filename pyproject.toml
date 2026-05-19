@@ -1,12 +1,12 @@
 [project]
 name = "mdstats-py"
 version = "1.2.0"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "mss>=10.2.0",
-    "numpy==2.4.6",
+    "numpy>=2.0",
     "opencv-python>=4.13.0.92",
     "pyside6>=6.11.1",
-    "pywin32==311",
+    "pywin32>=306",
     "tomli>=2.0.0; python_version < '3.11'",
 ]

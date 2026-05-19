@@ -99,7 +99,7 @@ def set_resolution(width: int, height: int) -> None:
     """设置当前游戏渲染分辨率，模板加载时使用对应子目录。
 
     根据传入的客户区宽高，构造子目录名 "{宽}x{高}"，如 "1920x1080"。
-    后续 _load_template 只从该子目录加载模板，不会回退到根目录。
+    后续 _get_cached_template 只从该子目录加载模板，不会回退到根目录。
 
     应在启动识别线程前调用一次。宽高通常来自 get_client_size()。
 
@@ -113,12 +113,12 @@ def set_resolution(width: int, height: int) -> None:
 
 _REQUIRED_TEMPLATES = ["coin_win", "coin_lose", "go_first", "go_second", "victory", "defeat"]
 
-# 模板内存缓存：init_templates() 预加载后填充，后续 _load_template 直接取用
+# 模板内存缓存：init_templates() 预加载后填充，后续 _get_cached_template 直接取用
 # 键为模板名（不含扩展名），值为 numpy 数组或 None（加载失败时）
 _template_cache: dict[str, np.ndarray | None] = {}
 
 
-def _load_from_disk(name: str) -> np.ndarray | None:
+def _read_template_file(name: str) -> np.ndarray | None:
     """从磁盘加载单个模板文件（不经过缓存）。"""
     if _resolution_subdir is not None:
         search_dir = _TEMPLATES_BASE / _resolution_subdir
@@ -136,7 +136,7 @@ def _load_from_disk(name: str) -> np.ndarray | None:
     return None
 
 
-def _load_template(name: str) -> np.ndarray | None:
+def _get_cached_template(name: str) -> np.ndarray | None:
     """从内存缓存取模板（调用前需确保 init_templates 已执行）。"""
     return _template_cache.get(name)
 
@@ -145,7 +145,7 @@ def init_templates() -> str | None:
     """预加载全部模板到内存缓存，并返回缺失报告。
 
     一次磁盘 IO 完成加载和校验。后续 match_template 的每次调用
-    通过 _load_template 直接从缓存取值，不再访问磁盘。
+    通过 _get_cached_template 直接从缓存取值，不再访问磁盘。
 
     调用方应在返回非 None 时停止识别流程（模板不完整则无法识别）。
 
@@ -156,7 +156,7 @@ def init_templates() -> str | None:
     missing: list[str] = []
 
     for name in _REQUIRED_TEMPLATES:
-        img = _load_from_disk(name)
+        img = _read_template_file(name)
         _template_cache[name] = img
         if img is None:
             missing.append(f"{name}.png")
@@ -202,7 +202,7 @@ def match_template(
            （OpenCV 要求被搜索图像 >= 模板图像）
     """
     # 1. 加载模板
-    template = _load_template(template_name)
+    template = _get_cached_template(template_name)
     if template is None:
         return False, 0.0
 

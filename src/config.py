@@ -31,6 +31,7 @@ Python 3.11+ 内置了 tomllib 模块。对于更早的 Python 版本，
 
 import sys
 from pathlib import Path
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # 兼容 Python 3.10 及以下版本：优先使用标准库 tomllib，否则降级到 tomli
@@ -57,7 +58,7 @@ def _get_config_path() -> Path:
     return get_project_root() / "config.toml"
 
 
-def load_config() -> dict:
+def load_config() -> dict[str, Any]:
     """加载并解析 config.toml，返回嵌套字典。
 
     返回值示例:

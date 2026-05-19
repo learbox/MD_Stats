@@ -67,6 +67,8 @@ from PySide6.QtGui import QFontDatabase
 # themes/ 文件夹路径（开发/打包兼容）
 _THEMES_DIR = get_project_root() / "themes"
 
+_DEFAULT_FONT = "Microsoft YaHei"
+
 
 @dataclass
 class Theme:
@@ -125,7 +127,7 @@ _BUILTIN_TITLEBAR: dict[str, Any] = {
 }
 
 _BUILTIN_ASSETS: dict[str, Any] = {
-    "font_family": "Microsoft YaHei", "font_size": 13,
+    "font_family": _DEFAULT_FONT, "font_size": 13,
     "fonts": [], "images": {},
 }
 
@@ -239,7 +241,7 @@ def _build_theme(theme_dir: Path) -> Theme:
     # --- 加载字体 ---
     _load_fonts(assets_cfg.get("fonts", []), assets_dir)
 
-    font_family = assets_cfg.get("font_family", "Microsoft YaHei")
+    font_family = assets_cfg.get("font_family", _DEFAULT_FONT)
     font_size = assets_cfg.get("font_size", 13)
 
     # --- 加载 QSS ---
@@ -272,11 +274,9 @@ def _build_theme(theme_dir: Path) -> Theme:
     # 收集图片（不注入 QSS，由 main_window 用 QPalette 加载）
     pixmaps = _collect_image_paths(assets_cfg.get("images", {}), theme_dir)
 
-    # 确保剩余的 {{color.xxx}} 占位符回退（如果有 QSS 中有但主题没定义的）
+    # 确保剩余的 {{color.xxx}} 占位符回退（如果 QSS 中有但主题没定义的）
     for key, val in _BUILTIN_COLORS.items():
         qss = qss.replace("{{color." + key + "}}", val)
-    qss = qss.replace("{{assets.font_family}}", f'"{font_family}"')
-    qss = qss.replace("{{assets.font_size}}", str(font_size))
 
     # 构建最终 QSS（附加颜色字典中没有但在内置 QSS 中需要的值）
     full_qss = qss
@@ -301,7 +301,7 @@ def _build_theme(theme_dir: Path) -> Theme:
 def _fallback_theme() -> Theme:
     """最终兜底：返回内置硬编码亮色主题。"""
     colors: dict[str, Any] = dict(_BUILTIN_COLORS)
-    colors["font_family"] = "Microsoft YaHei"
+    colors["font_family"] = _DEFAULT_FONT
     colors["font_size"] = "13"
     qss = _BUILTIN_QSS % colors
     return Theme(
@@ -332,40 +332,6 @@ _IMAGE_SELECTORS: dict[str, str] = {
     "button_bg":    "QPushButton",
     "statusbar_bg": "#customStatusBar",
 }
-
-def _inject_qss_property(qss: str, selector: str, prop_line: str) -> str:
-    """在已有选择器块 } 之前注入一行属性（不创建重复块）。"""
-    idx = qss.find(selector + " {")
-    if idx == -1:
-        return qss + f"\n{selector} {{\n{prop_line}\n}}\n"
-    # 找到匹配的 }
-    i = idx + len(selector) + 2
-    depth = 1
-    j = i
-    while j < len(qss) and depth > 0:
-        if qss[j] == "{":
-            depth += 1
-        elif qss[j] == "}":
-            depth -= 1
-        j += 1
-    return qss[:j - 1] + "    " + prop_line + "\n" + qss[j - 1:]
-
-
-def _remove_qss_property(qss: str, selector: str, prop: str) -> str:
-    """从 QSS 中删除指定选择器块内的指定属性行。"""
-    import re
-    # 匹配 "selector { ... }" 块
-    pattern = re.compile(
-        re.escape(selector) + r'\s*\{[^}]*}',
-        re.DOTALL,
-    )
-    def _clean(m: re.Match[str]) -> str:
-        block = m.group()
-        # 删除 prop: ...; 行
-        block = re.sub(r'\s*' + re.escape(prop) + r'\s*:\s*[^;]+;', '', block)
-        return block
-    return pattern.sub(_clean, qss)
-
 
 def _substitute_asset_paths(qss: str, images: dict, assets_dir: Path) -> str:
     """将 {{asset.<key>}} 替换为 assets/<file> 的绝对 POSIX 路径。

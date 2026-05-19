@@ -105,8 +105,7 @@ from src.recorder import (
     set_active_csv,
     STATS_COLUMNS,
 )
-from src.capture import get_window_status, is_window_open
-from src.stats_worker import StatsWorker
+# capture / stats_worker 在首次使用时延迟导入，避免启动时加载 OpenCV (~260ms)
 from src.theme_loader import Theme, load_theme
 from ui.titlebar import TitleBar
 
@@ -271,10 +270,6 @@ class MainWindow(QMainWindow):
         msg.button(QMessageBox.StandardButton.No).setText("否")
         return msg.exec() == QMessageBox.StandardButton.Yes
 
-    def _is_dark_theme(self) -> bool:
-        """判断当前是否为暗色主题。"""
-        return self._config.get("appearance", {}).get("theme", "dark") == "dark"
-
     def _apply_dwm_style(self) -> None:
         """DWM 原生阴影 + Windows 11 圆角（失败时静默跳过）。"""
         if os.name != "nt":
@@ -306,6 +301,7 @@ class MainWindow(QMainWindow):
             pass
 
     # ---- 无边框窗口 resize 支持 ----
+    # 窗口边缘 resize 检测敏感区域宽度（像素），鼠标进入此范围即触发拖拽光标
     _BORDER_WIDTH = 6
     _resize_edge: Any = None  # Qt.Edge | None
 
@@ -484,6 +480,24 @@ class MainWindow(QMainWindow):
             # 无纹理主题：清除局部 stylesheet，让全局 QSS 接管
             self._btn_stop.setStyleSheet("")
             self._btn_delete_last.setStyleSheet("")
+
+    def _apply_theme_to_widgets(self) -> None:
+        """将已加载的主题应用到控件（QSS 之外的部分）。
+
+        在 __init__ 和 _on_reload_config 中复用，消除重复代码。
+        """
+        self._wrap_layouts_in_frames(self._content)
+        self._apply_table_viewport_palette()
+        self._apply_static_button_palette()
+        self._refresh_stats_table()
+        self._refresh_record_table()
+        self._update_manual_buttons()
+        colors = self._theme_colors()
+        self._btn_start.setStyleSheet(
+            self._btn_style(colors["start_bg"], padding="6px 20px")
+        )
+        self._title_bar.set_title("MD Stats")
+        self._title_bar.reload_style(self._titlebar_cfg)
 
     @staticmethod
     def _readable_on(hex_color: str) -> str:
@@ -665,6 +679,7 @@ class MainWindow(QMainWindow):
         self._btn_manual_lose = _require_widget(content.findChild(QPushButton, "btn_manual_lose"), "btn_manual_lose")
         self._btn_undo = _require_widget(content.findChild(QPushButton, "btn_undo"), "btn_undo")
         self._btn_lock_deck = _require_widget(content.findChild(QPushButton, "btn_lock_deck"), "btn_lock_deck")
+        self._btn_lock_deck.setText("锁定卡组")  # 初始状态：输入框未锁定，点击可锁定
         self._stats_table = _require_widget(content.findChild(QTableWidget, "stats_table"), "stats_table")
         self._record_table = _require_widget(content.findChild(QTableWidget, "record_table"), "record_table")
         self._btn_reload = _require_widget(content.findChild(QPushButton, "btn_reload"), "btn_reload")
@@ -762,13 +777,10 @@ class MainWindow(QMainWindow):
         # ---- 右下角信息标签定时刷新 ----
         info_timer = QTimer(self)
         info_timer.timeout.connect(self._update_info_label)  # type: ignore[reportUnknownMemberType]
-        info_timer.start(2000)
+        info_timer.start(2000)  # 右下角信息刷新间隔（毫秒）
         self._info_timer = info_timer
-        # 首次更新延迟到窗口显示后，避免 EnumWindows 阻塞界面出现
+        # 首次更新延迟（毫秒），让窗口先渲染再执行 EnumWindows
         QTimer.singleShot(200, self._update_info_label)
-
-        # ---- 初始加载 CSV 数据并填充表格 ----
-        self._reload_tables()
 
         # ---- 初始化手动按钮样式（阶段 0 = 橙色赢硬币/输硬币） ----
         self._update_manual_buttons()
@@ -776,6 +788,9 @@ class MainWindow(QMainWindow):
         self._btn_start.setStyleSheet(
             self._btn_style(self._theme_colors()["start_bg"], padding="6px 20px")
         )
+
+        # 延迟加载 CSV 数据：让窗口先渲染出来，数据在下一帧异步填充
+        QTimer.singleShot(0, self._reload_tables)
 
     # =========================================================================
     # 底部按钮状态管理
@@ -823,16 +838,8 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def _on_start(self) -> None:
-        """点击"启动"按钮: 检测 Master Duel 窗口，必要时启动游戏并等待。
-
-        流程:
-            1. 如果正在等待 Master Duel 启动 → 取消等待（"终止等待"）
-            2. 如果 Master Duel 窗口已存在 → 直接启动识别
-            3. 如果不存在 → 弹窗询问（中文 是/否）
-               - 选"否" → 取消
-               - 选"是" → 启动游戏，按钮变为"终止等待"，开始轮询窗口
-            4. 轮询检测到窗口出现 → 自动进入识别流程
-        """
+        """点击"启动"按钮: 检测 Master Duel 窗口，必要时启动游戏并等待。"""
+        from src.capture import is_window_open  # 延迟导入，避免启动时加载 OpenCV
         # ---- 正在等待中，用户点击"终止等待" ----
         if self._wait_timer is not None:
             self._cancel_wait()
@@ -880,6 +887,7 @@ class MainWindow(QMainWindow):
 
     def _on_wait_tick(self) -> None:
         """轮询检测 Master Duel 窗口是否出现。"""
+        from src.capture import is_window_open  # 延迟导入
         if is_window_open("masterduel"):  # type: ignore[reportUnknownMemberType]
             self._cancel_wait()
             self._start_worker()
@@ -898,6 +906,7 @@ class MainWindow(QMainWindow):
 
     def _start_worker(self) -> None:
         """创建并启动后台识别工作线程。"""
+        from src.stats_worker import StatsWorker  # 延迟导入，避免启动时加载 OpenCV
         self._worker = StatsWorker()
 
         self._worker.status_update.connect(self._on_status)           # type: ignore[reportUnknownMemberType]
@@ -1011,7 +1020,7 @@ class MainWindow(QMainWindow):
     def _unlock_deck(self) -> None:
         """解锁卡组输入框（停止时恢复）。"""
         self._deck_input.setEnabled(True)
-        self._btn_lock_deck.setText("修改卡组")
+        self._btn_lock_deck.setText("锁定卡组")
 
     def _on_toggle_deck_lock(self) -> None:
         """切换卡组输入框的锁定状态。"""
@@ -1254,18 +1263,22 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def _on_about(self) -> None:
+        import html as _html
         lines = [
             "<h3>MD Stats</h3>",
-            f"<p>版本: {VERSION}<br>",
-            f"作者: {AUTHOR}<br>",
-            f"协议: {LICENSE}</p>",
+            f"<p>版本: {_html.escape(VERSION)}<br>",
+            f"作者: {_html.escape(AUTHOR)}<br>",
+            f"协议: {_html.escape(LICENSE)}</p>",
         ]
         if REPO_URL:
             lines.append(
-                f'<p>仓库: <a href="{REPO_URL}">{REPO_URL}</a></p>'
+                f'<p>仓库: <a href="{_html.escape(REPO_URL, quote=True)}">{_html.escape(REPO_URL)}</a></p>'
             )
-        lines.append(f"<p>{DESCRIPTION.replace(chr(10), '<br>')}</p>")
+        lines.append(
+            f"<p>{_html.escape(DESCRIPTION).replace(chr(10), '<br>')}</p>"
+        )
         if ACKNOWLEDGMENTS:
+            # ACKNOWLEDGMENTS 允许 HTML 标签（超链接），不做转义
             ack = ACKNOWLEDGMENTS.replace("\n", "<br>")
             lines.append(f"<p><b>特别鸣谢</b><br>{ack}</p>")
 
@@ -1342,20 +1355,7 @@ class MainWindow(QMainWindow):
             self._assets_dir = theme.assets_dir
             self.setStyleSheet(theme.qss)
             self._apply_theme_pixmaps(theme.pixmaps)
-            self._wrap_layouts_in_frames(self._content)
-            self._apply_table_viewport_palette()
-            self._apply_static_button_palette()
-            self._refresh_stats_table()
-            self._refresh_record_table()
-            self._update_manual_buttons()
-            # 更新启动按钮样式（有局部 stylesheet，全局 QSS 无法覆盖）
-            colors = self._theme_colors()
-            self._btn_start.setStyleSheet(
-                self._btn_style(colors["start_bg"], padding="6px 20px")
-            )
-            # 更新标题栏外观
-            self._title_bar.set_title("MD Stats")
-            self._title_bar.reload_style(self._titlebar_cfg)
+            self._apply_theme_to_widgets()
 
         # 如果 Worker 正在运行，停止后用新配置重启
         worker_was_running = self._worker is not None
@@ -1369,15 +1369,12 @@ class MainWindow(QMainWindow):
         )
 
     # =========================================================================
-    # 窗口关闭事件
-    # =========================================================================
-
-    # =========================================================================
     # 右下角信息标签
     # =========================================================================
 
     def _update_info_label(self) -> None:
         """更新右下角的信息显示：截图间隔、阈值、Master Duel 窗口尺寸。"""
+        from src.capture import get_window_status  # 延迟导入
         interval = self._config.get("detection", {}).get("interval", 0.5)
         threshold = self._config.get("detection", {}).get("confidence_threshold", 0.8)
 
