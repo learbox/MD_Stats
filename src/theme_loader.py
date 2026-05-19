@@ -57,7 +57,7 @@ from typing import Any
 if sys.version_info >= (3, 11):
     import tomllib
 else:
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[import-not-found]
 
 # 字体加载
 from PySide6.QtGui import QFontDatabase
@@ -81,21 +81,44 @@ class Theme:
 # =============================================================================
 
 _BUILTIN_COLORS: dict[str, str] = {
+    # 背景层次
     "main_bg": "#f5f6fa", "widget_bg": "#ffffff", "alt_row_bg": "#f5f7fa",
-    "statusbar_bg": "#ecf0f1", "text_primary": "#2c3e50", "text_secondary": "#7f8c8d",
+    "statusbar_bg": "#ecf0f1",
+    # 文字
+    "text_primary": "#2c3e50", "text_secondary": "#7f8c8d",
     "text_disabled": "#bdc3c7", "table_text": "#2c3e50",
+    # 边框
     "border": "#dcdde1", "border_hover": "#3498db", "border_focus": "#3498db",
-    "border_disabled": "#ecf0f1", "hover_bg": "#e8f0fe", "pressed_bg": "#d5e4f7",
+    "border_disabled": "#ecf0f1",
+    # 交互
+    "hover_bg": "#e8f0fe", "pressed_bg": "#d5e4f7",
     "selection_bg": "#d5e4f7",
+    # 语义色
     "win": "#27ae60", "lose": "#c0392b", "coin": "#e67e22", "turn": "#2980b9",
     "start_bg": "#27ae60", "warning_bg": "#e67e22", "muted_bg": "#95a5a6",
+    # 分割器
     "splitter": "#dcdde1", "splitter_hover": "#3498db", "header_accent": "#3498db",
+    # 下拉框
     "combo_bg": "#ffffff", "combo_border": "#dcdde1", "msgbox_bg": "#f5f6fa",
+    # —— 细粒度控件配色（用于统一 QSS 模板） ——
+    "button_bg": "#ffffff", "button_border": "#dcdde1",
+    "button_hover_bg": "#e8f0fe", "button_pressed_bg": "#d5e4f7",
+    "button_disabled_bg": "#ecf0f1",
+    "input_bg": "#ffffff", "input_focus_bg": "#ffffff",
+    "input_disabled_bg": "#ecf0f1",
+    "table_grid": "#dcdde1", "table_alt_bg": "#f5f7fa",
+    "table_item_bg": "transparent", "table_item_alt_bg": "transparent",
+    "table_selection_bg": "#d5e4f7",
+    "header_v_bg": "#ecf0f1", "header_v_border": "#dcdde1",
+    "corner_bg": "#ecf0f1", "corner_border": "#dcdde1",
+    "scrollbar_handle": "#7f8c8d", "scrollbar_handle_hover": "#3498db",
+    "combo_body_bg": "#ffffff", "combo_list_bg": "#ffffff",
 }
 
 _BUILTIN_TITLEBAR: dict[str, Any] = {
     "height": 36, "icon_size": 20,
     "text_color": "#2c3e50", "text_size": 12,
+    "text_font": "", "text_shadow": "",
     "btn_hover_bg": "#d5e4f7", "btn_close_hover": "#e74c3c",
 }
 
@@ -106,40 +129,59 @@ _BUILTIN_ASSETS: dict[str, Any] = {
 
 _BUILTIN_QSS = """\
 QMainWindow { background-color: %(main_bg)s; }
-QWidget { color: %(text_primary)s; font-family: "%(font_family)s"; font-size: %(font_size)dpx; }
-QPushButton { background-color: %(widget_bg)s; color: %(text_primary)s; border: 1px solid %(border)s; border-radius: 6px; padding: 4px 14px; }
-QPushButton:hover { background-color: %(hover_bg)s; border-color: %(border_hover)s; }
-QPushButton:pressed { background-color: %(pressed_bg)s; }
-QPushButton:disabled { background-color: %(border_disabled)s; color: %(text_disabled)s; border-color: %(border_disabled)s; }
-QLineEdit { background-color: %(widget_bg)s; color: %(text_primary)s; border: 1px solid %(border)s; border-radius: 4px; padding: 3px 8px; }
-QLineEdit:focus { border-color: %(border_focus)s; }
-QLineEdit:disabled { background-color: %(border_disabled)s; color: %(text_disabled)s; }
-QTableWidget { background-color: %(widget_bg)s; alternate-background-color: %(alt_row_bg)s; color: %(table_text)s; border: 1px solid %(border)s; gridline-color: %(border)s; outline: none; }
-QTableWidget::item:selected { background-color: %(selection_bg)s; color: %(table_text)s; }
-QHeaderView { background-color: %(statusbar_bg)s; }
-QHeaderView::section { background-color: %(statusbar_bg)s; color: %(text_primary)s; border: none; border-bottom: 2px solid %(header_accent)s; padding: 5px 8px; font-weight: bold; font-size: 12px; }
-QHeaderView::section:vertical { background-color: %(statusbar_bg)s; color: %(text_secondary)s; border: none; border-right: 1px solid %(border)s; padding: 0px 4px; font-size: 11px; }
-QTableCornerButton::section { background-color: %(statusbar_bg)s; border: none; border-bottom: 2px solid %(header_accent)s; border-right: 1px solid %(border)s; }
+QWidget { color: %(text_primary)s; font-family: "%(font_family)s"; font-size: %(font_size)spx; }
+QPushButton, QLineEdit, QLabel, QTableWidget, QHeaderView, QHeaderView::section,
+QComboBox, QComboBox QAbstractItemView, QMessageBox, QToolTip {
+    font-family: "%(font_family)s";
+}
+/* ---------- 主背景 ---------- */
+#contentWidget { border-radius: 8px; background-color: %(main_bg)s; }
+/* ---------- 面板 ---------- */
+QFrame#topPanel, QFrame#bottomPanel { background: transparent; border: none; border-radius: 10px; padding: 4px; }
+/* ---------- 标题栏 ---------- */
+#titleBar { background: transparent; border-top-left-radius: 8px; border-top-right-radius: 8px; }
+#titleMinBtn, #titleCloseBtn { background: transparent; border: none; border-radius: 4px; }
+/* ---------- 状态栏 ---------- */
+#customStatusBar { background-color: %(statusbar_bg)s; border: none; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+#statusMessage { color: %(text_secondary)s; background: transparent; border: none; font-size: 12px; }
+/* ---------- 按钮 ---------- */
+QPushButton { background-color: %(button_bg)s; color: %(text_primary)s; border: 1px solid %(button_border)s; border-radius: 12px; padding: 5px 14px; }
+QPushButton:hover { background-color: %(button_hover_bg)s; border-color: %(border_hover)s; }
+QPushButton:pressed { background-color: %(button_pressed_bg)s; border-color: %(border_hover)s; }
+QPushButton:disabled { background-color: %(button_disabled_bg)s; color: %(text_disabled)s; border-color: %(border_disabled)s; }
+/* ---------- 输入框 ---------- */
+QLineEdit { background-color: %(input_bg)s; color: %(text_primary)s; border: 1px solid %(border)s; border-radius: 6px; padding: 4px 10px; }
+QLineEdit:focus { border-color: %(border_focus)s; background-color: %(input_focus_bg)s; }
+QLineEdit:disabled { background-color: %(input_disabled_bg)s; color: %(text_disabled)s; }
+/* ---------- 标签 ---------- */
+QLabel { background: transparent; border: none; }
+/* ---------- 表格 ---------- */
+QTableWidget { background-color: %(widget_bg)s; alternate-background-color: %(table_alt_bg)s; color: %(table_text)s; border: none; gridline-color: %(table_grid)s; outline: none; selection-background-color: %(table_selection_bg)s; selection-color: %(table_text)s; }
+QTableWidget::item { background-color: %(table_item_bg)s; padding: 2px 6px; }
+QTableWidget::item:alternate { background-color: %(table_item_alt_bg)s; }
+QTableWidget::item:selected { background-color: %(table_selection_bg)s; color: %(table_text)s; }
+QHeaderView { background-color: transparent; border: none; }
+QHeaderView::section { background-color: transparent; color: %(text_primary)s; border: none; border-bottom: 2px solid %(header_accent)s; padding: 5px 8px; font-weight: bold; font-size: 12px; }
+QHeaderView::section:vertical { background-color: %(header_v_bg)s; color: %(text_disabled)s; border: none; border-right: 1px solid %(header_v_border)s; padding: 0px 4px; font-size: 11px; }
+QTableCornerButton::section { background-color: %(corner_bg)s; border: none; border-bottom: 2px solid %(header_accent)s; border-right: 1px solid %(corner_border)s; }
+/* ---------- 滚动条 ---------- */
 QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
-QScrollBar::handle:vertical { background: %(text_secondary)s; border-radius: 4px; min-height: 30px; }
-QScrollBar::handle:vertical:hover { background: %(muted_bg)s; }
+QScrollBar::handle:vertical { background-color: %(scrollbar_handle)s; border-radius: 4px; min-height: 30px; }
+QScrollBar::handle:vertical:hover { background: %(scrollbar_handle_hover)s; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar:horizontal { background: transparent; height: 8px; }
-QScrollBar::handle:horizontal { background: %(text_secondary)s; border-radius: 4px; min-width: 30px; }
-QScrollBar::handle:horizontal:hover { background: %(muted_bg)s; }
+QScrollBar::handle:horizontal { background-color: %(scrollbar_handle)s; border-radius: 4px; min-width: 30px; }
+QScrollBar::handle:horizontal:hover { background: %(scrollbar_handle_hover)s; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
-#customStatusBar { background-color: %(statusbar_bg)s; border: none; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
-#statusMessage { color: %(text_secondary)s; background: transparent; border: none; font-size: 12px; }
-#contentWidget { background-color: %(main_bg)s; border-radius: 8px; }
-#titleBar { background-color: %(main_bg)s; border-top-left-radius: 8px; border-top-right-radius: 8px; }
-#titleMinBtn, #titleCloseBtn { background: transparent; border: none; border-radius: 4px; }
+/* ---------- 分割器 ---------- */
 QSplitter::handle { background-color: %(splitter)s; }
 QSplitter::handle:hover { background-color: %(splitter_hover)s; }
 QSplitter::handle:vertical { height: 3px; }
-QLabel { background: transparent; border: none; }
-QComboBox { background-color: %(combo_bg)s; color: %(text_primary)s; border: 1px solid %(combo_border)s; border-radius: 4px; padding: 3px 8px; }
+/* ---------- 下拉框 ---------- */
+QComboBox { background-color: %(combo_body_bg)s; color: %(text_primary)s; border: 1px solid %(combo_border)s; border-radius: 6px; padding: 3px 8px; }
 QComboBox:hover { border-color: %(border_hover)s; }
-QComboBox QAbstractItemView { background-color: %(combo_bg)s; color: %(text_primary)s; border: 1px solid %(combo_border)s; selection-background-color: %(selection_bg)s; outline: none; }
+QComboBox QAbstractItemView { background-color: %(combo_list_bg)s; color: %(text_primary)s; border: 1px solid %(combo_border)s; selection-background-color: %(selection_bg)s; outline: none; }
+/* ---------- 消息框 ---------- */
 QMessageBox { background-color: %(msgbox_bg)s; }
 QMessageBox QLabel { color: %(text_primary)s; }
 """
@@ -171,15 +213,26 @@ def _build_theme(theme_dir: Path) -> Theme:
 
     # --- 加载 theme.toml ---
     toml_path = theme_dir / "theme.toml"
+    data: dict[str, Any] = {}
     if toml_path.exists():
         with open(toml_path, "rb") as f:
-            data = tomllib.load(f)
-    else:
-        data = {}
+            data = tomllib.load(f)  # type: ignore[assignment]
 
-    colors: dict[str, str] = dict(data.get("colors", {})) if data.get("colors") else dict(_BUILTIN_COLORS)
-    titlebar: dict[str, Any] = dict(data.get("titlebar", {})) if data.get("titlebar") else dict(_BUILTIN_TITLEBAR)
-    assets_cfg: dict[str, Any] = dict(data.get("assets", {})) if data.get("assets") else dict(_BUILTIN_ASSETS)
+    colors_raw = data.get("colors")
+    colors: dict[str, str] = (
+        dict(colors_raw) if isinstance(colors_raw, dict) and colors_raw
+        else dict(_BUILTIN_COLORS)
+    )
+    titlebar_raw = data.get("titlebar")
+    titlebar: dict[str, Any] = (
+        dict(titlebar_raw) if isinstance(titlebar_raw, dict) and titlebar_raw
+        else dict(_BUILTIN_TITLEBAR)
+    )
+    assets_raw = data.get("assets")
+    assets_cfg: dict[str, Any] = (
+        dict(assets_raw) if isinstance(assets_raw, dict) and assets_raw
+        else dict(_BUILTIN_ASSETS)
+    )
 
     # --- 加载字体 ---
     _load_fonts(assets_cfg.get("fonts", []), assets_dir)
@@ -210,6 +263,10 @@ def _build_theme(theme_dir: Path) -> Theme:
     # QSS 中可以用 border-image: url({{asset.main_bg}}) ... 引用主题图片
     qss = _substitute_asset_paths(qss, assets_cfg.get("images", {}), assets_dir)
 
+    # 清理残留的 {{asset.xxx}} 占位符（无图片资源的主题不会替换），
+    # 用 none 替代使得 QSS 中 url(none) 能被 Qt 安全忽略
+    qss = re.sub(r"\{\{asset\.\w+}}", "none", qss)
+
     # 收集图片（不注入 QSS，由 main_window 用 QPalette 加载）
     pixmaps = _collect_image_paths(assets_cfg.get("images", {}), theme_dir)
 
@@ -222,9 +279,9 @@ def _build_theme(theme_dir: Path) -> Theme:
     # 构建最终 QSS（附加颜色字典中没有但在内置 QSS 中需要的值）
     full_qss = qss
     # 把 font_family/font_size 注入到 QSS 的 %() 格式化（仅用于内置兜底 QSS）
-    colors_with_font = dict(colors)
+    colors_with_font: dict[str, Any] = dict(colors)
     colors_with_font["font_family"] = font_family
-    colors_with_font["font_size"] = font_size
+    colors_with_font["font_size"] = str(font_size)
 
     # 如果 QSS 文件加载失败兜底用了 _BUILTIN_QSS，需要 % 格式化
     if not (theme_dir / "style.qss").exists():
@@ -241,9 +298,9 @@ def _build_theme(theme_dir: Path) -> Theme:
 
 def _fallback_theme() -> Theme:
     """最终兜底：返回内置硬编码亮色主题。"""
-    colors = dict(_BUILTIN_COLORS)
+    colors: dict[str, Any] = dict(_BUILTIN_COLORS)
     colors["font_family"] = "Microsoft YaHei"
-    colors["font_size"] = 13
+    colors["font_size"] = "13"
     qss = _BUILTIN_QSS % colors
     return Theme(
         qss=qss,
@@ -297,7 +354,7 @@ def _remove_qss_property(qss: str, selector: str, prop: str) -> str:
     import re
     # 匹配 "selector { ... }" 块
     pattern = re.compile(
-        re.escape(selector) + r'\s*\{[^}]*\}',
+        re.escape(selector) + r'\s*\{[^}]*}',
         re.DOTALL,
     )
     def _clean(m: re.Match[str]) -> str:

@@ -17,65 +17,61 @@ name = "马卡龙"
 #   btn_close_hover: 关闭按钮悬停时的背景色（通常用红色系）
 # ==============================================================================
 [titlebar]
+# 标题栏总高度（像素）
 height = 40
+# 程序图标的显示尺寸（像素）
 icon_size = 22
+# 标题文字颜色（十六进制 RGB）
 text_color = "#9b6b8e"
+# 标题文字字号（像素）
 text_size = 16
-# Marker Felt（mac）/ Bradley Hand / Chalkboard SE — 手写但端正、可读，
-# 没有 Snell Roundhand 那种花体；Windows 上回退到 Comic Sans MS / 楷体。
+# 标题字体栈：手写但端正、可读，macOS 优先 Marker Felt / Bradley Hand，
+# Windows 回退到 Comic Sans MS / 楷体
 text_font = '"Marker Felt", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", "楷体", "KaiTi", "STKaiti", "Microsoft YaHei"'
+# 标题文字阴影颜色（柔和粉色水彩晕染感）
 text_shadow = "#fce4ec"
+# 最小化按钮悬停背景色
 btn_hover_bg = "#fce4ec"
+# 关闭按钮悬停背景色
 btn_close_hover = "#f0a5b5"
 
 
-# ==============================================================================
-# 资源 — 字体和背景图片
-#
-#   字体：
-#     font_family : QSS 中引用的字体名（没有 [[assets.fonts]] 时从系统查找）
-#     font_size   : 全局默认字号
-#
-#     [[assets.fonts]] — 自定义字体文件（可选，可重复多条）
-#       file   : assets/ 下的 TTF 文件名
-#       family : 加载后的字体族名（QSS 中引用此名称）
-#
-#   背景图片：
-#     [assets.images] — 全部可选，不填 file 则回退到 [colors] 中的纯色
-#       file : assets/ 下的文件名
-#       mode : stretch（拉伸填充）/ tile（平铺）/ center（居中）
-#
-#     ┌─────────────────┬───────────┬──────┬─────────┬──────────────────────────┐
-#     │ 配置项            │ 建议尺寸    │ 透明  │ 模式     │ 用途说明                   │
-#     ├─────────────────┼───────────┼──────┼─────────┼──────────────────────────┤
-#     │ main_bg         │ 1100×700  │ 否   │ stretch │ 主窗口全幅背景              │
-#     │ panel_bg        │ 1100×50   │ 否   │ stretch │ 顶部控制栏 + 底部按钮栏       │
-#     │ table_bg        │ 1080×480  │ 否   │ stretch │ 两张表格所在区域              │
-#     │ header_bg       │ 1080×32   │ 否   │ stretch │ 表格列标题栏                 │
-#     │ statusbar_bg    │ 1100×30   │ 否   │ stretch │ 底部状态栏                   │
-#     │ button_texture  │ 32×32     │ 否   │ tile    │ 按钮表面纹理（细微噪点/磨砂感）  │
-#     └─────────────────┴───────────┴──────┴─────────┴──────────────────────────┘
-# ==============================================================================
 [assets]
-# 可爱字体栈 — Qt 按顺序找第一个可用字体，缺字符再回退到下一个
-#   macOS 头三个最有手写感：HanziPen SC（毛笔）/ Hannotate SC（中性手写） / Yuppy SC（圆体）
-#   Chalkboard SE / Comic Sans MS — 英文/数字的圆体替代
-#   Windows: 华文琥珀（厚墩墩可爱）/ 华文新魏（毛笔感）/ 楷体（兜底毛笔风）/ Microsoft YaHei（最终保底）
-# 同一栈在两个系统都奏效，不存在的字体被 Qt 自动跳过
+# ---- 字体 ----
+# 支持两种方式，可同时使用：
+#   **方式一：系统字体** — 直接指定已安装的字体名
+#     font_family = "Microsoft YaHei"
+#   **方式二：自定义 TTF 文件** — 见下方 [[assets.fonts]] 示例
+#     把 .ttf 放到 assets/，取消注释并修改 file / family
+# Qt 按字体栈顺序查找第一个可用字体，缺字符自动回退到下一个
+#
+# macOS: HanziPen SC（毛笔）/ Hannotate SC（中性手写）/ Yuppy SC（圆体）
+# Windows: 华文琥珀 / 华文新魏 / 楷体 / Microsoft YaHei（兜底）
 font_family = '"Yuppy SC", "Hannotate SC", "HanziPen SC", "Chalkboard SE", "Comic Sans MS", "华文琥珀", "STHupo", "华文新魏", "STXinwei", "KaiTi", "楷体", "Microsoft YaHei", "PingFang SC"'
+# 全局字号（像素）
 font_size   = 14
 
+# 自定义 TTF 字体（可选），把字体文件放入 assets/ 后取消注释
 [[assets.fonts]]
-# file = "NotoSansSC-Regular.ttf"
-# family = "Noto Sans SC"
+# file   = "MyCustomFont.ttf"
+# family = "My Custom Font"
 
 [assets.images]
+# ---- 背景图片（全部可选，file = "" 时用纯色填充） ----
+# 格式: key = { file = "文件名.png", mode = "stretch|tile|center" }
+#
+# 主窗口全幅背景（#contentWidget）
 main_bg      = { file = "main_bg.png", mode = "stretch" }
+# 顶部控制栏 + 底部按钮面板（QFrame#topPanel / #bottomPanel）
 panel_bg     = { file = "panel_bg.png", mode = "stretch" }
+# 统计数据表格 + 对战记录表格（QTableWidget）
 table_bg     = { file = "table_bg.png", mode = "stretch" }
+# 表格列标题栏（QHeaderView）
 header_bg    = { file = "header_bg.png", mode = "stretch" }
+# 按钮表面纹理（QPushButton），小图 tile 平铺
 button_bg    = { file = "button_texture.png", mode = "tile" }
-statusbar_bg = { file = "statusbar_bg .png", mode = "stretch" }
+# 底部状态栏（#customStatusBar）
+statusbar_bg = { file = "statusbar_bg.png", mode = "stretch" }
 
 
 # ==============================================================================
@@ -174,3 +170,64 @@ combo_border = "#f0e0ec"
 # 弹窗 — QMessageBox 对话框
 # --------------------------------------------------------------------------
 msgbox_bg = "#fdf6f0"
+
+# =========================================================================
+# 细粒度控件配色 — 按钮、输入框、表格、滚动条等独立配色
+# 马卡龙主题用 rgba() 实现半透效果配合水彩纹理底图
+# =========================================================================
+
+# --- 按钮 ---
+# QPushButton 默认状态：背景色（柔和奶油粉）
+button_bg           = "#fef0f5"
+# QPushButton 默认状态：边框色（浅粉）
+button_border       = "#ecd0dc"
+# QPushButton 鼠标悬停时背景色（比默认略深）
+button_hover_bg     = "#fce4ec"
+# QPushButton 鼠标按下时背景色
+button_pressed_bg   = "#f5d5e0"
+# QPushButton 禁用状态背景色（半透明粉灰）
+button_disabled_bg  = "rgba(245,238,244,220)"
+
+# --- 输入框 ---
+# QLineEdit 默认背景（半透明白）
+input_bg            = "rgba(255,255,255,200)"
+# QLineEdit 获得焦点时背景（比默认略不透）
+input_focus_bg      = "rgba(255,255,255,235)"
+# QLineEdit 禁用状态背景
+input_disabled_bg   = "rgba(245,238,244,180)"
+
+# --- 表格 ---
+# 表格网格线颜色（半透明香芋紫）
+table_grid          = "rgba(232,180,208,100)"
+# 表格交替行背景色（带透明度的粉色）
+table_alt_bg        = "rgba(253,242,248,110)"
+# 单元格默认背景（半透白，透出水彩底图）
+table_item_bg       = "rgba(255,255,255,90)"
+# 交替行单元格背景
+table_item_alt_bg   = "rgba(253,242,248,90)"
+# 表格选中行背景色
+table_selection_bg  = "rgba(252,228,240,220)"
+
+# --- 表头 ---
+# 垂直表头（行号栏）背景色
+header_v_bg         = "rgba(245,230,240,180)"
+# 垂直表头右边框颜色
+header_v_border     = "rgba(240,224,236,200)"
+
+# --- 表格左上角按钮 ---
+# 左上角 QTableCornerButton 背景色
+corner_bg           = "rgba(245,230,240,200)"
+# 左上角 QTableCornerButton 右边框颜色
+corner_border       = "rgba(240,224,236,200)"
+
+# --- 滚动条 ---
+# 滚动条手柄（滑块）颜色（半透明粉紫）
+scrollbar_handle        = "rgba(212,160,192,200)"
+# 滚动条手柄鼠标悬停时颜色
+scrollbar_handle_hover  = "#d4a0c0"
+
+# --- 下拉框 ---
+# QComboBox 本体背景色（半透白）
+combo_body_bg       = "rgba(255,255,255,220)"
+# QComboBox 弹出下拉列表背景色（不透明白）
+combo_list_bg       = "#ffffff"

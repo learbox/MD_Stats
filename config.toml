@@ -34,7 +34,10 @@ height = 700
 # [appearance] — 界面外观
 # ------------------------------------------------------------------------------
 [appearance]
-# 主题: "dark" = 暗色沉浸, "light" = 亮色清爽
+# 界面主题 — 填写 themes/ 目录下的主题文件夹名
+# 内置主题: "dark"（暗色沉浸）、"light"（亮色清爽）、"macaron"（马卡龙水彩）
+# 自定义主题: 在 themes/ 下新建文件夹，放入 theme.toml + assets/，然后在此填写文件夹名
+# 详见 themes/README.md
 theme = "macaron"
 
 # ------------------------------------------------------------------------------
@@ -52,4 +55,4 @@ presets = ["炎兽", "闪刀姬", "烙印", "白银城"]
 # 是否启用按日期分文件存储。
 # false: 所有对战数据保存在 csv/data.csv 中（默认）。
 # true:  每天生成独立文件 csv/data-YYYY-MM-DD.csv，启动时自动创建。
-daily_files = true
+daily_files = false

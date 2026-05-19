@@ -38,7 +38,7 @@ from pathlib import Path
 if sys.version_info >= (3, 11):
     import tomllib  # Python 3.11+ 内置
 else:
-    import tomli as tomllib  # 需要 pip install tomli
+    import tomli as tomllib  # type: ignore[import-not-found]
 
 
 def _get_config_path() -> Path:

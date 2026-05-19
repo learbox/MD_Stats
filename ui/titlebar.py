@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QPoint, QSize
+from PySide6.QtCore import Qt, Signal, QPoint
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QPushButton, QWidget
 
@@ -210,7 +210,7 @@ class TitleBar(QWidget):
             effect.setOffset(0, 1)
             self._title_label.setGraphicsEffect(effect)
         else:
-            self._title_label.setGraphicsEffect(None)
+            self._title_label.setGraphicsEffect(None)  # type: ignore[arg-type]
         self._btn_min.setStyleSheet(
             "QPushButton { background: transparent; border: 1px solid transparent; "
             "border-radius: 4px; }"

@@ -129,7 +129,7 @@ class StatsWorker(QThread):
                     if msg is not None:
                         self.status_update.emit(msg)
                         return None
-                return (w, h)
+                return w, h
             case _:
                 return None
 
