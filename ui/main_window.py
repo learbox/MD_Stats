@@ -73,7 +73,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from PySide6.QtCore import QEvent, QFile, Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QPixmap
+from PySide6.QtGui import QBrush, QColor, QPalette, QIcon, QPixmap
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (
     QApplication,
@@ -211,7 +211,8 @@ class MainWindow(QMainWindow):
         main_bg = self._colors.get("main_bg", "#f5f6fa")
         status_bg = self._colors.get("statusbar_bg", "#ecf0f1")
 
-        self._set_palette_bg(self._title_bar, None, main_bg)
+        # 标题栏 QSS 是 background: transparent，设 autoFillBackground 会覆盖透明
+        # 让标题栏保持透明，透出 contentWidget 的背景图
         self._set_palette_bg(self._status_frame, None, status_bg)
         # content widget 从 QSS 中移掉 background-color，改用 QPalette
         self._set_palette_bg(self._content, None, main_bg)
@@ -231,8 +232,6 @@ class MainWindow(QMainWindow):
                 for table in (self._stats_table, self._record_table):
                     hh = table.horizontalHeader()
                     self._set_palette_bg(hh, pm, main_bg)
-            elif selector == "QPushButton":
-                self._set_palette_bg(self._btn_start, pm, main_bg)
 
     @staticmethod
     def _set_palette_bg(widget, pm, fallback_color: str) -> None:
@@ -244,8 +243,11 @@ class MainWindow(QMainWindow):
                                Qt.AspectRatioMode.IgnoreAspectRatio,
                                Qt.TransformationMode.SmoothTransformation)
             p.setBrush(p.ColorRole.Window, scaled)
+            p.setBrush(p.ColorRole.Base, scaled)
         else:
-            p.setColor(p.ColorRole.Window, QColor(fallback_color))
+            color = QColor(fallback_color)
+            p.setColor(p.ColorRole.Window, color)
+            p.setColor(p.ColorRole.Base, color)
         widget.setPalette(p)
 
     def _show_status(self, msg: str) -> None:
@@ -444,7 +446,8 @@ class MainWindow(QMainWindow):
     def _apply_static_button_palette(self) -> None:
         """给少数语义重要的按钮上色，其余保持水彩纹理底色（参考 Uilbox 目标图）。
 
-        只在主题提供了按钮纹理（macaron）时启用 —— dark/light 主题保持原状。
+        有纹理主题（macaron）时用语义色上色；无纹理主题时清除局部 stylesheet，
+        让全局 QSS 接管，避免从 macaron 切换后残留旧样式。
         动态按钮（启动/手动 win/lose）由 _update_manual_buttons / _cancel_wait
         在状态切换时另行调 _btn_style 重新设色。
 
@@ -452,13 +455,15 @@ class MainWindow(QMainWindow):
         像"加载 / 复制 / 打开 / 编辑 / 重新载入 / 关于"这种常规操作保持原色，
         避免一面墙的彩色按钮淹没主题的水彩气质。
         """
-        if not (self._pixmap_paths and self._pixmap_paths.get("QPushButton")):
-            return
         c = self._colors
-
-        # 停止 — 警告色（粉）；删除最后记录 — 同样的警告粉
-        self._btn_stop.setStyleSheet(self._btn_style(c.get("lose", "#f0a5b5")))
-        self._btn_delete_last.setStyleSheet(self._btn_style(c.get("lose", "#f0a5b5")))
+        if self._pixmap_paths and self._pixmap_paths.get("QPushButton"):
+            # 有纹理主题：用语义色上色
+            self._btn_stop.setStyleSheet(self._btn_style(c.get("lose", "#f0a5b5")))
+            self._btn_delete_last.setStyleSheet(self._btn_style(c.get("lose", "#f0a5b5")))
+        else:
+            # 无纹理主题：清除局部 stylesheet，让全局 QSS 接管
+            self._btn_stop.setStyleSheet("")
+            self._btn_delete_last.setStyleSheet("")
 
     @staticmethod
     def _readable_on(hex_color: str) -> str:
@@ -471,12 +476,31 @@ class MainWindow(QMainWindow):
         return "#4a3a52" if luma > 170 else "#ffffff"
 
     def _apply_table_viewport_palette(self) -> None:
-        """直接给表格和表头的 viewport 设样式，杜绝任何空白变白。
+        """表格/表头 viewport 背景：清旧样式，有资源图用 QPalette 贴图，无图涂纯色。"""
+        # 先清空所有 viewport/header 上旧主题遗留的 stylesheet 和 QPalette
+        for table in (self._stats_table, self._record_table):
+            for w in (table.viewport(), table.verticalHeader(), table.horizontalHeader()):
+                w.setStyleSheet("")
+                w.setAutoFillBackground(False)
+                p = w.palette()
+                p.setColor(QPalette.ColorRole.Window, QColor(0, 0, 0, 0))
+                p.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 0))
+                p.setBrush(QPalette.ColorRole.Window, QBrush())
+                p.setBrush(QPalette.ColorRole.Base, QBrush())
+                w.setPalette(p)
 
-        如果主题在 QSS 中用 border-image/url 贴了表格/表头背景（pixmaps 非空），
-        就跳过 setStyleSheet —— stylesheet 会盖过 border-image，导致背景图不显示。
-        """
+        # 有资源图：用 QPalette 直接把图贴在 viewport/header 上，
+        # 绕过 QAbstractScrollArea 内部对 viewport 的 autoFillBackground 干扰。
         if self._pixmap_paths:
+            table_path = self._pixmap_paths.get("QTableWidget")
+            header_path = self._pixmap_paths.get("QHeaderView::section")
+            main_bg = self._colors.get("main_bg", "#f5f6fa")
+            table_pm = QPixmap(table_path) if table_path else None
+            header_pm = QPixmap(header_path) if header_path else None
+            for table in (self._stats_table, self._record_table):
+                self._set_palette_bg(table.viewport(), table_pm, main_bg)
+                self._set_palette_bg(table.horizontalHeader(), header_pm, main_bg)
+                self._set_palette_bg(table.verticalHeader(), header_pm, main_bg)
             return
 
         base = self._colors.get("widget_bg", "#ffffff")
@@ -487,15 +511,15 @@ class MainWindow(QMainWindow):
 
         for table in (self._stats_table, self._record_table):
             vp = table.viewport()
-            vp.setAutoFillBackground(True)
+            self._set_palette_bg(vp, None, base)
             vp.setStyleSheet(f"background-color: {base};")
 
             vh = table.verticalHeader()
-            vh.setAutoFillBackground(True)
+            self._set_palette_bg(vh, None, header_bg)
             vh.setStyleSheet(f"background-color: {header_bg};")
 
             hh = table.horizontalHeader()
-            hh.setAutoFillBackground(True)
+            self._set_palette_bg(hh, None, header_bg)
             hh.setStyleSheet(f"background-color: {header_bg};")
 
     def _wrap_layouts_in_frames(self, content) -> None:
@@ -503,6 +527,7 @@ class MainWindow(QMainWindow):
 
         只在主题带资源图（pixmaps 非空）时执行；dark / light 主题没有 panel_bg，
         让它们的布局保持和原来完全一致，避免 14px 内边距移位。
+        已存在同名 QFrame 时跳过，防止重复包裹。
         """
         if not self._pixmap_paths:
             return
@@ -512,6 +537,9 @@ class MainWindow(QMainWindow):
 
         for layout_name, frame_name in (("ctrlLayout", "topPanel"),
                                          ("bottomLayout", "bottomPanel")):
+            # 已存在同名 QFrame，说明之前已包裹过，跳过
+            if content.findChild(QFrame, frame_name) is not None:
+                continue
             layout = content.findChild(QHBoxLayout, layout_name)
             if layout is None:
                 continue
@@ -723,6 +751,10 @@ class MainWindow(QMainWindow):
 
         # ---- 初始化手动按钮样式（阶段 0 = 橙色赢硬币/输硬币） ----
         self._update_manual_buttons()
+        # 启动按钮有局部 stylesheet，需显式设置语义色
+        self._btn_start.setStyleSheet(
+            self._btn_style(self._theme_colors()["start_bg"], padding="6px 20px")
+        )
 
     # =========================================================================
     # 底部按钮状态管理
@@ -1286,10 +1318,17 @@ class MainWindow(QMainWindow):
             self._assets_dir = theme.assets_dir
             self.setStyleSheet(theme.qss)
             self._apply_theme_pixmaps(theme.pixmaps)
+            self._wrap_layouts_in_frames(self._content)
             self._apply_table_viewport_palette()
             self._apply_static_button_palette()
             self._refresh_stats_table()
+            self._refresh_record_table()
             self._update_manual_buttons()
+            # 更新启动按钮样式（有局部 stylesheet，全局 QSS 无法覆盖）
+            colors = self._theme_colors()
+            self._btn_start.setStyleSheet(
+                self._btn_style(colors["start_bg"], padding="6px 20px")
+            )
             # 更新标题栏外观
             self._title_bar.set_title("MD Stats")
             self._title_bar.reload_style(self._titlebar_cfg)

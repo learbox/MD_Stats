@@ -149,6 +149,11 @@ QMessageBox QLabel {
 #contentWidget {
     border-radius: 8px;
 }
+/* 从 macaron 主题切换回来时，面板 QFrame 可能残留，确保透明 */
+QFrame#topPanel, QFrame#bottomPanel {
+    background: transparent;
+    border: none;
+}
 #titleBar {
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
