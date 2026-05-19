@@ -83,12 +83,12 @@ import cv2
 import numpy as np
 from pathlib import Path
 
+from src.config import get_project_root
+
 # ---------------------------------------------------------------------------
 # 模板图片存放目录
 # ---------------------------------------------------------------------------
-# 使用 __file__ 计算出绝对路径，确保无论从何处运行都能找到模板。
-# 路径: src/detector.py → src/ → 项目根目录/resource/templates/
-_TEMPLATES_BASE = Path(__file__).resolve().parent.parent / "resource" / "templates"
+_TEMPLATES_BASE = get_project_root() / "resource" / "templates"
 
 # 当前分辨率子目录（由 set_resolution 设置），如 1920x1080/。
 # 为 None 时只搜索根目录。
