@@ -44,13 +44,12 @@ import csv
 from datetime import datetime
 from pathlib import Path
 
-from src.config import load_config
+from src.config import get_project_root, load_config
 
 # ---------------------------------------------------------------------------
 # CSV 文件路径
 # ---------------------------------------------------------------------------
-# 基础路径: src/recorder.py → src/ → 项目根目录/csv/
-_CSV_DIR = Path(__file__).resolve().parent.parent / "csv"
+_CSV_DIR = get_project_root() / "csv"
 
 # 活跃 CSV 文件路径 — 由 set_active_csv() / init_active_csv_from_config() 设置。
 # 所有读写操作均使用此变量。

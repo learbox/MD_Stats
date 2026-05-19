@@ -93,7 +93,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui._meta import VERSION, AUTHOR, LICENSE, DESCRIPTION, REPO_URL, ACKNOWLEDGMENTS
-from src.config import load_config
+from src.config import get_project_root, load_config
 from src.recorder import (
     add_record,
     COLUMNS as RECORD_COLUMNS,
@@ -113,12 +113,12 @@ from ui.titlebar import TitleBar
 # .ui 界面文件的绝对路径
 UI_FILE = Path(__file__).resolve().parent / "main_window.ui"
 
-# config.toml 的绝对路径
-_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
+# config.toml 的绝对路径（开发/打包兼容）
+_CONFIG_PATH = get_project_root() / "config.toml"
 
 # 表格列宽持久化文件
-_COLUMN_WIDTHS_PATH = Path(__file__).resolve().parent.parent / ".column_widths.json"
-_RESOURCE_DIR = Path(__file__).resolve().parent.parent / "resource"
+_COLUMN_WIDTHS_PATH = get_project_root() / ".column_widths.json"
+_RESOURCE_DIR = get_project_root() / "resource"
 
 _T = TypeVar("_T")
 

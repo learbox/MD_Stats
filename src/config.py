@@ -41,16 +41,20 @@ else:
     import tomli as tomllib  # type: ignore[import-not-found]
 
 
-def _get_config_path() -> Path:
-    """获取 config.toml 的绝对路径。
+def get_project_root() -> Path:
+    """获取项目根目录的绝对路径。
 
-    config.toml 位于项目根目录，即 src/config.py 的上两级目录。
-    路径计算:
-        __file__                 → src/config.py
-        .resolve().parent        → src/
-        .parent                  → 项目根目录
+    开发模式: __file__ → src/config.py → 上两级 → 项目根目录
+    打包模式 (sys.frozen): sys.executable → EXE 所在目录
     """
-    return Path(__file__).resolve().parent.parent / "config.toml"
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+def _get_config_path() -> Path:
+    """获取 config.toml 的绝对路径。"""
+    return get_project_root() / "config.toml"
 
 
 def load_config() -> dict:

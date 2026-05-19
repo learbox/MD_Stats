@@ -54,6 +54,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.config import get_project_root
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
@@ -62,8 +64,8 @@ else:
 # 字体加载
 from PySide6.QtGui import QFontDatabase
 
-# themes/ 文件夹相对于本文件的路径
-_THEMES_DIR = Path(__file__).resolve().parent.parent / "themes"
+# themes/ 文件夹路径（开发/打包兼容）
+_THEMES_DIR = get_project_root() / "themes"
 
 
 @dataclass

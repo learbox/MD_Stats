@@ -9,6 +9,7 @@ __pycache__/
 .venv/
 
 # Build
+build/
 dist/
 *.spec
 
