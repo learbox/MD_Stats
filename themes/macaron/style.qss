@@ -1,18 +1,17 @@
 /* ============================================================
-   马卡龙主题 — 手绘水彩纹理 + 半透明覆盖层
-   背景图片通过 {{asset.X}} 占位符在 theme_loader 中替换为绝对路径。
+   统一 QSS 模板 — 所有主题共享此结构。
+   颜色用 {color.key} 占位符，图片用 {asset.key} 占位符。
+   新建主题只需修改 theme.toml，无需编辑此文件。
    ============================================================ */
 
-QMainWindow {
-    background-color: {{color.main_bg}};
-}
+QMainWindow { background-color: {{color.main_bg}}; }
 QWidget {
     color: {{color.text_primary}};
     font-family: {{assets.font_family}};
     font-size: {{assets.font_size}}px;
 }
-/* 显式给每种文字控件加 font-family —— Qt QSS 在更具体的选择器（QPushButton 等）
- * 出现时，有时会忽略 QWidget 层级的 font-family 继承，必须显式声明才稳定生效。 */
+
+/* 显式声明字体 —— Qt QSS 在更具体的选择器上有时会忽略 QWidget 的 font-family 继承 */
 QPushButton, QLineEdit, QLabel, QTableWidget, QHeaderView, QHeaderView::section,
 QComboBox, QComboBox QAbstractItemView, QMessageBox, QToolTip {
     font-family: {{assets.font_family}};
@@ -21,12 +20,14 @@ QComboBox, QComboBox QAbstractItemView, QMessageBox, QToolTip {
 /* ---------- 主背景 ---------- */
 #contentWidget {
     border-image: url({{asset.main_bg}}) 0 0 0 0 stretch stretch;
+    background-color: {{color.main_bg}};
     border-radius: 8px;
 }
 
-/* ---------- 顶部/底部面板 ---------- */
+/* ---------- 顶部 / 底部面板 ---------- */
 QFrame#topPanel, QFrame#bottomPanel {
     border-image: url({{asset.panel_bg}}) 0 0 0 0 stretch stretch;
+    background-color: transparent;
     border: none;
     border-radius: 10px;
     padding: 4px;
@@ -47,6 +48,7 @@ QFrame#topPanel, QFrame#bottomPanel {
 /* ---------- 状态栏 ---------- */
 #customStatusBar {
     border-image: url({{asset.statusbar_bg}}) 0 0 0 0 stretch stretch;
+    background-color: {{color.statusbar_bg}};
     border: none;
     border-bottom-left-radius: 10px;
     border-bottom-right-radius: 10px;
@@ -58,36 +60,31 @@ QFrame#topPanel, QFrame#bottomPanel {
     font-size: 12px;
 }
 
-/* ---------- 按钮（默认中性奶油粉，配合面板水彩底色不抢眼）----------
- * 用纯色而不是 button_texture.png：纹理 + 圆角 + 父面板的 border-image
- * 三者叠加时，按钮两侧会露出面板水彩，看上去像"粉色矩形中间夹着别的颜色"。
- * 改成单一柔粉色后，按钮和动作色按钮（启动绿 / 停止粉 / 赢硬币黄）一脉相承，
- * 都是清晰的圆角色块。
- */
+/* ---------- 按钮 ---------- */
 QPushButton {
-    background: #fef0f5;
+    background-color: {{color.button_bg}};
     color: {{color.text_primary}};
-    border: 1px solid #ecd0dc;
+    border: 1px solid {{color.button_border}};
     border-radius: 12px;
     padding: 5px 14px;
 }
 QPushButton:hover {
-    background: #fce4ec;
+    background-color: {{color.button_hover_bg}};
     border-color: {{color.border_hover}};
 }
 QPushButton:pressed {
-    background: #f5d5e0;
+    background-color: {{color.button_pressed_bg}};
     border-color: {{color.border_hover}};
 }
 QPushButton:disabled {
-    background: rgba(245, 238, 244, 220);
+    background-color: {{color.button_disabled_bg}};
     color: {{color.text_disabled}};
     border-color: {{color.border_disabled}};
 }
 
 /* ---------- 输入框 ---------- */
 QLineEdit {
-    background-color: rgba(255, 255, 255, 200);
+    background-color: {{color.input_bg}};
     color: {{color.text_primary}};
     border: 1px solid {{color.border}};
     border-radius: 6px;
@@ -95,10 +92,10 @@ QLineEdit {
 }
 QLineEdit:focus {
     border-color: {{color.border_focus}};
-    background-color: rgba(255, 255, 255, 235);
+    background-color: {{color.input_focus_bg}};
 }
 QLineEdit:disabled {
-    background-color: rgba(245, 238, 244, 180);
+    background-color: {{color.input_disabled_bg}};
     color: {{color.text_disabled}};
 }
 
@@ -111,30 +108,30 @@ QLabel {
 /* ---------- 表格 ---------- */
 QTableWidget {
     border-image: url({{asset.table_bg}}) 0 0 0 0 stretch stretch;
-    background-color: transparent;
-    alternate-background-color: rgba(253, 242, 248, 110);
+    background-color: {{color.widget_bg}};
+    alternate-background-color: {{color.table_alt_bg}};
     color: {{color.table_text}};
     border: none;
-    gridline-color: rgba(232, 180, 208, 100);
+    gridline-color: {{color.table_grid}};
     outline: none;
-    selection-background-color: rgba(252, 228, 240, 220);
+    selection-background-color: {{color.table_selection_bg}};
     selection-color: {{color.table_text}};
 }
 QTableWidget::item {
-    background-color: rgba(255, 255, 255, 90);
+    background-color: {{color.table_item_bg}};
     padding: 2px 6px;
 }
 QTableWidget::item:alternate {
-    background-color: rgba(253, 242, 248, 90);
+    background-color: {{color.table_item_alt_bg}};
 }
 QTableWidget::item:selected {
-    background-color: rgba(252, 228, 240, 220);
+    background-color: {{color.table_selection_bg}};
     color: {{color.table_text}};
 }
 
 QHeaderView {
     border-image: url({{asset.header_bg}}) 0 0 0 0 stretch stretch;
-    background: transparent;
+    background-color: transparent;
     border: none;
 }
 QHeaderView::section {
@@ -142,23 +139,25 @@ QHeaderView::section {
     background-color: transparent;
     color: {{color.text_primary}};
     border: none;
+    border-bottom: 2px solid {{color.header_accent}};
     padding: 5px 8px;
     font-weight: bold;
     font-size: 12px;
 }
 QHeaderView::section:vertical {
     border-image: none;
-    background-color: rgba(245, 230, 240, 180);
+    background-color: {{color.header_v_bg}};
     color: {{color.text_disabled}};
     border: none;
-    border-right: 1px solid rgba(240, 224, 236, 200);
+    border-right: 1px solid {{color.header_v_border}};
     padding: 0px 4px;
     font-size: 11px;
 }
 QTableCornerButton::section {
-    background-color: rgba(245, 230, 240, 200);
+    background-color: {{color.corner_bg}};
     border: none;
-    border-right: 1px solid rgba(240, 224, 236, 200);
+    border-bottom: 2px solid {{color.header_accent}};
+    border-right: 1px solid {{color.corner_border}};
 }
 
 /* ---------- 滚动条 ---------- */
@@ -168,12 +167,12 @@ QScrollBar:vertical {
     margin: 0;
 }
 QScrollBar::handle:vertical {
-    background: rgba(212, 160, 192, 200);
+    background-color: {{color.scrollbar_handle}};
     border-radius: 4px;
     min-height: 30px;
 }
 QScrollBar::handle:vertical:hover {
-    background: {{color.border_focus}};
+    background: {{color.scrollbar_handle_hover}};
 }
 QScrollBar::add-line:vertical,
 QScrollBar::sub-line:vertical {
@@ -184,12 +183,12 @@ QScrollBar:horizontal {
     height: 8px;
 }
 QScrollBar::handle:horizontal {
-    background: rgba(212, 160, 192, 200);
+    background-color: {{color.scrollbar_handle}};
     border-radius: 4px;
     min-width: 30px;
 }
 QScrollBar::handle:horizontal:hover {
-    background: {{color.border_focus}};
+    background: {{color.scrollbar_handle_hover}};
 }
 QScrollBar::add-line:horizontal,
 QScrollBar::sub-line:horizontal {
@@ -209,7 +208,7 @@ QSplitter::handle:vertical {
 
 /* ---------- 下拉框 ---------- */
 QComboBox {
-    background-color: rgba(255, 255, 255, 220);
+    background-color: {{color.combo_body_bg}};
     color: {{color.text_primary}};
     border: 1px solid {{color.combo_border}};
     border-radius: 6px;
@@ -219,7 +218,7 @@ QComboBox:hover {
     border-color: {{color.border_hover}};
 }
 QComboBox QAbstractItemView {
-    background-color: #ffffff;
+    background-color: {{color.combo_list_bg}};
     color: {{color.text_primary}};
     border: 1px solid {{color.combo_border}};
     selection-background-color: {{color.selection_bg}};

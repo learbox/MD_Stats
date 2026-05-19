@@ -72,7 +72,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, TypeVar
 
-from PySide6.QtCore import QEvent, QFile, Qt, QTimer
+from PySide6.QtCore import QFile, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QPalette, QIcon, QPixmap
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (
@@ -92,6 +92,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
+from ui._meta import VERSION, AUTHOR, LICENSE, DESCRIPTION, REPO_URL, ACKNOWLEDGMENTS
 from src.config import load_config
 from src.recorder import (
     add_record,
@@ -117,6 +118,7 @@ _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
 
 # 表格列宽持久化文件
 _COLUMN_WIDTHS_PATH = Path(__file__).resolve().parent.parent / ".column_widths.json"
+_RESOURCE_DIR = Path(__file__).resolve().parent.parent / "resource"
 
 _T = TypeVar("_T")
 
@@ -254,6 +256,21 @@ class MainWindow(QMainWindow):
         """更新状态栏消息。"""
         self._status_label.setText(msg)
 
+    def _ask_yes_no(self, title: str, text: str) -> bool:
+        """弹出"是/否"确认对话框，返回 True 表示选"是"。"""
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        msg.setWindowIcon(self.windowIcon())
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        msg.setDefaultButton(QMessageBox.StandardButton.No)
+        msg.button(QMessageBox.StandardButton.Yes).setText("是")
+        msg.button(QMessageBox.StandardButton.No).setText("否")
+        return msg.exec() == QMessageBox.StandardButton.Yes
+
     def _is_dark_theme(self) -> bool:
         """判断当前是否为暗色主题。"""
         return self._config.get("appearance", {}).get("theme", "dark") == "dark"
@@ -273,19 +290,19 @@ class MainWindow(QMainWindow):
                     ("cyBottomHeight", ctypes.c_int),
                 ]
             margins = _MARGINS(1, 1, 1, 1)
-            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(
+            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(  # type: ignore[attr-defined]
                 hwnd, ctypes.byref(margins),
             )
 
             # Windows 11 原生圆角
-            DWMWA_WINDOW_CORNER_PREFERENCE = 33
-            DWMWCP_ROUND = 2
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
-                ctypes.byref(ctypes.c_int(DWMWCP_ROUND)),
+            dwmwa_window_corner_preference = 33
+            dwmwcp_round = 2
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore[attr-defined]
+                hwnd, dwmwa_window_corner_preference,
+                ctypes.byref(ctypes.c_int(dwmwcp_round)),
                 ctypes.sizeof(ctypes.c_int),
             )
-        except Exception:
+        except OSError:
             pass
 
     # ---- 无边框窗口 resize 支持 ----
@@ -303,13 +320,13 @@ class MainWindow(QMainWindow):
         bottom_edge = y >= geo.y() + geo.height() - bw
 
         if top_edge and left_edge:
-            return Qt.Edge.LeftEdge | Qt.Edge.TopEdge
+            return Qt.Edge.LeftEdge | Qt.Edge.TopEdge  # type: ignore[return-value]
         if top_edge and right_edge:
-            return Qt.Edge.RightEdge | Qt.Edge.TopEdge
+            return Qt.Edge.RightEdge | Qt.Edge.TopEdge  # type: ignore[return-value]
         if bottom_edge and left_edge:
-            return Qt.Edge.LeftEdge | Qt.Edge.BottomEdge
+            return Qt.Edge.LeftEdge | Qt.Edge.BottomEdge  # type: ignore[return-value]
         if bottom_edge and right_edge:
-            return Qt.Edge.RightEdge | Qt.Edge.BottomEdge
+            return Qt.Edge.RightEdge | Qt.Edge.BottomEdge  # type: ignore[return-value]
         if top_edge:
             return Qt.Edge.TopEdge
         if bottom_edge:
@@ -325,9 +342,9 @@ class MainWindow(QMainWindow):
         from PySide6.QtCore import QEvent
         t = event.type()
         if t == QEvent.Type.MouseMove:
-            self._update_resize_cursor(event.globalPosition().toPoint())
+            self._update_resize_cursor(event.globalPosition().toPoint())  # type: ignore[attr-defined]
         elif t == QEvent.Type.MouseButtonPress:
-            edge = self._edge_at(event.globalPosition().toPoint())
+            edge = self._edge_at(event.globalPosition().toPoint())  # type: ignore[attr-defined]
             if edge and self.windowHandle():
                 self.windowHandle().startSystemResize(edge)
                 return True
@@ -340,9 +357,9 @@ class MainWindow(QMainWindow):
             self.setCursor(Qt.CursorShape.SizeHorCursor)
         elif edge == Qt.Edge.TopEdge or edge == Qt.Edge.BottomEdge:
             self.setCursor(Qt.CursorShape.SizeVerCursor)
-        elif edge == (Qt.Edge.LeftEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.RightEdge | Qt.Edge.BottomEdge):
+        elif edge == (Qt.Edge.LeftEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.RightEdge | Qt.Edge.BottomEdge):  # type: ignore[comparison-overlap]
             self.setCursor(Qt.CursorShape.SizeFDiagCursor)
-        elif edge == (Qt.Edge.RightEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.LeftEdge | Qt.Edge.BottomEdge):
+        elif edge == (Qt.Edge.RightEdge | Qt.Edge.TopEdge) or edge == (Qt.Edge.LeftEdge | Qt.Edge.BottomEdge):  # type: ignore[comparison-overlap]
             self.setCursor(Qt.CursorShape.SizeBDiagCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -413,7 +430,7 @@ class MainWindow(QMainWindow):
                 f"border-color: {pressed_bg}; "
                 "} "
                 "QPushButton:disabled { "
-                "background: rgba(245, 238, 244, 220); "
+                f"background: {self._colors.get('button_disabled_bg', 'rgba(245,238,244,220)')}; "
                 f"color: {text_disabled}; "
                 f"border-color: {border_disabled}; "
                 "}"
@@ -422,14 +439,17 @@ class MainWindow(QMainWindow):
         # 默认（dark/light）：保持原来的纯色按钮样式
         border = self._colors.get("border", "#dcdde1")
         hover_bg = self._lighter(bg)
+        disabled_bg = self._colors.get("button_disabled_bg", "#9E9E9E")
+        disabled_color = self._colors.get("text_disabled", "#e0e0e0")
+        disabled_border = self._colors.get("border_disabled", "#888")
         return (
             f"QPushButton {{ background-color: {bg}; color: white; "
             f"font-weight: bold; padding: {padding}; border-radius: 6px; "
             f"border: 1px solid {border}; }}"
             f"QPushButton:hover {{ background-color: {hover_bg}; "
             f"border-color: {hover_bg}; }}"
-            "QPushButton:disabled { background-color: #9E9E9E; color: #e0e0e0; "
-            "border-color: #888; }"
+            f"QPushButton:disabled {{ background-color: {disabled_bg}; "
+            f"color: {disabled_color}; border-color: {disabled_border}; }}"
         )
 
     @staticmethod
@@ -582,6 +602,7 @@ class MainWindow(QMainWindow):
         self._turn_cache: str = ""
         # 防止 refresh_record_table 触发的 cellChanged 写回 CSV
         self._suppress_cell_changed: bool = False
+        self._cols_restored: bool = False
 
         # ---- 加载主题 ----
         theme: Theme = load_theme(
@@ -617,7 +638,7 @@ class MainWindow(QMainWindow):
         self._title_bar.close_clicked.connect(self.close)
         root_layout = content.layout()
         if root_layout is not None:
-            root_layout.insertWidget(0, self._title_bar)
+            root_layout.insertWidget(0, self._title_bar)  # type: ignore[attr-defined]
 
         self.setCentralWidget(content)
 
@@ -625,8 +646,8 @@ class MainWindow(QMainWindow):
         content.setMouseTracking(True)
         content.installEventFilter(self)
 
-        # ---- 窗口图标 ----
-        icon_path = self._assets_dir / "app_icon.png"
+        # ---- 窗口图标（系统资源，不随主题变化）----
+        icon_path = _RESOURCE_DIR / "icons" / "app_icon.png"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 
@@ -736,7 +757,7 @@ class MainWindow(QMainWindow):
         self._info_label = QLabel()
         sf_layout.addWidget(self._info_label)
 
-        root_layout.addWidget(self._status_frame)
+        root_layout.addWidget(self._status_frame)  # type: ignore[union-attr]
 
         # ---- 右下角信息标签定时刷新 ----
         info_timer = QTimer(self)
@@ -777,17 +798,10 @@ class MainWindow(QMainWindow):
         """
         # 运行时切换 CSV 需确认，避免当前对局的记录写入错误文件
         if self._worker is not None:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("切换数据文件")
-            msg.setText("识别正在运行，切换数据文件可能导致\n当前对局记录写入错误的文件。\n\n确定要切换吗？")
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setStandardButtons(
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            msg.setDefaultButton(QMessageBox.StandardButton.No)
-            msg.button(QMessageBox.StandardButton.Yes).setText("是")
-            msg.button(QMessageBox.StandardButton.No).setText("否")
-            if msg.exec() != QMessageBox.StandardButton.Yes:
+            if not self._ask_yes_no(
+                "切换数据文件",
+                "识别正在运行，切换数据文件可能导致\n当前对局记录写入错误的文件。\n\n确定要切换吗？",
+            ):
                 return
 
         csv_dir = str(get_active_csv_path().parent.resolve())  # type: ignore[reportUnknownMemberType]
@@ -834,6 +848,7 @@ class MainWindow(QMainWindow):
         msg = QMessageBox(self)
         msg.setWindowTitle("Master Duel 未运行")
         msg.setText("未检测到 Master Duel 窗口。\n\n是否启动 Master Duel？")
+        msg.setWindowIcon(self.windowIcon())
         msg.setIcon(QMessageBox.Icon.Question)
         btn_yes = msg.addButton("是", QMessageBox.ButtonRole.YesRole)
         msg.addButton("否", QMessageBox.ButtonRole.NoRole)
@@ -1223,18 +1238,10 @@ class MainWindow(QMainWindow):
         coin = "赢硬币" if last.get("赢硬币") == "是" else "输硬币"
         detail = f"{deck} / {coin} / {result}" if deck else f"{coin} / {result}"
 
-        msg = QMessageBox(self)
-        msg.setWindowTitle("确认删除")
-        msg.setText(f"确定要删除最后一条记录吗？\n\n{detail}")
-        msg.setIcon(QMessageBox.Icon.Warning)
-        msg.setStandardButtons(
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        msg.setDefaultButton(QMessageBox.StandardButton.No)
-        msg.button(QMessageBox.StandardButton.Yes).setText("是")
-        msg.button(QMessageBox.StandardButton.No).setText("否")
-
-        if msg.exec() != QMessageBox.StandardButton.Yes:
+        if not self._ask_yes_no(
+            "确认删除",
+            f"确定要删除最后一条记录吗？\n\n{detail}",
+        ):
             return
 
         records.pop()
@@ -1247,16 +1254,33 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def _on_about(self) -> None:
-        QMessageBox.about(
-            self,
-            "关于 MD Stats",
-            "MD Stats\n\n"
-            "版本: 1.1.0\n"
-            "作者: learbox\n"
-            "协议: MIT\n\n"
-            "基于 OpenCV + PySide6\n"
-            "Master Duel 对局自动统计工具",
-        )
+        lines = [
+            "<h3>MD Stats</h3>",
+            f"<p>版本: {VERSION}<br>",
+            f"作者: {AUTHOR}<br>",
+            f"协议: {LICENSE}</p>",
+        ]
+        if REPO_URL:
+            lines.append(
+                f'<p>仓库: <a href="{REPO_URL}">{REPO_URL}</a></p>'
+            )
+        lines.append(f"<p>{DESCRIPTION.replace(chr(10), '<br>')}</p>")
+        if ACKNOWLEDGMENTS:
+            ack = ACKNOWLEDGMENTS.replace("\n", "<br>")
+            lines.append(f"<p><b>特别鸣谢</b><br>{ack}</p>")
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("关于 MD Stats")
+        msg.setText("".join(lines))
+        msg.setWindowIcon(self.windowIcon())
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.button(QMessageBox.StandardButton.Ok).setText("确定")
+        # 启用超链接点击
+        for label in msg.findChildren(QLabel):
+            label.setOpenExternalLinks(True)
+            label.setTextFormat(Qt.TextFormat.RichText)
+        msg.exec()
 
     # =========================================================================
     # 复制 / 打开
@@ -1389,7 +1413,7 @@ class MainWindow(QMainWindow):
     def showEvent(self, event) -> None:
         """窗口首次显示后，恢复列宽并应用背景图片。"""
         super().showEvent(event)
-        if not getattr(self, "_cols_restored", False):
+        if not self._cols_restored:
             self._cols_restored = True
             QTimer.singleShot(0, self._restore_column_widths)
             QTimer.singleShot(100, self._do_apply_pixmaps)

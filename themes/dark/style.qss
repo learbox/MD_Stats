@@ -1,62 +1,143 @@
-QMainWindow {
-    background-color: {{color.main_bg}};
-}
+/* ============================================================
+   统一 QSS 模板 — 所有主题共享此结构。
+   颜色用 {color.key} 占位符，图片用 {asset.key} 占位符。
+   新建主题只需修改 theme.toml，无需编辑此文件。
+   ============================================================ */
+
+QMainWindow { background-color: {{color.main_bg}}; }
 QWidget {
     color: {{color.text_primary}};
     font-family: {{assets.font_family}};
     font-size: {{assets.font_size}}px;
 }
+
+/* 显式声明字体 —— Qt QSS 在更具体的选择器上有时会忽略 QWidget 的 font-family 继承 */
+QPushButton, QLineEdit, QLabel, QTableWidget, QHeaderView, QHeaderView::section,
+QComboBox, QComboBox QAbstractItemView, QMessageBox, QToolTip {
+    font-family: {{assets.font_family}};
+}
+
+/* ---------- 主背景 ---------- */
+#contentWidget {
+    border-image: url({{asset.main_bg}}) 0 0 0 0 stretch stretch;
+    background-color: {{color.main_bg}};
+    border-radius: 8px;
+}
+
+/* ---------- 顶部 / 底部面板 ---------- */
+QFrame#topPanel, QFrame#bottomPanel {
+    border-image: url({{asset.panel_bg}}) 0 0 0 0 stretch stretch;
+    background-color: transparent;
+    border: none;
+    border-radius: 10px;
+    padding: 4px;
+}
+
+/* ---------- 标题栏 ---------- */
+#titleBar {
+    background: transparent;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+#titleMinBtn, #titleCloseBtn {
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+}
+
+/* ---------- 状态栏 ---------- */
+#customStatusBar {
+    border-image: url({{asset.statusbar_bg}}) 0 0 0 0 stretch stretch;
+    background-color: {{color.statusbar_bg}};
+    border: none;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+}
+#statusMessage {
+    color: {{color.text_secondary}};
+    background: transparent;
+    border: none;
+    font-size: 12px;
+}
+
+/* ---------- 按钮 ---------- */
 QPushButton {
-    background-color: {{color.widget_bg}};
+    background-color: {{color.button_bg}};
     color: {{color.text_primary}};
-    border: 1px solid {{color.border}};
-    border-radius: 6px;
-    padding: 4px 14px;
+    border: 1px solid {{color.button_border}};
+    border-radius: 12px;
+    padding: 5px 14px;
 }
 QPushButton:hover {
-    background-color: {{color.hover_bg}};
+    background-color: {{color.button_hover_bg}};
     border-color: {{color.border_hover}};
 }
 QPushButton:pressed {
-    background-color: {{color.pressed_bg}};
+    background-color: {{color.button_pressed_bg}};
+    border-color: {{color.border_hover}};
 }
 QPushButton:disabled {
-    background-color: {{color.main_bg}};
+    background-color: {{color.button_disabled_bg}};
     color: {{color.text_disabled}};
     border-color: {{color.border_disabled}};
 }
+
+/* ---------- 输入框 ---------- */
 QLineEdit {
-    background-color: {{color.widget_bg}};
+    background-color: {{color.input_bg}};
     color: {{color.text_primary}};
     border: 1px solid {{color.border}};
-    border-radius: 4px;
-    padding: 3px 8px;
+    border-radius: 6px;
+    padding: 4px 10px;
 }
 QLineEdit:focus {
     border-color: {{color.border_focus}};
+    background-color: {{color.input_focus_bg}};
 }
 QLineEdit:disabled {
-    background-color: {{color.main_bg}};
+    background-color: {{color.input_disabled_bg}};
     color: {{color.text_disabled}};
 }
+
+/* ---------- 标签 ---------- */
+QLabel {
+    background: transparent;
+    border: none;
+}
+
+/* ---------- 表格 ---------- */
 QTableWidget {
+    border-image: url({{asset.table_bg}}) 0 0 0 0 stretch stretch;
     background-color: {{color.widget_bg}};
-    alternate-background-color: {{color.alt_row_bg}};
+    alternate-background-color: {{color.table_alt_bg}};
     color: {{color.table_text}};
-    border: 1px solid {{color.border}};
-    gridline-color: {{color.border}};
+    border: none;
+    gridline-color: {{color.table_grid}};
     outline: none;
+    selection-background-color: {{color.table_selection_bg}};
+    selection-color: {{color.table_text}};
+}
+QTableWidget::item {
+    background-color: {{color.table_item_bg}};
+    padding: 2px 6px;
+}
+QTableWidget::item:alternate {
+    background-color: {{color.table_item_alt_bg}};
 }
 QTableWidget::item:selected {
-    background-color: {{color.selection_bg}};
+    background-color: {{color.table_selection_bg}};
     color: {{color.table_text}};
 }
+
 QHeaderView {
-    background-color: {{color.main_bg}};
+    border-image: url({{asset.header_bg}}) 0 0 0 0 stretch stretch;
+    background-color: transparent;
+    border: none;
 }
 QHeaderView::section {
-    background-color: {{color.main_bg}};
-    color: {{color.text_secondary}};
+    border-image: none;
+    background-color: transparent;
+    color: {{color.text_primary}};
     border: none;
     border-bottom: 2px solid {{color.header_accent}};
     padding: 5px 8px;
@@ -64,31 +145,34 @@ QHeaderView::section {
     font-size: 12px;
 }
 QHeaderView::section:vertical {
-    background-color: {{color.main_bg}};
+    border-image: none;
+    background-color: {{color.header_v_bg}};
     color: {{color.text_disabled}};
     border: none;
-    border-right: 1px solid {{color.border}};
+    border-right: 1px solid {{color.header_v_border}};
     padding: 0px 4px;
     font-size: 11px;
 }
 QTableCornerButton::section {
-    background-color: {{color.main_bg}};
+    background-color: {{color.corner_bg}};
     border: none;
     border-bottom: 2px solid {{color.header_accent}};
-    border-right: 1px solid {{color.border}};
+    border-right: 1px solid {{color.corner_border}};
 }
+
+/* ---------- 滚动条 ---------- */
 QScrollBar:vertical {
     background: transparent;
     width: 8px;
     margin: 0;
 }
 QScrollBar::handle:vertical {
-    background: {{color.border}};
+    background-color: {{color.scrollbar_handle}};
     border-radius: 4px;
     min-height: 30px;
 }
 QScrollBar::handle:vertical:hover {
-    background: {{color.border_hover}};
+    background: {{color.scrollbar_handle_hover}};
 }
 QScrollBar::add-line:vertical,
 QScrollBar::sub-line:vertical {
@@ -99,17 +183,19 @@ QScrollBar:horizontal {
     height: 8px;
 }
 QScrollBar::handle:horizontal {
-    background: {{color.border}};
+    background-color: {{color.scrollbar_handle}};
     border-radius: 4px;
     min-width: 30px;
 }
 QScrollBar::handle:horizontal:hover {
-    background: {{color.border_hover}};
+    background: {{color.scrollbar_handle_hover}};
 }
 QScrollBar::add-line:horizontal,
 QScrollBar::sub-line:horizontal {
     width: 0;
 }
+
+/* ---------- 分割器 ---------- */
 QSplitter::handle {
     background-color: {{color.splitter}};
 }
@@ -119,59 +205,30 @@ QSplitter::handle:hover {
 QSplitter::handle:vertical {
     height: 3px;
 }
-QLabel {
-    background: transparent;
-    border: none;
-}
+
+/* ---------- 下拉框 ---------- */
 QComboBox {
-    background-color: {{color.combo_bg}};
+    background-color: {{color.combo_body_bg}};
     color: {{color.text_primary}};
     border: 1px solid {{color.combo_border}};
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 3px 8px;
 }
 QComboBox:hover {
     border-color: {{color.border_hover}};
 }
 QComboBox QAbstractItemView {
-    background-color: {{color.combo_bg}};
+    background-color: {{color.combo_list_bg}};
     color: {{color.text_primary}};
     border: 1px solid {{color.combo_border}};
     selection-background-color: {{color.selection_bg}};
     outline: none;
 }
+
+/* ---------- 消息框 ---------- */
 QMessageBox {
     background-color: {{color.msgbox_bg}};
 }
 QMessageBox QLabel {
     color: {{color.text_primary}};
-}
-#contentWidget {
-    border-radius: 8px;
-}
-/* 从 macaron 主题切换回来时，面板 QFrame 可能残留，确保透明 */
-QFrame#topPanel, QFrame#bottomPanel {
-    background: transparent;
-    border: none;
-}
-#titleBar {
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-}
-#titleMinBtn, #titleCloseBtn {
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-}
-#customStatusBar {
-    background-color: {{color.statusbar_bg}};
-    border: none;
-    border-bottom-left-radius: 8px;
-    border-bottom-right-radius: 8px;
-}
-#statusMessage {
-    color: {{color.text_secondary}};
-    background: transparent;
-    border: none;
-    font-size: 12px;
 }
