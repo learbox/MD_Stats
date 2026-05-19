@@ -523,7 +523,7 @@ class MainWindow(QMainWindow):
                     break
             if idx < 0:
                 continue
-            root_layout.removeItem(layout)
+            root_layout.takeAt(idx)
             frame = QFrame(content)
             frame.setObjectName(frame_name)
             frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
