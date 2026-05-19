@@ -1,0 +1,233 @@
+# ==============================================================================
+# 马卡龙主题 — 低饱和度、高明度的梦幻粉彩色调
+# ==============================================================================
+
+[meta]
+# 主题显示名称（用于 UI 中展示）
+name = "马卡龙"
+
+
+# ==============================================================================
+# 标题栏 — 自定义标题栏外观
+#   height         : 标题栏总高度（像素）
+#   icon_size      : 左侧程序图标的显示尺寸（像素）
+#   text_color     : 标题文字颜色（十六进制 RGB）
+#   text_size      : 标题文字字号（像素）
+#   btn_hover_bg   : 最小化按钮悬停时的背景色
+#   btn_close_hover: 关闭按钮悬停时的背景色（通常用红色系）
+# ==============================================================================
+[titlebar]
+# 标题栏总高度（像素）
+height = 40
+# 程序图标的显示尺寸（像素）
+icon_size = 22
+# 标题文字颜色（十六进制 RGB）
+text_color = "#9b6b8e"
+# 标题文字字号（像素）
+text_size = 16
+# 标题字体栈：手写但端正、可读，macOS 优先 Marker Felt / Bradley Hand，
+# Windows 回退到 Comic Sans MS / 楷体
+text_font = '"Marker Felt", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", "楷体", "KaiTi", "STKaiti", "Microsoft YaHei"'
+# 标题文字阴影颜色（柔和粉色水彩晕染感）
+text_shadow = "#fce4ec"
+# 最小化按钮悬停背景色
+btn_hover_bg = "#fce4ec"
+# 关闭按钮悬停背景色
+btn_close_hover = "#f0a5b5"
+
+
+[assets]
+# ---- 字体 ----
+# 支持两种方式，可同时使用：
+#   **方式一：系统字体** — 直接指定已安装的字体名
+#     font_family = "Microsoft YaHei"
+#   **方式二：自定义 TTF 文件** — 见下方 [[assets.fonts]] 示例
+#     把 .ttf 放到 assets/，取消注释并修改 file / family
+# Qt 按字体栈顺序查找第一个可用字体，缺字符自动回退到下一个
+#
+# macOS: HanziPen SC（毛笔）/ Hannotate SC（中性手写）/ Yuppy SC（圆体）
+# Windows: 华文琥珀 / 华文新魏 / 楷体 / Microsoft YaHei（兜底）
+font_family = '"Yuppy SC", "Hannotate SC", "HanziPen SC", "Chalkboard SE", "Comic Sans MS", "华文琥珀", "STHupo", "华文新魏", "STXinwei", "KaiTi", "楷体", "Microsoft YaHei", "PingFang SC"'
+# 全局字号（像素）
+font_size   = 14
+
+# 自定义 TTF 字体（可选），把字体文件放入 assets/ 后取消注释
+[[assets.fonts]]
+# file   = "MyCustomFont.ttf"
+# family = "My Custom Font"
+
+[assets.images]
+# ---- 背景图片（全部可选，file = "" 时用纯色填充） ----
+# 格式: key = { file = "文件名.png", mode = "stretch|tile|center" }
+#
+# 主窗口全幅背景（#contentWidget）
+main_bg      = { file = "main_bg.png", mode = "stretch" }
+# 顶部控制栏 + 底部按钮面板（QFrame#topPanel / #bottomPanel）
+panel_bg     = { file = "panel_bg.png", mode = "stretch" }
+# 统计数据表格 + 对战记录表格（QTableWidget）
+table_bg     = { file = "table_bg.png", mode = "stretch" }
+# 表格列标题栏（QHeaderView）
+header_bg    = { file = "header_bg.png", mode = "stretch" }
+# 按钮表面纹理（QPushButton），小图 tile 平铺
+button_bg    = { file = "button_texture.png", mode = "tile" }
+# 底部状态栏（#customStatusBar）
+statusbar_bg = { file = "statusbar_bg.png", mode = "stretch" }
+
+
+# ==============================================================================
+# 颜色表 — 下方所有值既用于 style.qss 中的 {{color.xxx}} 占位符替换，
+# 也被 Python 代码调用 _theme_colors() 获取，用于动态按钮着色。
+#
+# 格式: 十六进制 RGB，如 "#fdf6f0"。必须带引号。
+# ==============================================================================
+
+[colors]
+
+# --------------------------------------------------------------------------
+# 背景层次 — 奶油质感淡米色 + 浅粉辅色，构成甜美的空间感
+#   main_bg      : 窗口/主区域底色
+#   widget_bg    : 卡片、输入框、按钮、表格主体等控件的背景色
+#   alt_row_bg   : 表格交替行背景（比 widget_bg 略亮/略暗以区分行）
+#   statusbar_bg : 底部状态栏背景
+# --------------------------------------------------------------------------
+main_bg       = "#fdf6f0"
+widget_bg     = "#ffffff"
+alt_row_bg    = "#fdf2f8"
+statusbar_bg  = "#f5e6f0"
+
+# --------------------------------------------------------------------------
+# 文字颜色 — 柔和的紫灰色，避免纯黑刺眼
+#   text_primary   : 正文、标签、按钮文字
+#   text_secondary : 辅助说明、表头文字、状态栏消息
+#   text_disabled  : 禁用状态的文字（按钮、输入框等）
+#   table_text     : 统计表格和记录表格的文字
+# --------------------------------------------------------------------------
+text_primary   = "#7a6b7e"
+text_secondary = "#b8a9be"
+text_disabled  = "#d5ccd8"
+table_text     = "#7a6b7e"
+
+# --------------------------------------------------------------------------
+# 边框颜色 — 浅粉为主，香芋紫为强调
+#   border          : 默认边框（按钮、输入框、表格网格线）
+#   border_hover    : 鼠标悬停时的边框
+#   border_focus    : 输入框/控件获得焦点时的边框（通常是强调色）
+#   border_disabled : 禁用状态的边框
+# --------------------------------------------------------------------------
+border          = "#f0e0ec"
+border_hover    = "#e8b4d0"
+border_focus    = "#d4a0c0"
+border_disabled = "#f5eef4"
+
+# --------------------------------------------------------------------------
+# 交互状态 — 按钮 hover/pressed、表格行选中
+#   hover_bg     : 鼠标悬停时控件的背景色
+#   pressed_bg   : 按钮按下时的背景色（应比 hover_bg 略深）
+#   selection_bg : 表格选中行、ComboBox 下拉选中项的背景色
+# --------------------------------------------------------------------------
+hover_bg     = "#fef0f5"
+pressed_bg   = "#fce4ec"
+selection_bg = "#fce4f0"
+
+# --------------------------------------------------------------------------
+# 语义色 — 用于手动按钮的动态变色（背景色随对局阶段切换）
+#   win        : 手动按钮阶段 2 左按钮（胜）的背景色
+#   lose       : 手动按钮阶段 2 右按钮（负）的背景色
+#   coin       : 手动按钮阶段 0（赢硬币 / 输硬币）的背景色
+#   turn       : 手动按钮阶段 1（先攻 / 后攻）的背景色
+#   start_bg   : "启动" 按钮的背景色
+#   warning_bg : "终止等待" 按钮的背景色
+#   muted_bg   : 弱化/辅助按钮的背景色
+# --------------------------------------------------------------------------
+win         = "#98d4bb"
+lose        = "#f0a5b5"
+coin        = "#f5d5a0"
+turn        = "#a8c8f0"
+start_bg    = "#98d4bb"
+warning_bg  = "#f5d5a0"
+muted_bg    = "#d5ccd8"
+
+# --------------------------------------------------------------------------
+# 分割器 — QSplitter 的拖拽手柄
+#   splitter       : 默认颜色
+#   splitter_hover : 鼠标悬停时颜色（通常用强调色）
+# --------------------------------------------------------------------------
+splitter        = "#f0e0ec"
+splitter_hover  = "#d4a0c0"
+
+# --------------------------------------------------------------------------
+# 表头强调线 — 表格表头（QHeaderView）底部的 2px 装饰线
+# --------------------------------------------------------------------------
+header_accent   = "#e8b4d0"
+
+# --------------------------------------------------------------------------
+# 下拉框 — QComboBox 及弹出列表
+# --------------------------------------------------------------------------
+combo_bg     = "#ffffff"
+combo_border = "#f0e0ec"
+
+# --------------------------------------------------------------------------
+# 弹窗 — QMessageBox 对话框
+# --------------------------------------------------------------------------
+msgbox_bg = "#fdf6f0"
+
+# =========================================================================
+# 细粒度控件配色 — 按钮、输入框、表格、滚动条等独立配色
+# 马卡龙主题用 rgba() 实现半透效果配合水彩纹理底图
+# =========================================================================
+
+# --- 按钮 ---
+# QPushButton 默认状态：背景色（柔和奶油粉）
+button_bg           = "#fef0f5"
+# QPushButton 默认状态：边框色（浅粉）
+button_border       = "#ecd0dc"
+# QPushButton 鼠标悬停时背景色（比默认略深）
+button_hover_bg     = "#fce4ec"
+# QPushButton 鼠标按下时背景色
+button_pressed_bg   = "#f5d5e0"
+# QPushButton 禁用状态背景色（半透明粉灰）
+button_disabled_bg  = "rgba(245,238,244,220)"
+
+# --- 输入框 ---
+# QLineEdit 默认背景（半透明白）
+input_bg            = "rgba(255,255,255,200)"
+# QLineEdit 获得焦点时背景（比默认略不透）
+input_focus_bg      = "rgba(255,255,255,235)"
+# QLineEdit 禁用状态背景
+input_disabled_bg   = "rgba(245,238,244,180)"
+
+# --- 表格 ---
+# 表格网格线颜色（半透明香芋紫）
+table_grid          = "rgba(232,180,208,100)"
+# 表格交替行背景色（带透明度的粉色）
+table_alt_bg        = "rgba(253,242,248,110)"
+# 单元格默认背景（半透白，透出水彩底图）
+table_item_bg       = "rgba(255,255,255,90)"
+# 交替行单元格背景
+table_item_alt_bg   = "rgba(253,242,248,90)"
+# 表格选中行背景色
+table_selection_bg  = "rgba(252,228,240,220)"
+
+# --- 表头 ---
+# 垂直表头（行号栏）背景色
+header_v_bg         = "rgba(245,230,240,180)"
+# 垂直表头右边框颜色
+header_v_border     = "rgba(240,224,236,200)"
+
+# --- 表格左上角按钮 ---
+# 左上角 QTableCornerButton 背景色
+corner_bg           = "rgba(245,230,240,200)"
+# 左上角 QTableCornerButton 右边框颜色
+corner_border       = "rgba(240,224,236,200)"
+
+# --- 滚动条 ---
+# 滚动条手柄（滑块）颜色（半透明粉紫）
+scrollbar_handle        = "rgba(212,160,192,200)"
+# 滚动条手柄鼠标悬停时颜色
+scrollbar_handle_hover  = "#d4a0c0"
+
+# --- 下拉框 ---
+# QComboBox 本体背景色（半透白）
+combo_body_bg       = "rgba(255,255,255,220)"
+# QComboBox 弹出下拉列表背景色（不透明白）
+combo_list_bg       = "#ffffff"

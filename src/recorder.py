@@ -151,8 +151,8 @@ def load_records() -> list[dict[str, str]]:
             reader = csv.DictReader(f)
             for row in reader:
                 records.append(row)
-    except Exception:
-        # 文件损坏或格式错误：返回空列表，GUI 会显示"暂无数据"
+    except (OSError, csv.Error, KeyError):
+        # 文件损坏、权限不足或格式错误：返回空列表，GUI 显示"暂无数据"
         pass
     return records
 

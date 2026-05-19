@@ -14,16 +14,30 @@
    <string>MD Stats</string>
   </property>
   <layout class="QVBoxLayout" name="rootLayout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>14</number>
+   </property>
+   <property name="topMargin">
+    <number>14</number>
+   </property>
+   <property name="rightMargin">
+    <number>14</number>
+   </property>
+   <property name="bottomMargin">
+    <number>14</number>
+   </property>
    <item>
     <layout class="QHBoxLayout" name="ctrlLayout">
+     <property name="spacing">
+      <number>10</number>
+     </property>
      <item>
       <widget class="QPushButton" name="btn_start">
        <property name="text">
         <string>启动</string>
-       </property>
-       <property name="styleSheet">
-        <string>QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 6px 20px; }
-QPushButton:disabled { background-color: #9E9E9E; }</string>
        </property>
       </widget>
      </item>
@@ -34,10 +48,6 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
        </property>
        <property name="text">
         <string>停止</string>
-       </property>
-       <property name="styleSheet">
-        <string>QPushButton { background-color: #F44336; color: white; font-weight: bold; padding: 6px 20px; }
-QPushButton:disabled { background-color: #9E9E9E; }</string>
        </property>
       </widget>
      </item>
@@ -82,12 +92,6 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
        <property name="text">
         <string>修改卡组</string>
        </property>
-       <property name="maximumSize">
-        <size>
-         <width>70</width>
-         <height>16777215</height>
-        </size>
-       </property>
       </widget>
      </item>
      <item>
@@ -111,18 +115,12 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
        <property name="text">
         <string>赢硬币</string>
        </property>
-       <property name="styleSheet">
-        <string>QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 4px 12px; }</string>
-       </property>
       </widget>
      </item>
      <item>
       <widget class="QPushButton" name="btn_manual_lose">
        <property name="text">
         <string>输硬币</string>
-       </property>
-       <property name="styleSheet">
-        <string>QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 4px 12px; }</string>
        </property>
       </widget>
      </item>
@@ -133,9 +131,6 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
        </property>
        <property name="visible">
         <bool>false</bool>
-       </property>
-       <property name="styleSheet">
-        <string>QPushButton { background-color: #9E9E9E; color: white; padding: 4px 12px; }</string>
        </property>
       </widget>
      </item>
@@ -160,6 +155,9 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
       <enum>Qt::Vertical</enum>
      </property>
      <widget class="QTableWidget" name="stats_table">
+      <property name="alternatingRowColors">
+       <bool>true</bool>
+      </property>
       <property name="editTriggers">
        <set>QAbstractItemView::NoEditTriggers</set>
       </property>
@@ -168,6 +166,9 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
       </property>
      </widget>
      <widget class="QTableWidget" name="record_table">
+      <property name="alternatingRowColors">
+       <bool>true</bool>
+      </property>
       <property name="selectionBehavior">
        <enum>QAbstractItemView::SelectRows</enum>
       </property>
@@ -176,6 +177,9 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
    </item>
    <item>
     <layout class="QHBoxLayout" name="bottomLayout">
+     <property name="spacing">
+      <number>10</number>
+     </property>
      <item>
       <widget class="QPushButton" name="btn_reload">
        <property name="text">
@@ -232,19 +236,12 @@ QPushButton:disabled { background-color: #9E9E9E; }</string>
        <property name="text">
         <string>删除最后记录</string>
        </property>
-       <property name="styleSheet">
-        <string>QPushButton { background-color: #F44336; color: white; padding: 4px 12px; }
-QPushButton:disabled { background-color: #9E9E9E; }</string>
-       </property>
       </widget>
      </item>
      <item>
       <widget class="QPushButton" name="btn_about">
        <property name="text">
         <string>关于</string>
-       </property>
-       <property name="styleSheet">
-        <string>QPushButton { padding: 4px 12px; }</string>
        </property>
       </widget>
      </item>

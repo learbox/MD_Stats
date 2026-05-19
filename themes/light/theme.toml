@@ -1,0 +1,229 @@
+# ==============================================================================
+# 亮色清爽主题
+# ==============================================================================
+
+[meta]
+# 主题显示名称（用于 UI 中展示）
+name = "亮色清爽"
+
+
+# ==============================================================================
+# 标题栏 — 自定义标题栏外观
+#   height         : 标题栏总高度（像素）
+#   icon_size      : 左侧程序图标的显示尺寸（像素）
+#   text_color     : 标题文字颜色（十六进制 RGB）
+#   text_size      : 标题文字字号（像素）
+#   btn_hover_bg   : 最小化按钮悬停时的背景色
+#   btn_close_hover: 关闭按钮悬停时的背景色（通常用红色系）
+# ==============================================================================
+[titlebar]
+# 标题栏总高度（像素）
+height = 36
+# 程序图标的显示尺寸（像素）
+icon_size = 20
+# 标题文字颜色（十六进制 RGB）
+text_color = "#2c3e50"
+# 标题文字字号（像素）
+text_size = 12
+# 标题字体栈（可选，空则使用全局字体）
+# 例: '"Marker Felt", "Comic Sans MS", "楷体", "Microsoft YaHei"'
+text_font = ""
+# 标题文字阴影颜色（可选，空则不启用阴影）
+text_shadow = ""
+# 最小化按钮悬停背景色
+btn_hover_bg = "#d5e4f7"
+# 关闭按钮悬停背景色（通常用红色系）
+btn_close_hover = "#e74c3c"
+
+
+[assets]
+# 全局字体族名 — 单个名字如 "Microsoft YaHei"，或带引号的回退栈
+# 例: font_family = '"My Font", "Microsoft YaHei"'
+font_family = "Microsoft YaHei"
+# 全局字号（像素）
+font_size   = 13
+
+# ---- 自定义 TTF 字体（可选） ----
+# 1. 把 .ttf / .otf 文件放到本主题的 assets/ 目录下
+# 2. 取消下方注释，修改 file 为实际文件名，family 为加载后的字体名
+# 3. 把上面的 font_family 改为包含该字体的回退栈
+[[assets.fonts]]
+# file   = "MyCustomFont.ttf"
+# family = "My Custom Font"
+
+[assets.images]
+# ---- 背景图片（全部可选，file = "" 时用纯色填充） ----
+# 格式: key = { file = "文件名.png", mode = "stretch|tile|center" }
+#   stretch = 拉伸填充控件    tile = 小图循环平铺    center = 居中不缩放
+#
+# 主窗口全幅背景（#contentWidget）
+main_bg      = { file = "", mode = "stretch" }
+# 顶部控制栏 + 底部按钮面板（QFrame#topPanel / #bottomPanel）
+panel_bg     = { file = "", mode = "stretch" }
+# 统计数据表格 + 对战记录表格（QTableWidget）
+table_bg     = { file = "", mode = "stretch" }
+# 表格列标题栏（QHeaderView）
+header_bg    = { file = "", mode = "stretch" }
+# 按钮表面纹理（QPushButton），建议 32×32 小图 tile 平铺
+button_bg    = { file = "", mode = "tile" }
+# 底部状态栏（#customStatusBar）
+statusbar_bg = { file = "", mode = "stretch" }
+
+
+# ==============================================================================
+# 颜色表 — 下方所有值既用于 style.qss 中的 {{color.xxx}} 占位符替换，
+# 也被 Python 代码调用 _theme_colors() 获取，用于动态按钮着色。
+#
+# 格式: 十六进制 RGB，如 "#f5f6fa"。必须带引号。
+# ==============================================================================
+
+[colors]
+
+# --------------------------------------------------------------------------
+# 背景层次 — 从浅到深，构成界面的空间感
+#   main_bg      : 窗口/主区域底色
+#   widget_bg    : 卡片、按钮、输入框、表格主体等控件的背景色
+#   alt_row_bg   : 表格交替行背景（比 widget_bg 略暗以区分行）
+#   statusbar_bg : 底部状态栏背景、表头背景
+# --------------------------------------------------------------------------
+main_bg       = "#f5f6fa"
+widget_bg     = "#ffffff"
+alt_row_bg    = "#f5f7fa"
+statusbar_bg  = "#ecf0f1"
+
+# --------------------------------------------------------------------------
+# 文字颜色
+#   text_primary   : 正文、标签、按钮文字
+#   text_secondary : 辅助说明、状态栏消息、垂直表头序号
+#   text_disabled  : 禁用状态的文字（按钮、输入框等）
+#   table_text     : 统计表格和记录表格的文字
+# --------------------------------------------------------------------------
+text_primary   = "#2c3e50"
+text_secondary = "#7f8c8d"
+text_disabled  = "#bdc3c7"
+table_text     = "#2c3e50"
+
+# --------------------------------------------------------------------------
+# 边框颜色
+#   border          : 默认边框（按钮、输入框、表格网格线）
+#   border_hover    : 鼠标悬停时的边框（通常用强调色或蓝色系）
+#   border_focus    : 输入框/控件获得焦点时的边框（强调色）
+#   border_disabled : 禁用状态的边框、禁用按钮的背景
+# --------------------------------------------------------------------------
+border          = "#dcdde1"
+border_hover    = "#3498db"
+border_focus    = "#3498db"
+border_disabled = "#ecf0f1"
+
+# --------------------------------------------------------------------------
+# 交互状态 — 按钮 hover/pressed、表格行选中
+#   hover_bg     : 鼠标悬停时控件的背景色（淡蓝）
+#   pressed_bg   : 按钮按下时的背景色（应比 hover_bg 略深）
+#   selection_bg : 表格选中行、ComboBox 下拉选中项的背景色
+# --------------------------------------------------------------------------
+hover_bg     = "#e8f0fe"
+pressed_bg   = "#d5e4f7"
+selection_bg = "#d5e4f7"
+
+# --------------------------------------------------------------------------
+# 语义色 — 用于手动按钮的动态变色（背景色随对局阶段切换）
+#   win        : 手动按钮阶段 2 左按钮（胜）的背景色
+#   lose       : 手动按钮阶段 2 右按钮（负）的背景色
+#   coin       : 手动按钮阶段 0（赢硬币 / 输硬币）的背景色
+#   turn       : 手动按钮阶段 1（先攻 / 后攻）的背景色
+#   start_bg   : "启动" 按钮的背景色
+#   warning_bg : "终止等待" 按钮的背景色
+#   muted_bg   : 弱化/辅助按钮的背景色、滚动条 hover 色
+# --------------------------------------------------------------------------
+win         = "#27ae60"
+lose        = "#c0392b"
+coin        = "#e67e22"
+turn        = "#2980b9"
+start_bg    = "#27ae60"
+warning_bg  = "#e67e22"
+muted_bg    = "#95a5a6"
+
+# --------------------------------------------------------------------------
+# 分割器 — QSplitter 的拖拽手柄
+#   splitter       : 默认颜色（与 border 一致）
+#   splitter_hover : 鼠标悬停时颜色（用强调色）
+# --------------------------------------------------------------------------
+splitter        = "#dcdde1"
+splitter_hover  = "#3498db"
+
+# --------------------------------------------------------------------------
+# 表头强调线 — 表格表头（QHeaderView）底部的 2px 装饰线
+# --------------------------------------------------------------------------
+header_accent   = "#3498db"
+
+# --------------------------------------------------------------------------
+# 下拉框 — QComboBox 及弹出列表
+# --------------------------------------------------------------------------
+combo_bg     = "#ffffff"
+combo_border = "#dcdde1"
+
+# --------------------------------------------------------------------------
+# 弹窗 — QMessageBox 对话框
+# --------------------------------------------------------------------------
+msgbox_bg = "#f5f6fa"
+
+# =========================================================================
+# 细粒度控件配色 — 按钮、输入框、表格、滚动条等独立配色
+# 新建主题时按需修改即可；留空会回退到上方基础色
+# =========================================================================
+
+# --- 按钮 ---
+# QPushButton 默认状态：背景色
+button_bg           = "#ffffff"
+# QPushButton 默认状态：边框色
+button_border       = "#dcdde1"
+# QPushButton 鼠标悬停时背景色
+button_hover_bg     = "#e8f0fe"
+# QPushButton 鼠标按下时背景色
+button_pressed_bg   = "#d5e4f7"
+# QPushButton 禁用状态背景色
+button_disabled_bg  = "#ecf0f1"
+
+# --- 输入框 ---
+# QLineEdit 默认背景
+input_bg            = "#ffffff"
+# QLineEdit 获得焦点时背景
+input_focus_bg      = "#ffffff"
+# QLineEdit 禁用状态背景
+input_disabled_bg   = "#ecf0f1"
+
+# --- 表格 ---
+# 表格网格线颜色
+table_grid          = "#dcdde1"
+# 表格交替行背景色（alternate-background-color）
+table_alt_bg        = "#f5f7fa"
+# 单元格默认背景（通常与 widget_bg 一致或 transparent）
+table_item_bg       = "transparent"
+# 交替行单元格背景
+table_item_alt_bg   = "transparent"
+# 表格选中行背景色
+table_selection_bg  = "#d5e4f7"
+
+# --- 表头 ---
+# 垂直表头（行号栏）背景色
+header_v_bg         = "#ecf0f1"
+# 垂直表头右边框颜色
+header_v_border     = "#dcdde1"
+
+# --- 表格左上角按钮 ---
+# 左上角 QTableCornerButton 背景色
+corner_bg           = "#ecf0f1"
+# 左上角 QTableCornerButton 右边框颜色
+corner_border       = "#dcdde1"
+
+# --- 滚动条 ---
+# 滚动条手柄（滑块）颜色
+scrollbar_handle        = "#7f8c8d"
+# 滚动条手柄鼠标悬停时颜色
+scrollbar_handle_hover  = "#3498db"
+
+# --- 下拉框 ---
+# QComboBox 本体背景色
+combo_body_bg       = "#ffffff"
+# QComboBox 弹出下拉列表背景色
+combo_list_bg       = "#ffffff"

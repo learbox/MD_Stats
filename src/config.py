@@ -12,9 +12,8 @@
     width = 1100                # 主窗口宽度（像素）
     height = 700                # 主窗口高度（像素）
 
-    [table]
-    win_color = "#4CAF50"       # 统计表格中"胜"列的字体颜色
-    lose_color = "#F44336"      # 统计表格中"负"列的字体颜色
+    [appearance]
+    theme = "dark"              # 界面主题: "dark" = 暗色沉浸, "light" = 亮色清爽
 
     [opponent_decks]
     presets = ["炎兽", "闪刀姬"]  # 对方卡组预设（下拉菜单选项）
@@ -39,7 +38,7 @@ from pathlib import Path
 if sys.version_info >= (3, 11):
     import tomllib  # Python 3.11+ 内置
 else:
-    import tomli as tomllib  # 需要 pip install tomli
+    import tomli as tomllib  # type: ignore[import-not-found]
 
 
 def _get_config_path() -> Path:
@@ -61,7 +60,7 @@ def load_config() -> dict:
         {
             "detection": {"interval": 0.5, "confidence_threshold": 0.8},
             "window": {"width": 1100, "height": 700},
-            "table": {"win_color": "#4CAF50", "lose_color": "#F44336"},
+            "appearance": {"theme": "dark"},
             "opponent_decks": {"presets": ["炎兽", "闪刀姬"]},
             "recorder": {"daily_files": False},
         }
