@@ -109,6 +109,7 @@ QLabel {
 QTableWidget {
     border-image: url({{asset.table_bg}}) 0 0 0 0 stretch stretch;
     background-color: {{color.widget_bg}};
+    font-size: {{assets.table_font_size}}px;
     alternate-background-color: {{color.table_alt_bg}};
     color: {{color.table_text}};
     border: none;
@@ -129,8 +130,15 @@ QTableWidget::item:selected {
     color: {{color.table_text}};
 }
 
-QHeaderView {
+/* 横向表头 — 整张 header_bg.png 拉伸 */
+QHeaderView#horizontalHeader {
     border-image: url({{asset.header_bg}}) 0 0 0 0 stretch stretch;
+    background-color: transparent;
+    border: none;
+}
+/* 竖向表头 — 整张 row_header_bg.png 拉伸 */
+QHeaderView#verticalHeader {
+    border-image: url({{asset.row_header_bg}}) 0 0 0 0 stretch stretch;
     background-color: transparent;
     border: none;
 }
@@ -142,22 +150,23 @@ QHeaderView::section {
     border-bottom: 2px solid {{color.header_accent}};
     padding: 5px 8px;
     font-weight: bold;
-    font-size: 12px;
+    font-size: {{assets.header_font_size}}px;
 }
 QHeaderView::section:vertical {
     border-image: none;
-    background-color: {{color.header_v_bg}};
-    color: {{color.text_disabled}};
+    background-color: transparent;
+    color: {{color.text_primary}};
     border: none;
     border-right: 1px solid {{color.header_v_border}};
     padding: 0px 4px;
-    font-size: 11px;
+    font-size: {{assets.row_header_font_size}}px;
 }
 QTableCornerButton::section {
-    background-color: {{color.corner_bg}};
+    border-image: url({{asset.corner_bg}}) 0 0 0 0 stretch stretch;
+    background-color: transparent;
     border: none;
     border-bottom: 2px solid {{color.header_accent}};
-    border-right: 1px solid {{color.corner_border}};
+    border-right: 1px solid {{color.header_v_border}};
 }
 
 /* ---------- 滚动条 ---------- */

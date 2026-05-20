@@ -81,8 +81,6 @@ TM_CCOEFF_NORMED 的优势:
 
 import cv2
 import numpy as np
-from pathlib import Path
-
 from src.config import get_project_root
 
 # ---------------------------------------------------------------------------

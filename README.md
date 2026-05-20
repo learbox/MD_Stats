@@ -12,6 +12,7 @@
 - **撤销 / 删除** — 手动录入支持逐级撤销，支持删除最后一条记录
 - **配置热加载** — 修改 `config.toml` 后一键重载（包括主题切换），无需重启
 - **主题系统** — 内置暗色/亮色/马卡龙三套主题，支持纯色和图片纹理，可自行制作
+- **悬浮统计窗** — 可拖拽的半透明悬浮窗，实时显示当前卡组关键数据，位置持久化
 
 ## 截图
 
@@ -99,6 +100,11 @@ python main.py
 | `appearance.theme` | 界面主题，填写 `themes/` 下的文件夹名 | `"dark"` |
 | `opponent_decks.presets` | 对方卡组预设列表 | `["炎兽", "闪刀姬", ...]` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
+| `floating_window.width` / `height` | 悬浮窗尺寸 | `300` |
+| `floating_window.bg_color` | 悬浮窗背景色 | `#98d4bb` |
+| `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
+| `floating_window.font_size` | 悬浮窗文字字号 | `20` |
+| `floating_window.text_color` | 悬浮窗文字颜色 | `#000000` |
 
 修改后点击"重新载入配置"即时生效，无需重启。
 
@@ -115,7 +121,7 @@ mdstats_py/
 ├── main.py                  # 程序入口
 ├── config.toml              # 配置文件
 ├── pyproject.toml           # 项目元数据与依赖 (uv)
-├── .column_widths.json      # 表格列宽持久化
+├── .app_state.json          # 列宽 / 悬浮窗位置持久化
 ├── resource/templates/      # 模板图片（按分辨率分目录）
 ├── csv/                     # 对战数据 CSV 文件
 ├── themes/                  # 主题目录
@@ -137,9 +143,12 @@ mdstats_py/
 │   ├── recorder.py          # CSV 读写与统计计算
 │   └── stats_worker.py      # 后台识别线程（QThread）
 └── ui/
-    ├── main_window.py       # 主窗口逻辑（~1420 行）
+    ├── main_window.py       # 主窗口逻辑
     ├── main_window.ui       # Qt Designer 界面文件
-    └── titlebar.py          # 自定义标题栏
+    ├── titlebar.py          # 自定义标题栏
+    ├── theme_manager.py     # 主题管理器
+    ├── floating_window.py   # 悬浮统计窗
+    └── meta.py              # 关于对话框元数据
 ```
 
 ## 致谢

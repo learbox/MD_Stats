@@ -73,7 +73,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from PySide6.QtCore import QFile, Qt, QTimer
-from PySide6.QtGui import QBrush, QColor, QPalette, QIcon, QPixmap
+from PySide6.QtGui import QIcon
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (
     QApplication,
@@ -92,7 +92,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
-from ui._meta import VERSION, AUTHOR, LICENSE, DESCRIPTION, REPO_URL, ACKNOWLEDGMENTS
+from ui.meta import VERSION, AUTHOR, LICENSE, DESCRIPTION, REPO_URL, ACKNOWLEDGMENTS
 from src.config import get_project_root, load_config
 from src.recorder import (
     add_record,
@@ -107,6 +107,8 @@ from src.recorder import (
 )
 # capture / stats_worker 在首次使用时延迟导入，避免启动时加载 OpenCV (~260ms)
 from src.theme_loader import Theme, load_theme
+from ui.floating_window import FloatingWindow
+from ui.theme_manager import ThemeManager
 from ui.titlebar import TitleBar
 
 # .ui 界面文件的绝对路径
@@ -115,8 +117,8 @@ UI_FILE = Path(__file__).resolve().parent / "main_window.ui"
 # config.toml 的绝对路径（开发/打包兼容）
 _CONFIG_PATH = get_project_root() / "config.toml"
 
-# 表格列宽持久化文件
-_COLUMN_WIDTHS_PATH = get_project_root() / ".column_widths.json"
+# 列宽 / 悬浮窗位置等状态持久化文件
+_APP_STATE_PATH = get_project_root() / ".app_state.json"
 _RESOURCE_DIR = get_project_root() / "resource"
 
 _T = TypeVar("_T")
@@ -201,55 +203,14 @@ class MainWindow(QMainWindow):
     """
 
     def _theme_colors(self) -> dict[str, str]:
-        """返回当前主题的颜色表（缓存在 self._colors 中）。"""
-        return self._colors
+        """返回当前主题的颜色表（缓存在 self._tm.colors 中）。"""
+        return self._tm.colors
 
     def _apply_theme_pixmaps(self, pixmaps: dict[str, str]) -> None:
-        self._pixmap_paths = pixmaps
+        self._tm.pixmap_paths = pixmaps
 
     def _do_apply_pixmaps(self) -> None:
-        """QPalette 设背景：关键控件先 QPalette 纯色，有图叠图。"""
-        main_bg = self._colors.get("main_bg", "#f5f6fa")
-        status_bg = self._colors.get("statusbar_bg", "#ecf0f1")
-
-        # 标题栏 QSS 是 background: transparent，设 autoFillBackground 会覆盖透明
-        # 让标题栏保持透明，透出 contentWidget 的背景图
-        self._set_palette_bg(self._status_frame, None, status_bg)
-        # content widget 从 QSS 中移掉 background-color，改用 QPalette
-        self._set_palette_bg(self._content, None, main_bg)
-
-        for selector, path in self._pixmap_paths.items():
-            pm = QPixmap(path)
-            if pm.isNull():
-                continue
-            if selector == "#contentWidget":
-                self._set_palette_bg(self._content, pm, main_bg)
-            elif selector == "#customStatusBar":
-                self._set_palette_bg(self._status_frame, pm, status_bg)
-            elif selector == "QTableWidget":
-                for table in (self._stats_table, self._record_table):
-                    self._set_palette_bg(table.viewport(), pm, main_bg)
-            elif selector == "QHeaderView::section":
-                for table in (self._stats_table, self._record_table):
-                    hh = table.horizontalHeader()
-                    self._set_palette_bg(hh, pm, main_bg)
-
-    @staticmethod
-    def _set_palette_bg(widget, pm, fallback_color: str) -> None:
-        widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        widget.setAutoFillBackground(True)
-        p = widget.palette()
-        if pm is not None and not pm.isNull():
-            scaled = pm.scaled(widget.size(),
-                               Qt.AspectRatioMode.IgnoreAspectRatio,
-                               Qt.TransformationMode.SmoothTransformation)
-            p.setBrush(p.ColorRole.Window, scaled)
-            p.setBrush(p.ColorRole.Base, scaled)
-        else:
-            color = QColor(fallback_color)
-            p.setColor(p.ColorRole.Window, color)
-            p.setColor(p.ColorRole.Base, color)
-        widget.setPalette(p)
+        self._tm.do_apply_pixmaps(self)
 
     def _show_status(self, msg: str) -> None:
         """更新状态栏消息。"""
@@ -380,11 +341,13 @@ class MainWindow(QMainWindow):
         super().mouseDoubleClickEvent(event)
 
     @staticmethod
-    def _lighter(hex_color: str, factor: float = 0.25) -> str:
-        """将十六进制颜色向白色方向提亮 factor*100%%。"""
-        r = int(hex_color[1:3], 16)
-        g = int(hex_color[3:5], 16)
-        b = int(hex_color[5:7], 16)
+    def _parse_hex(hex_color: str) -> tuple[int, int, int]:
+        return int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+
+    @classmethod
+    def _lighter(cls, hex_color: str, factor: float = 0.25) -> str:
+        """将十六进制颜色向白色方向提亮 factor*100%。"""
+        r, g, b = cls._parse_hex(hex_color)
         r = min(255, int(r + (255 - r) * factor))
         g = min(255, int(g + (255 - g) * factor))
         b = min(255, int(b + (255 - b) * factor))
@@ -397,14 +360,14 @@ class MainWindow(QMainWindow):
         填充，覆盖底层水彩纹理 —— 让 [启动=绿] [赢硬币=黄] [先攻=蓝] [胜=绿/负=粉]
         这些按钮在面板中作为彩色音符跳出来，而不是被纹理混成一片粉色。
         """
-        button_texture = self._pixmap_paths.get("QPushButton") if self._pixmap_paths else None
+        button_texture = self._tm.pixmap_paths.get("QPushButton") if self._tm.pixmap_paths else None
 
         if button_texture:
             text_color = self._readable_on(bg)
             hover_bg = self._lighter(bg, 0.12)
             pressed_bg = self._darker(bg, 0.08)
-            border_disabled = self._colors.get("border_disabled", "#f5eef4")
-            text_disabled = self._colors.get("text_disabled", "#d5ccd8")
+            border_disabled = self._tm.colors.get("border_disabled", "#f5eef4")
+            text_disabled = self._tm.colors.get("text_disabled", "#d5ccd8")
             # 关键：用 `background:` 简写而不是 background-color/background-image 分开写，
             # 因为 Qt QSS 在合并 setStyleSheet 和全局 QSS 时，分写形式有时不会清掉
             # 全局规则里的 background-image: url(button_texture)，导致整个按钮还显示
@@ -426,18 +389,18 @@ class MainWindow(QMainWindow):
                 f"border-color: {pressed_bg}; "
                 "} "
                 "QPushButton:disabled { "
-                f"background: {self._colors.get('button_disabled_bg', 'rgba(245,238,244,220)')}; "
+                f"background: {self._tm.colors.get('button_disabled_bg', 'rgba(245,238,244,220)')}; "
                 f"color: {text_disabled}; "
                 f"border-color: {border_disabled}; "
                 "}"
             )
 
         # 默认（dark/light）：保持原来的纯色按钮样式
-        border = self._colors.get("border", "#dcdde1")
+        border = self._tm.colors.get("border", "#dcdde1")
         hover_bg = self._lighter(bg)
-        disabled_bg = self._colors.get("button_disabled_bg", "#9E9E9E")
-        disabled_color = self._colors.get("text_disabled", "#e0e0e0")
-        disabled_border = self._colors.get("border_disabled", "#888")
+        disabled_bg = self._tm.colors.get("button_disabled_bg", "#9E9E9E")
+        disabled_color = self._tm.colors.get("text_disabled", "#e0e0e0")
+        disabled_border = self._tm.colors.get("border_disabled", "#888")
         return (
             f"QPushButton {{ background-color: {bg}; color: white; "
             f"font-weight: bold; padding: {padding}; border-radius: 6px; "
@@ -448,151 +411,33 @@ class MainWindow(QMainWindow):
             f"color: {disabled_color}; border-color: {disabled_border}; }}"
         )
 
-    @staticmethod
-    def _darker(hex_color: str, factor: float = 0.15) -> str:
+    @classmethod
+    def _darker(cls, hex_color: str, factor: float = 0.15) -> str:
         """将十六进制颜色向黑色方向加深 factor*100%。"""
-        r = int(hex_color[1:3], 16)
-        g = int(hex_color[3:5], 16)
-        b = int(hex_color[5:7], 16)
+        r, g, b = cls._parse_hex(hex_color)
         r = max(0, int(r * (1 - factor)))
         g = max(0, int(g * (1 - factor)))
         b = max(0, int(b * (1 - factor)))
         return f"#{r:02x}{g:02x}{b:02x}"
 
     def _apply_static_button_palette(self) -> None:
-        """给少数语义重要的按钮上色，其余保持水彩纹理底色（参考 Uilbox 目标图）。
-
-        有纹理主题（macaron）时用语义色上色；无纹理主题时清除局部 stylesheet，
-        让全局 QSS 接管，避免从 macaron 切换后残留旧样式。
-        动态按钮（启动/手动 win/lose）由 _update_manual_buttons / _cancel_wait
-        在状态切换时另行调 _btn_style 重新设色。
-
-        着色原则：跟"动作 / 状态变化 / 警告"相关的按钮才上色，
-        像"加载 / 复制 / 打开 / 编辑 / 重新载入 / 关于"这种常规操作保持原色，
-        避免一面墙的彩色按钮淹没主题的水彩气质。
-        """
-        c = self._colors
-        if self._pixmap_paths and self._pixmap_paths.get("QPushButton"):
-            # 有纹理主题：用语义色上色
-            self._btn_stop.setStyleSheet(self._btn_style(c.get("lose", "#f0a5b5")))
-            self._btn_delete_last.setStyleSheet(self._btn_style(c.get("lose", "#f0a5b5")))
-        else:
-            # 无纹理主题：清除局部 stylesheet，让全局 QSS 接管
-            self._btn_stop.setStyleSheet("")
-            self._btn_delete_last.setStyleSheet("")
+        self._tm.apply_static_button_palette(self)
 
     def _apply_theme_to_widgets(self) -> None:
-        """将已加载的主题应用到控件（QSS 之外的部分）。
+        self._tm.apply_to_widgets(self)
 
-        在 __init__ 和 _on_reload_config 中复用，消除重复代码。
-        """
-        self._wrap_layouts_in_frames(self._content)
-        self._apply_table_viewport_palette()
-        self._apply_static_button_palette()
-        self._refresh_stats_table()
-        self._refresh_record_table()
-        self._update_manual_buttons()
-        colors = self._theme_colors()
-        self._btn_start.setStyleSheet(
-            self._btn_style(colors["start_bg"], padding="6px 20px")
-        )
-        self._title_bar.set_title("MD Stats")
-        self._title_bar.reload_style(self._titlebar_cfg)
-
-    @staticmethod
-    def _readable_on(hex_color: str) -> str:
+    @classmethod
+    def _readable_on(cls, hex_color: str) -> str:
         """根据底色亮度返回易读的文字色：浅底用深紫灰，深底用白。"""
-        r = int(hex_color[1:3], 16)
-        g = int(hex_color[3:5], 16)
-        b = int(hex_color[5:7], 16)
-        # 感知亮度 (ITU-R BT.601)
+        r, g, b = cls._parse_hex(hex_color)
         luma = (0.299 * r + 0.587 * g + 0.114 * b)
         return "#4a3a52" if luma > 170 else "#ffffff"
 
     def _apply_table_viewport_palette(self) -> None:
-        """表格/表头 viewport 背景：清旧样式，有资源图用 QPalette 贴图，无图涂纯色。"""
-        # 先清空所有 viewport/header 上旧主题遗留的 stylesheet 和 QPalette
-        for table in (self._stats_table, self._record_table):
-            for w in (table.viewport(), table.verticalHeader(), table.horizontalHeader()):
-                w.setStyleSheet("")
-                w.setAutoFillBackground(False)
-                p = w.palette()
-                p.setColor(QPalette.ColorRole.Window, QColor(0, 0, 0, 0))
-                p.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 0))
-                p.setBrush(QPalette.ColorRole.Window, QBrush())
-                p.setBrush(QPalette.ColorRole.Base, QBrush())
-                w.setPalette(p)
+        self._tm.apply_table_viewport_palette(self)
 
-        # 有资源图：用 QPalette 直接把图贴在 viewport/header 上，
-        # 绕过 QAbstractScrollArea 内部对 viewport 的 autoFillBackground 干扰。
-        if self._pixmap_paths:
-            table_path = self._pixmap_paths.get("QTableWidget")
-            header_path = self._pixmap_paths.get("QHeaderView::section")
-            main_bg = self._colors.get("main_bg", "#f5f6fa")
-            table_pm = QPixmap(table_path) if table_path else None
-            header_pm = QPixmap(header_path) if header_path else None
-            for table in (self._stats_table, self._record_table):
-                self._set_palette_bg(table.viewport(), table_pm, main_bg)
-                self._set_palette_bg(table.horizontalHeader(), header_pm, main_bg)
-                self._set_palette_bg(table.verticalHeader(), header_pm, main_bg)
-            return
-
-        base = self._colors.get("widget_bg", "#ffffff")
-        header_bg = self._colors.get("main_bg", "#f5f6fa")
-        # 亮色主题下表头用 statusbar_bg
-        if self._config.get("appearance", {}).get("theme", "dark") != "dark":
-            header_bg = self._colors.get("statusbar_bg", header_bg)
-
-        for table in (self._stats_table, self._record_table):
-            vp = table.viewport()
-            self._set_palette_bg(vp, None, base)
-            vp.setStyleSheet(f"background-color: {base};")
-
-            vh = table.verticalHeader()
-            self._set_palette_bg(vh, None, header_bg)
-            vh.setStyleSheet(f"background-color: {header_bg};")
-
-            hh = table.horizontalHeader()
-            self._set_palette_bg(hh, None, header_bg)
-            hh.setStyleSheet(f"background-color: {header_bg};")
-
-    def _wrap_layouts_in_frames(self, content) -> None:
-        """把 ctrlLayout 和 bottomLayout 各自塞进一个 QFrame，便于 QSS 贴 panel_bg。
-
-        只在主题带资源图（pixmaps 非空）时执行；dark / light 主题没有 panel_bg，
-        让它们的布局保持和原来完全一致，避免 14px 内边距移位。
-        已存在同名 QFrame 时跳过，防止重复包裹。
-        """
-        if not self._pixmap_paths:
-            return
-        root_layout = content.layout()
-        if root_layout is None:
-            return
-
-        for layout_name, frame_name in (("ctrlLayout", "topPanel"),
-                                         ("bottomLayout", "bottomPanel")):
-            # 已存在同名 QFrame，说明之前已包裹过，跳过
-            if content.findChild(QFrame, frame_name) is not None:
-                continue
-            layout = content.findChild(QHBoxLayout, layout_name)
-            if layout is None:
-                continue
-            # 找到 layout 在 rootLayout 中的位置
-            idx = -1
-            for i in range(root_layout.count()):
-                if root_layout.itemAt(i).layout() is layout:
-                    idx = i
-                    break
-            if idx < 0:
-                continue
-            root_layout.takeAt(idx)
-            frame = QFrame(content)
-            frame.setObjectName(frame_name)
-            frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-            frame.setLayout(layout)
-            # 留一点内边距让 panel_bg 的画笔边缘可见
-            layout.setContentsMargins(14, 6, 14, 6)
-            root_layout.insertWidget(idx, frame)
+    def _wrap_layouts_in_frames(self) -> None:
+        self._tm.wrap_layouts(self)
 
     def __init__(self) -> None:
         """初始化主窗口：加载 .ui 界面文件、配置样式、连接信号、加载数据。"""
@@ -600,6 +445,9 @@ class MainWindow(QMainWindow):
 
         # ---- 加载配置 ----
         self._config: dict[str, Any] = load_config()  # type: ignore[reportUnknownMemberType]
+
+        # ---- 主题管理器 ----
+        self._tm = ThemeManager(self._config)
 
         # ---- 初始化活跃 CSV 文件 ----
         init_active_csv_from_config()  # type: ignore[reportUnknownMemberType]
@@ -622,9 +470,9 @@ class MainWindow(QMainWindow):
         theme: Theme = load_theme(
             self._config.get("appearance", {}).get("theme", "dark")
         )
-        self._colors = theme.colors
-        self._titlebar_cfg = theme.titlebar
-        self._assets_dir = theme.assets_dir
+        self._tm.colors = theme.colors
+        self._tm.titlebar_cfg = theme.titlebar
+        self._tm.assets_dir = theme.assets_dir
         self.setStyleSheet(theme.qss)
         self._apply_theme_pixmaps(theme.pixmaps)
 
@@ -645,8 +493,9 @@ class MainWindow(QMainWindow):
         self._content = content
 
         # ---- 插入自定义标题栏 ----
+        assets_dir = self._tm.assets_dir or (get_project_root() / "resource")
         self._title_bar = TitleBar(
-            "MD Stats", self._titlebar_cfg, self._assets_dir, self
+            "MD Stats", self._tm.titlebar_cfg, assets_dir, self
         )
         self._title_bar.minimize_clicked.connect(self.showMinimized)
         self._title_bar.close_clicked.connect(self.close)
@@ -668,7 +517,7 @@ class MainWindow(QMainWindow):
         # 将顶部控制行与底部按钮行各自包进 QFrame，方便 QSS 给它们贴 panel_bg。
         # .ui 里 ctrlLayout/bottomLayout 是裸 QHBoxLayout 直接挂在 rootLayout 上，
         # 没有可绘制的容器；运行时改造一次即可。
-        self._wrap_layouts_in_frames(content)
+        self._wrap_layouts_in_frames()
 
         # 通过 objectName 获取各个控件的引用
         # _require_widget 将 findChild 的 X | None 收窄为 X，消除类型警告
@@ -715,6 +564,16 @@ class MainWindow(QMainWindow):
         self._btn_edit_config.clicked.connect(self._on_edit_config)
         self._btn_reload_config.clicked.connect(self._on_reload_config)
 
+        # ---- 悬浮窗按钮（程序创建，不在 .ui 中）----
+        self._btn_float = QPushButton("悬浮窗")
+        bottom_layout = content.findChild(QHBoxLayout, "bottomLayout")
+        if bottom_layout is not None:
+            # 关于按钮是倒数第 2 个，插入到它左边
+            idx = bottom_layout.indexOf(self._btn_about)
+            bottom_layout.insertWidget(idx, self._btn_float)
+        self._btn_float.clicked.connect(self._on_toggle_float)
+        self._float_window: Any = None
+
         # ---- 表格配置 ----
         self._stats_table.setColumnCount(len(STATS_COLUMNS))
         self._stats_table.setHorizontalHeaderLabels(STATS_COLUMNS)
@@ -726,6 +585,11 @@ class MainWindow(QMainWindow):
         self._record_table.setColumnHidden(0, True)  # 序号列不出现在界面中
         self._record_table.horizontalHeader().setStretchLastSection(True)
         self._record_table.verticalHeader().setDefaultSectionSize(28)
+
+        # 给横/竖表头设 objectName，QSS 可以区分贴不同的背景图
+        for table in (self._stats_table, self._record_table):
+            table.horizontalHeader().setObjectName("horizontalHeader")
+            table.verticalHeader().setObjectName("verticalHeader")
 
         # 修复表格空白区域背景色（QSS 可能无法覆盖 viewport 的 palette 色）
         self._apply_table_viewport_palette()
@@ -1152,6 +1016,9 @@ class MainWindow(QMainWindow):
 
                 self._stats_table.setItem(row_idx, col_idx, item)
 
+        # 同步刷新悬浮窗
+        self._refresh_float_window()
+
         # 列宽仅首次计算，后续刷新保持稳定
 
     def _refresh_record_table(self) -> None:
@@ -1261,6 +1128,81 @@ class MainWindow(QMainWindow):
     # =========================================================================
     # 关于
     # =========================================================================
+    # 悬浮窗
+    # =========================================================================
+
+    def _on_toggle_float(self) -> None:
+        """打开/关闭悬浮统计窗。"""
+        if self._float_window is not None:
+            self._save_float_window_pos()
+            self._float_window.close()
+            self._float_window = None
+            self._btn_float.setText("悬浮窗")
+            return
+
+        cfg = self._config.get("floating_window", {})
+        self._float_window = FloatingWindow(self)
+        self._float_window.update_style(cfg)
+        self._refresh_float_window()
+        # 恢复上次位置
+        self._restore_float_window_pos()
+        self._float_window.show()
+        self._btn_float.setText("关闭悬浮")
+
+    def _save_float_window_pos(self) -> None:
+        """将悬浮窗当前位置保存到 .app_state.json。"""
+        if self._float_window is None:
+            return
+        try:
+            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            saved = {}
+        pos = self._float_window.pos()
+        saved["float_pos"] = [pos.x(), pos.y()]
+        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(saved, f, ensure_ascii=False, indent=2)
+
+    def _restore_float_window_pos(self) -> None:
+        """从 .app_state.json 恢复悬浮窗位置，越界则居中。"""
+        try:
+            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            pos = saved.get("float_pos")
+            if pos and len(pos) == 2:
+                x, y = pos[0], pos[1]
+                # 只要坐标不为负且不太离谱就恢复
+                if x >= -1000 and y >= -1000:
+                    self._float_window.move(x, y)
+                    return
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        # 兜底：主屏幕中央
+        screen = QApplication.primaryScreen()
+        if screen is not None and self._float_window is not None:
+            geo = screen.availableGeometry()
+            sz = self._float_window.size()
+            self._float_window.move(
+                geo.x() + (geo.width() - sz.width()) // 2,
+                geo.y() + (geo.height() - sz.height()) // 2,
+            )
+
+    def _refresh_float_window(self) -> None:
+        """用当前统计表格数据刷新悬浮窗内容。"""
+        if self._float_window is None:
+            return
+        records = load_records()  # type: ignore[reportUnknownMemberType]
+        stats_list = compute_stats(records)  # type: ignore[reportUnknownMemberType]
+        deck_name = self._deck_input.text().strip()
+        # 查找当前卡组的统计行
+        found = None
+        for s in stats_list:
+            if s.get("卡组") == deck_name:
+                found = s
+                break
+        self._float_window.update_content(deck_name, found)
+
+    # =========================================================================
 
     def _on_about(self) -> None:
         import html as _html
@@ -1343,6 +1285,7 @@ class MainWindow(QMainWindow):
         """
         old_theme_name = self._config.get("appearance", {}).get("theme", "dark")
         self._config = load_config()  # type: ignore[reportUnknownMemberType]
+        self._tm._config = self._config  # 同步到主题管理器
         new_theme_name = self._config.get("appearance", {}).get("theme", "dark")
         init_active_csv_from_config()  # type: ignore[reportUnknownMemberType]
         self._update_info_label()
@@ -1350,9 +1293,9 @@ class MainWindow(QMainWindow):
         # 主题变化时重新加载主题文件并应用
         if old_theme_name != new_theme_name:
             theme = load_theme(new_theme_name)
-            self._colors = theme.colors
-            self._titlebar_cfg = theme.titlebar
-            self._assets_dir = theme.assets_dir
+            self._tm.colors = theme.colors
+            self._tm.titlebar_cfg = theme.titlebar
+            self._tm.assets_dir = theme.assets_dir
             self.setStyleSheet(theme.qss)
             self._apply_theme_pixmaps(theme.pixmaps)
             self._apply_theme_to_widgets()
@@ -1403,8 +1346,8 @@ class MainWindow(QMainWindow):
 
     # 列宽默认值（首次运行使用，像素），最后一列由 stretchLastSection 管理
     _DEFAULT_COLUMN_WIDTHS = {
-        "stats":    [70, 40, 25, 25, 50, 75, 75, 70, 70, 60, 60, 50, 50, 70],
-        "record":   [ 0, 78, 65, 64, 62, 50, 47, 39],
+        "stats":    [80, 60, 45, 45, 70, 75, 75, 75, 85, 85, 80, 75, 70, 70, 75, 75],
+        "record":   [ 0, 115, 90, 75, 80, 65, 70, 50],
     }
 
     def showEvent(self, event) -> None:
@@ -1416,9 +1359,9 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(100, self._do_apply_pixmaps)
 
     def _restore_column_widths(self) -> None:
-        """从 .column_widths.json 恢复列宽（跳过最后一列）。"""
+        """从 .app_state.json 恢复列宽（跳过最后一列）。"""
         try:
-            with open(_COLUMN_WIDTHS_PATH, "r", encoding="utf-8") as f:
+            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
                 saved = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             saved = {}
@@ -1436,7 +1379,11 @@ class MainWindow(QMainWindow):
 
     def _save_column_widths(self) -> None:
         """保存绝对列宽（跳过最后一列，由 stretchLastSection 管理）。"""
-        data: dict[str, list[int]] = {}
+        try:
+            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
         for table, key in [
             (self._stats_table, "stats"),
             (self._record_table, "record"),
@@ -1445,7 +1392,7 @@ class MainWindow(QMainWindow):
                 table.columnWidth(c)
                 for c in range(table.columnCount() - 1)
             ]
-        with open(_COLUMN_WIDTHS_PATH, "w", encoding="utf-8") as f:
+        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
     # =========================================================================
@@ -1454,6 +1401,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: Any) -> None:
         """窗口关闭时保存列宽、安全停止后台工作线程和所有定时器。"""
+        self._save_float_window_pos()
         self._save_column_widths()
         if self._info_timer is not None:
             self._info_timer.stop()

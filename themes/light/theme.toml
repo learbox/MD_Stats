@@ -42,6 +42,12 @@ btn_close_hover = "#e74c3c"
 font_family = "Microsoft YaHei"
 # 全局字号（像素）
 font_size   = 13
+# 列标题字号（像素）
+header_font_size = 12
+# 行号列字号（像素）
+row_header_font_size = 11
+# 表格内文字字号（像素）
+table_font_size = 13
 
 # ---- 自定义 TTF 字体（可选） ----
 # 1. 把 .ttf / .otf 文件放到本主题的 assets/ 目录下
@@ -63,7 +69,10 @@ panel_bg     = { file = "", mode = "stretch" }
 # 统计数据表格 + 对战记录表格（QTableWidget）
 table_bg     = { file = "", mode = "stretch" }
 # 表格列标题栏（QHeaderView）
-header_bg    = { file = "", mode = "stretch" }
+header_bg       = { file = "", mode = "stretch" }
+row_header_bg   = { file = "", mode = "stretch" }
+# 表格左上角交叉按钮（QTableCornerButton::section）
+corner_bg       = { file = "", mode = "stretch" }
 # 按钮表面纹理（QPushButton），建议 32×32 小图 tile 平铺
 button_bg    = { file = "", mode = "tile" }
 # 底部状态栏（#customStatusBar）

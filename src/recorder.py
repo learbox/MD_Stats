@@ -66,8 +66,8 @@ COLUMNS = ["序号", "日期", "时间", "使用卡组", "对方卡组", "赢硬
 # 统计表格列（与 compute_stats 输出的字典键一致）
 STATS_COLUMNS = [
     "卡组", "对局数", "胜", "负", "胜率",
-    "赢硬币次数", "赢硬币胜率",
-    "输硬币次数", "输硬币胜率",
+    "赢硬币次数", "输硬币次数", "赢硬币概率",
+    "赢硬币胜率", "输硬币胜率",
     "先攻次数", "后攻次数", "先攻胜", "后攻胜",
     "先攻胜率", "后攻胜率",
 ]
@@ -387,8 +387,9 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
             "对局数": d["total"], "胜": d["win"], "负": d["lose"],
             "胜率": _rate(d["win"], d["total"]),
             "赢硬币次数": d["coin_win"],
-            "赢硬币胜率": _rate(d["coin_win_win"], d["coin_win"]),
             "输硬币次数": d["coin_lose"],
+            "赢硬币概率": _rate(d["coin_win"], d["total"]),
+            "赢硬币胜率": _rate(d["coin_win_win"], d["coin_win"]),
             "输硬币胜率": _rate(d["coin_lose_win"], d["coin_lose"]),
             "先攻次数": d["first"], "后攻次数": d["second"],
             "先攻胜": d["first_win"], "后攻胜": d["second_win"],
@@ -402,8 +403,9 @@ def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:
         "对局数": total_all, "胜": win_all, "负": lose_all,
         "胜率": _rate(win_all, total_all),
         "赢硬币次数": coin_win_all,
-        "赢硬币胜率": _rate(coin_win_win_all, coin_win_all),
         "输硬币次数": coin_lose_all,
+        "赢硬币概率": _rate(coin_win_all, total_all),
+        "赢硬币胜率": _rate(coin_win_win_all, coin_win_all),
         "输硬币胜率": _rate(coin_lose_win_all, coin_lose_all),
         "先攻次数": first_all, "后攻次数": second_all,
         "先攻胜": first_win_all, "后攻胜": second_win_all,

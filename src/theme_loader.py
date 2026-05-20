@@ -128,6 +128,8 @@ _BUILTIN_TITLEBAR: dict[str, Any] = {
 
 _BUILTIN_ASSETS: dict[str, Any] = {
     "font_family": _DEFAULT_FONT, "font_size": 13,
+    "header_font_size": 12, "row_header_font_size": 11,
+    "table_font_size": 13,
     "fonts": [], "images": {},
 }
 
@@ -160,13 +162,13 @@ QLineEdit:disabled { background-color: %(input_disabled_bg)s; color: %(text_disa
 /* ---------- 标签 ---------- */
 QLabel { background: transparent; border: none; }
 /* ---------- 表格 ---------- */
-QTableWidget { background-color: %(widget_bg)s; alternate-background-color: %(table_alt_bg)s; color: %(table_text)s; border: none; gridline-color: %(table_grid)s; outline: none; selection-background-color: %(table_selection_bg)s; selection-color: %(table_text)s; }
+QTableWidget { background-color: %(widget_bg)s; alternate-background-color: %(table_alt_bg)s; color: %(table_text)s; font-size: %(table_font_size)spx; border: none; gridline-color: %(table_grid)s; outline: none; selection-background-color: %(table_selection_bg)s; selection-color: %(table_text)s; }
 QTableWidget::item { background-color: %(table_item_bg)s; padding: 2px 6px; }
 QTableWidget::item:alternate { background-color: %(table_item_alt_bg)s; }
 QTableWidget::item:selected { background-color: %(table_selection_bg)s; color: %(table_text)s; }
 QHeaderView { background-color: transparent; border: none; }
-QHeaderView::section { background-color: transparent; color: %(text_primary)s; border: none; border-bottom: 2px solid %(header_accent)s; padding: 5px 8px; font-weight: bold; font-size: 12px; }
-QHeaderView::section:vertical { background-color: %(header_v_bg)s; color: %(text_disabled)s; border: none; border-right: 1px solid %(header_v_border)s; padding: 0px 4px; font-size: 11px; }
+QHeaderView::section { background-color: transparent; color: %(text_primary)s; border: none; border-bottom: 2px solid %(header_accent)s; padding: 5px 8px; font-weight: bold; font-size: %(header_font_size)spx; }
+QHeaderView::section:vertical { background-color: %(header_v_bg)s; color: %(text_primary)s; border: none; border-right: 1px solid %(header_v_border)s; padding: 0px 4px; font-size: %(row_header_font_size)spx; }
 QTableCornerButton::section { background-color: %(corner_bg)s; border: none; border-bottom: 2px solid %(header_accent)s; border-right: 1px solid %(corner_border)s; }
 /* ---------- 滚动条 ---------- */
 QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
@@ -262,6 +264,12 @@ def _build_theme(theme_dir: Path) -> Theme:
     ff_value = font_family if ("," in font_family or '"' in font_family) else f'"{font_family}"'
     qss = qss.replace("{{assets.font_family}}", ff_value)
     qss = qss.replace("{{assets.font_size}}", str(font_size))
+    qss = qss.replace("{{assets.header_font_size}}",
+                      str(assets_cfg.get("header_font_size", 12)))
+    qss = qss.replace("{{assets.row_header_font_size}}",
+                      str(assets_cfg.get("row_header_font_size", 11)))
+    qss = qss.replace("{{assets.table_font_size}}",
+                      str(assets_cfg.get("table_font_size", 13)))
 
     # 替换 {{asset.<image_key>}} 占位符 → 资源文件的绝对路径（POSIX，正斜杠）
     # QSS 中可以用 border-image: url({{asset.main_bg}}) ... 引用主题图片
@@ -303,6 +311,9 @@ def _fallback_theme() -> Theme:
     colors: dict[str, Any] = dict(_BUILTIN_COLORS)
     colors["font_family"] = _DEFAULT_FONT
     colors["font_size"] = "13"
+    colors["header_font_size"] = "12"
+    colors["row_header_font_size"] = "11"
+    colors["table_font_size"] = "13"
     qss = _BUILTIN_QSS % colors
     return Theme(
         qss=qss,
@@ -326,11 +337,13 @@ def _load_fonts(fonts: list[dict], assets_dir: Path) -> None:
 
 # 图片配置 → QSS 选择器映射
 _IMAGE_SELECTORS: dict[str, str] = {
-    "main_bg":      "#contentWidget",
-    "table_bg":     "QTableWidget",
-    "header_bg":    "QHeaderView::section",
-    "button_bg":    "QPushButton",
-    "statusbar_bg": "#customStatusBar",
+    "main_bg":        "#contentWidget",
+    "table_bg":       "QTableWidget",
+    "header_bg":      "QHeaderView::section",
+    "row_header_bg":  "QHeaderView::section:vertical",
+    "corner_bg":      "QTableCornerButton::section",
+    "button_bg":      "QPushButton",
+    "statusbar_bg":   "#customStatusBar",
 }
 
 def _substitute_asset_paths(qss: str, images: dict, assets_dir: Path) -> str:
