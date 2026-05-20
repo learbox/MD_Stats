@@ -226,12 +226,21 @@ QComboBox {
 QComboBox:hover {
     border-color: {{color.border_hover}};
 }
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border: none;
+}
 QComboBox QAbstractItemView {
     background-color: {{color.combo_list_bg}};
     color: {{color.text_primary}};
     border: 1px solid {{color.combo_border}};
     selection-background-color: {{color.selection_bg}};
     outline: none;
+}
+QComboBox QAbstractItemView::item {
+    padding: 4px 8px;
 }
 
 /* ---------- 消息框 ---------- */

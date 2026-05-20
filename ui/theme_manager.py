@@ -16,7 +16,7 @@ from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPalette, QPixmap
-from PySide6.QtWidgets import QFrame, QHBoxLayout
+from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout
 
 from src.theme_loader import Theme, load_theme
 
@@ -43,6 +43,52 @@ class ThemeManager:
         self.titlebar_cfg = theme.titlebar
         self.assets_dir = theme.assets_dir
         return theme
+
+    # ------------------------------------------------------------------
+    # 全局 QPalette（修复 QComboBox 弹出容器等 QSS 无法覆盖的区域）
+    # ------------------------------------------------------------------
+
+    def apply_app_palette(self) -> None:
+        """根据当前主题颜色设置 QApplication 级别的 QPalette。
+
+        QComboBox 的弹出容器（popup container）是独立顶层窗口，
+        其背景色来自 QApplication 的 QPalette 而非 QSS。
+        不设置全局 QPalette 的话，dark 主题下弹出列表上下会出现白条。
+        """
+        app = QApplication.instance()
+        if not isinstance(app, QApplication):
+            return
+
+        c = self.colors
+        pal = QPalette()
+        base = QColor(c.get("widget_bg", "#ffffff"))
+        text = QColor(c.get("text_primary", "#000000"))
+        window = QColor(c.get("main_bg", "#ffffff"))
+        highlight = QColor(c.get("selection_bg", "#3080e0"))
+        disabled_text = QColor(c.get("text_disabled", "#999999"))
+
+        role_map: list[tuple[QPalette.ColorRole, QColor]] = [
+            (QPalette.ColorRole.Window, window),
+            (QPalette.ColorRole.Base, base),
+            (QPalette.ColorRole.WindowText, text),
+            (QPalette.ColorRole.Text, text),
+            (QPalette.ColorRole.Button, base),
+            (QPalette.ColorRole.ButtonText, text),
+            (QPalette.ColorRole.Highlight, highlight),
+            (QPalette.ColorRole.HighlightedText, text),
+            (QPalette.ColorRole.ToolTipBase, base),
+            (QPalette.ColorRole.ToolTipText, text),
+        ]
+        for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
+            for role, color in role_map:
+                pal.setColor(group, role, color)
+
+        for role in (QPalette.ColorRole.WindowText,
+                     QPalette.ColorRole.Text,
+                     QPalette.ColorRole.ButtonText):
+            pal.setColor(QPalette.ColorGroup.Disabled, role, disabled_text)
+
+        app.setPalette(pal)
 
     # ------------------------------------------------------------------
     # 控件着色（接收 MainWindow 实例，从中取需要的控件引用）
@@ -88,11 +134,9 @@ class ThemeManager:
                         f"background-color: transparent;"
                     )
             elif selector == "QHeaderView::section":
-                for table in (mw._stats_table, mw._record_table):
-                    self.set_palette_bg(table.horizontalHeader(), pm, main_bg)
+                pass  # 全局 QSS 的 border-image 处理拉伸
             elif selector == "QHeaderView::section:vertical":
-                for table in (mw._stats_table, mw._record_table):
-                    self.set_palette_bg(table.verticalHeader(), pm, main_bg)
+                pass  # 全局 QSS 的 border-image 处理拉伸
 
     def apply_static_button_palette(self, mw) -> None:
         """给少数语义重要的按钮上色。"""
@@ -125,10 +169,6 @@ class ThemeManager:
 
         if self.pixmap_paths:
             table_path = self.pixmap_paths.get("QTableWidget")
-            header_path = self.pixmap_paths.get("QHeaderView::section")
-            row_header_path = self.pixmap_paths.get("QHeaderView::section:vertical")
-            header_pm = QPixmap(header_path) if header_path else None
-            row_header_pm = QPixmap(row_header_path) if row_header_path else None
             for table in (mw._stats_table, mw._record_table):
                 # viewport: 有图用 border-image 拉伸，无图跳过靠 QSS
                 if table_path:
@@ -136,12 +176,7 @@ class ThemeManager:
                         f"border-image: url({table_path}) 0 0 0 0 stretch stretch;"
                         f"background-color: transparent;"
                     )
-                if header_pm and not header_pm.isNull():
-                    self.set_palette_bg(table.horizontalHeader(),
-                                       header_pm, "")
-                if row_header_pm and not row_header_pm.isNull():
-                    self.set_palette_bg(table.verticalHeader(),
-                                       row_header_pm, "")
+                # 表头不设局 stylesheet，靠全局 QSS 的 border-image 拉伸
             return
 
         base = self.colors.get("widget_bg", "#ffffff")
@@ -292,19 +327,21 @@ class ThemeManager:
         return "#4a3a52" if luma > 170 else "#ffffff"
 
     @classmethod
+    def _adjust_color(cls, hex_color: str, factor: float, darken: bool) -> str:
+        """将颜色向黑/白方向调整 factor*100%。"""
+        r, g, b = cls._parse_hex(hex_color)
+        if darken:
+            r, g, b = max(0, int(r * (1 - factor))), max(0, int(g * (1 - factor))), max(0, int(b * (1 - factor)))
+        else:
+            r, g, b = min(255, int(r + (255 - r) * factor)), min(255, int(g + (255 - g) * factor)), min(255, int(b + (255 - b) * factor))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    @classmethod
     def lighter_color(cls, hex_color: str, factor: float = 0.25) -> str:
         """将颜色向白色方向提亮 factor*100%。"""
-        r, g, b = cls._parse_hex(hex_color)
-        r = min(255, int(r + (255 - r) * factor))
-        g = min(255, int(g + (255 - g) * factor))
-        b = min(255, int(b + (255 - b) * factor))
-        return f"#{r:02x}{g:02x}{b:02x}"
+        return cls._adjust_color(hex_color, factor, darken=False)
 
     @classmethod
     def darker_color(cls, hex_color: str, factor: float = 0.15) -> str:
         """将颜色向黑色方向加深 factor*100%。"""
-        r, g, b = cls._parse_hex(hex_color)
-        r = max(0, int(r * (1 - factor)))
-        g = max(0, int(g * (1 - factor)))
-        b = max(0, int(b * (1 - factor)))
-        return f"#{r:02x}{g:02x}{b:02x}"
+        return cls._adjust_color(hex_color, factor, darken=True)

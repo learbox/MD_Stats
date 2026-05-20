@@ -73,7 +73,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from PySide6.QtCore import QFile, Qt, QTimer
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QPalette
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (
     QApplication,
@@ -143,6 +143,15 @@ class ComboDelegate(QStyledItemDelegate):
     ) -> QComboBox:
         combo = QComboBox(parent_widget)
         combo.addItems(self._items)
+        combo.setMaxVisibleItems(len(self._items))
+        combo.view().setFrameShape(QFrame.Shape.NoFrame)
+        # 覆盖 viewport 继承的透明调色板，避免弹出列表背景变黑
+        pal = QApplication.palette()
+        combo.setPalette(pal)
+        combo.view().setPalette(pal)
+        # 用不透明背景覆盖半透明 combo_body_bg，防止单元格原文字透出重叠
+        bg = pal.color(QPalette.ColorRole.Base).name()
+        combo.setStyleSheet(f"QComboBox {{ background-color: {bg}; }}")
         # activated 仅在用户从弹出列表中选择时触发，不会在 setEditorData 时误触发
         combo.activated.connect(  # type: ignore[reportUnknownMemberType]
             lambda _idx: self.commitData.emit(combo)  # type: ignore[reportUnknownMemberType]
@@ -176,7 +185,16 @@ class EditableComboDelegate(QStyledItemDelegate):
         combo = QComboBox(parent_widget)
         combo.setEditable(True)
         combo.addItems(self._items)
+        combo.setMaxVisibleItems(min(len(self._items), 8))
         combo.setCurrentText("")
+        combo.view().setFrameShape(QFrame.Shape.NoFrame)
+        # 覆盖 viewport 继承的透明调色板，避免弹出列表背景变黑
+        pal = QApplication.palette()
+        combo.setPalette(pal)
+        combo.view().setPalette(pal)
+        # 用不透明背景覆盖半透明 combo_body_bg，防止单元格原文字透出重叠
+        bg = pal.color(QPalette.ColorRole.Base).name()
+        combo.setStyleSheet(f"QComboBox {{ background-color: {bg}; }}")
         return combo
 
     def setEditorData(self, editor: QComboBox, index) -> None:
@@ -474,6 +492,7 @@ class MainWindow(QMainWindow):
         self._tm.titlebar_cfg = theme.titlebar
         self._tm.assets_dir = theme.assets_dir
         self.setStyleSheet(theme.qss)
+        self._tm.apply_app_palette()
         self._apply_theme_pixmaps(theme.pixmaps)
 
         # ---- 无边框窗口 + DWM 原生阴影 ----
@@ -1298,6 +1317,7 @@ class MainWindow(QMainWindow):
             self._tm.titlebar_cfg = theme.titlebar
             self._tm.assets_dir = theme.assets_dir
             self.setStyleSheet(theme.qss)
+            self._tm.apply_app_palette()
             self._apply_theme_pixmaps(theme.pixmaps)
             self._apply_theme_to_widgets()
 
