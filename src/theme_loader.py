@@ -162,14 +162,15 @@ QLineEdit:disabled { background-color: %(input_disabled_bg)s; color: %(text_disa
 /* ---------- 标签 ---------- */
 QLabel { background: transparent; border: none; }
 /* ---------- 表格 ---------- */
-QTableWidget { background-color: %(widget_bg)s; alternate-background-color: %(table_alt_bg)s; color: %(table_text)s; font-size: %(table_font_size)spx; border: none; gridline-color: %(table_grid)s; outline: none; selection-background-color: %(table_selection_bg)s; selection-color: %(table_text)s; }
+QTableWidget { background-color: %(widget_bg)s; font-size: %(table_font_size)spx; alternate-background-color: %(table_alt_bg)s; color: %(table_text)s; border: none; gridline-color: %(table_grid)s; outline: none; selection-background-color: %(table_selection_bg)s; selection-color: %(table_text)s; }
 QTableWidget::item { background-color: %(table_item_bg)s; padding: 2px 6px; }
 QTableWidget::item:alternate { background-color: %(table_item_alt_bg)s; }
 QTableWidget::item:selected { background-color: %(table_selection_bg)s; color: %(table_text)s; }
-QHeaderView { background-color: transparent; border: none; }
-QHeaderView::section { background-color: transparent; color: %(text_primary)s; border: none; border-bottom: 2px solid %(header_accent)s; padding: 5px 8px; font-weight: bold; font-size: %(header_font_size)spx; }
-QHeaderView::section:vertical { background-color: %(header_v_bg)s; color: %(text_primary)s; border: none; border-right: 1px solid %(header_v_border)s; padding: 0px 4px; font-size: %(row_header_font_size)spx; }
-QTableCornerButton::section { background-color: %(corner_bg)s; border: none; border-bottom: 2px solid %(header_accent)s; border-right: 1px solid %(corner_border)s; }
+QHeaderView#horizontalHeader { background-color: transparent; border: none; }
+QHeaderView#verticalHeader { background-color: transparent; border: none; }
+QHeaderView::section { border-image: none; background-color: transparent; color: %(text_primary)s; border: none; border-bottom: 2px solid %(header_accent)s; padding: 5px 8px; font-weight: bold; font-size: %(header_font_size)spx; }
+QHeaderView::section:vertical { border-image: none; background-color: transparent; color: %(text_primary)s; border: none; border-right: 1px solid %(header_v_border)s; padding: 0px 4px; font-size: %(row_header_font_size)spx; }
+QTableCornerButton::section { background-color: transparent; border: none; border-bottom: 2px solid %(header_accent)s; border-right: 1px solid %(header_v_border)s; }
 /* ---------- 滚动条 ---------- */
 QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
 QScrollBar::handle:vertical { background-color: %(scrollbar_handle)s; border-radius: 4px; min-height: 30px; }
@@ -186,7 +187,9 @@ QSplitter::handle:vertical { height: 3px; }
 /* ---------- 下拉框 ---------- */
 QComboBox { background-color: %(combo_body_bg)s; color: %(text_primary)s; border: 1px solid %(combo_border)s; border-radius: 6px; padding: 3px 8px; }
 QComboBox:hover { border-color: %(border_hover)s; }
+QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 20px; border: none; }
 QComboBox QAbstractItemView { background-color: %(combo_list_bg)s; color: %(text_primary)s; border: 1px solid %(combo_border)s; selection-background-color: %(selection_bg)s; outline: none; }
+QComboBox QAbstractItemView::item { padding: 4px 8px; }
 /* ---------- 消息框 ---------- */
 QMessageBox { background-color: %(msgbox_bg)s; }
 QMessageBox QLabel { color: %(text_primary)s; }

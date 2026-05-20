@@ -1,6 +1,6 @@
 """关于对话框的可编辑元数据 — 打包 exe 时 .py 会被捆绑，不会丢失。"""
 
-VERSION = "1.3.1"
+VERSION = "1.3.2"
 AUTHOR = "learbox"
 LICENSE = "MIT"
 REPO_URL = "https://github.com/learbox/mdstats_py"  # 项目仓库，留空则隐藏
