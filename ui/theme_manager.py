@@ -2,23 +2,40 @@
 
 将颜色工具函数、QPalette 背景设置、表格/按钮着色、布局包裹等
 集中管理，减少 MainWindow 的代码量。
-
-注意：本类方法接收 MainWindow 实例（mw）直接访问其 _ 前缀控件，
-      这是代码拆分后的设计选择，PyCharm 中请在 Settings
-      → Editor → Inspections → Python → Protected member 中关闭检查，
-      或添加此文件到排除列表。
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPalette, QPixmap
-from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout
+from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QHBoxLayout, QPushButton, QTableWidget, QWidget
 
 from src.theme_loader import Theme, load_theme
+from ui.titlebar import TitleBar
+
+
+@dataclass
+class ThemeWidgets:
+    """MainWindow 中 ThemeManager 需要访问的控件引用集合。
+
+    由 MainWindow 构建，传入 ThemeManager 的各个方法，
+    避免 ThemeManager 直接访问 MainWindow 的 protected 成员。
+    """
+    stats_table: QTableWidget
+    record_table: QTableWidget
+    btn_start: QPushButton
+    btn_stop: QPushButton
+    btn_delete_last: QPushButton
+    title_bar: TitleBar
+    status_frame: QFrame
+    content: QWidget
+    refresh_stats_table: Callable[[], None]
+    refresh_record_table: Callable[[], None]
+    update_manual_buttons: Callable[[], None]
 
 
 class ThemeManager:
@@ -91,44 +108,43 @@ class ThemeManager:
         app.setPalette(pal)
 
     # ------------------------------------------------------------------
-    # 控件着色（接收 MainWindow 实例，从中取需要的控件引用）
+    # 控件着色（接收 ThemeWidgets，从中取需要的控件引用）
     # ------------------------------------------------------------------
 
-    def apply_to_widgets(self, mw) -> None:
+    def apply_to_widgets(self, w: ThemeWidgets) -> None:
         """将已加载的主题应用到所有控件（在 __init__ 和 reload 中复用）。"""
-        self.wrap_layouts(mw)
-        self.apply_table_viewport_palette(mw)
-        self.apply_static_button_palette(mw)
-        mw._refresh_stats_table()
-        mw._refresh_record_table()
-        mw._update_manual_buttons()
-        mw._btn_start.setStyleSheet(
+        self.wrap_layouts(w)
+        self.apply_table_viewport_palette(w)
+        self.apply_static_button_palette(w)
+        w.refresh_stats_table()
+        w.refresh_record_table()
+        w.update_manual_buttons()
+        w.btn_start.setStyleSheet(
             self.make_button_style(
                 self.colors["start_bg"], padding="6px 20px"
             )
         )
-        mw._title_bar.set_title("MD Stats")
-        mw._title_bar.reload_style(self.titlebar_cfg)
+        w.title_bar.set_title("MD Stats")
+        w.title_bar.reload_style(self.titlebar_cfg)
 
-    def do_apply_pixmaps(self, mw) -> None:
+    def do_apply_pixmaps(self, w: ThemeWidgets) -> None:
         """QPalette 设背景：关键控件先纯色，有图叠图。首次启动时 showEvent 调用。"""
         main_bg = self.colors.get("main_bg", "#f5f6fa")
         status_bg = self.colors.get("statusbar_bg", "#ecf0f1")
 
-        # 标题栏 QSS 是 background: transparent
-        self.set_palette_bg(mw._status_frame, None, status_bg)
-        self.set_palette_bg(mw._content, None, main_bg)
+        self.set_palette_bg(w.status_frame, None, status_bg)
+        self.set_palette_bg(w.content, None, main_bg)
 
         for selector, path in self.pixmap_paths.items():
             pm = QPixmap(path)
             if pm.isNull():
                 continue
             if selector == "#contentWidget":
-                self.set_palette_bg(mw._content, pm, main_bg)
+                self.set_palette_bg(w.content, pm, main_bg)
             elif selector == "#customStatusBar":
-                self.set_palette_bg(mw._status_frame, pm, status_bg)
+                self.set_palette_bg(w.status_frame, pm, status_bg)
             elif selector == "QTableWidget":
-                for table in (mw._stats_table, mw._record_table):
+                for table in (w.stats_table, w.record_table):
                     table.viewport().setStyleSheet(
                         f"border-image: url({path}) 0 0 0 0 stretch stretch;"
                         f"background-color: transparent;"
@@ -138,39 +154,38 @@ class ThemeManager:
             elif selector == "QHeaderView::section:vertical":
                 pass  # 全局 QSS 的 border-image 处理拉伸
 
-    def apply_static_button_palette(self, mw) -> None:
+    def apply_static_button_palette(self, w: ThemeWidgets) -> None:
         """给少数语义重要的按钮上色。"""
         c = self.colors
         if self.pixmap_paths and self.pixmap_paths.get("QPushButton"):
-            mw._btn_stop.setStyleSheet(
+            w.btn_stop.setStyleSheet(
                 self.make_button_style(c.get("lose", "#f0a5b5"))
             )
-            mw._btn_delete_last.setStyleSheet(
+            w.btn_delete_last.setStyleSheet(
                 self.make_button_style(c.get("lose", "#f0a5b5"))
             )
         else:
-            mw._btn_stop.setStyleSheet("")
-            mw._btn_delete_last.setStyleSheet("")
+            w.btn_stop.setStyleSheet("")
+            w.btn_delete_last.setStyleSheet("")
 
-    def apply_table_viewport_palette(self, mw) -> None:
+    def apply_table_viewport_palette(self, w: ThemeWidgets) -> None:
         """表格/表头 viewport 背景：清旧样式，有资源图用 QPalette 贴图，无图涂纯色。"""
         # 先清空旧主题遗留的 stylesheet 和 QPalette
-        for table in (mw._stats_table, mw._record_table):
-            for w in (table.viewport(), table.verticalHeader(),
-                      table.horizontalHeader()):
-                w.setStyleSheet("")
-                w.setAutoFillBackground(False)
-                p = w.palette()
+        for table in (w.stats_table, w.record_table):
+            for vw in (table.viewport(), table.verticalHeader(),
+                       table.horizontalHeader()):
+                vw.setStyleSheet("")
+                vw.setAutoFillBackground(False)
+                p = vw.palette()
                 p.setColor(QPalette.ColorRole.Window, QColor(0, 0, 0, 0))
                 p.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 0))
                 p.setBrush(QPalette.ColorRole.Window, QBrush())
                 p.setBrush(QPalette.ColorRole.Base, QBrush())
-                w.setPalette(p)
+                vw.setPalette(p)
 
         if self.pixmap_paths:
             table_path = self.pixmap_paths.get("QTableWidget")
-            for table in (mw._stats_table, mw._record_table):
-                # viewport: 有图用 border-image 拉伸，无图跳过靠 QSS
+            for table in (w.stats_table, w.record_table):
                 if table_path:
                     table.viewport().setStyleSheet(
                         f"border-image: url({table_path}) 0 0 0 0 stretch stretch;"
@@ -185,7 +200,7 @@ class ThemeManager:
         if theme != "dark":
             header_bg = self.colors.get("statusbar_bg", header_bg)
 
-        for table in (mw._stats_table, mw._record_table):
+        for table in (w.stats_table, w.record_table):
             vp = table.viewport()
             self.set_palette_bg(vp, None, base)
             vp.setStyleSheet(f"background-color: {base};")
@@ -198,13 +213,13 @@ class ThemeManager:
             self.set_palette_bg(hh, None, header_bg)
             hh.setStyleSheet(f"background-color: {header_bg};")
 
-    def wrap_layouts(self, mw) -> None:
+    def wrap_layouts(self, w: ThemeWidgets) -> None:
         """把 ctrlLayout 和 bottomLayout 包进 QFrame，便于 QSS 贴 panel_bg。"""
         if not self.pixmap_paths:
             return
-        content = mw._content
+        content = w.content
         root_layout = content.layout()
-        if root_layout is None:
+        if not isinstance(root_layout, QBoxLayout):
             return
 
         for layout_name, frame_name in (("ctrlLayout", "topPanel"),
@@ -216,7 +231,8 @@ class ThemeManager:
                 continue
             idx = -1
             for i in range(root_layout.count()):
-                if root_layout.itemAt(i).layout() is layout:
+                item = root_layout.itemAt(i)
+                if item is not None and item.layout() is layout:
                     idx = i
                     break
             if idx < 0:

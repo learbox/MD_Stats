@@ -108,7 +108,7 @@ from src.recorder import (
 # capture / stats_worker 在首次使用时延迟导入，避免启动时加载 OpenCV (~260ms)
 from src.theme_loader import Theme, load_theme
 from ui.floating_window import FloatingWindow
-from ui.theme_manager import ThemeManager
+from ui.theme_manager import ThemeManager, ThemeWidgets
 from ui.titlebar import TitleBar
 
 # .ui 界面文件的绝对路径
@@ -128,6 +128,18 @@ _T = TypeVar("_T")
 # 表格列委托 — 为特定列提供下拉菜单编辑
 # ---------------------------------------------------------------------------
 
+def _setup_combo_editor(combo: QComboBox) -> None:
+    """QComboBox 表格编辑器公共初始化：调色板覆盖 + 不透明背景。"""
+    combo.view().setFrameShape(QFrame.Shape.NoFrame)
+    # 覆盖 viewport 继承的透明调色板，避免弹出列表背景变黑
+    pal = QApplication.palette()
+    combo.setPalette(pal)
+    combo.view().setPalette(pal)
+    # 用不透明背景覆盖半透明 combo_body_bg，防止单元格原文字透出重叠
+    bg = pal.color(QPalette.ColorRole.Base).name()
+    combo.setStyleSheet(f"QComboBox {{ background-color: {bg}; }}")
+
+
 class ComboDelegate(QStyledItemDelegate):
     """固定选项的下拉菜单委托（用于赢硬币、先后攻、结果等列）。
 
@@ -144,14 +156,7 @@ class ComboDelegate(QStyledItemDelegate):
         combo = QComboBox(parent_widget)
         combo.addItems(self._items)
         combo.setMaxVisibleItems(len(self._items))
-        combo.view().setFrameShape(QFrame.Shape.NoFrame)
-        # 覆盖 viewport 继承的透明调色板，避免弹出列表背景变黑
-        pal = QApplication.palette()
-        combo.setPalette(pal)
-        combo.view().setPalette(pal)
-        # 用不透明背景覆盖半透明 combo_body_bg，防止单元格原文字透出重叠
-        bg = pal.color(QPalette.ColorRole.Base).name()
-        combo.setStyleSheet(f"QComboBox {{ background-color: {bg}; }}")
+        _setup_combo_editor(combo)
         # activated 仅在用户从弹出列表中选择时触发，不会在 setEditorData 时误触发
         combo.activated.connect(  # type: ignore[reportUnknownMemberType]
             lambda _idx: self.commitData.emit(combo)  # type: ignore[reportUnknownMemberType]
@@ -187,14 +192,7 @@ class EditableComboDelegate(QStyledItemDelegate):
         combo.addItems(self._items)
         combo.setMaxVisibleItems(min(len(self._items), 8))
         combo.setCurrentText("")
-        combo.view().setFrameShape(QFrame.Shape.NoFrame)
-        # 覆盖 viewport 继承的透明调色板，避免弹出列表背景变黑
-        pal = QApplication.palette()
-        combo.setPalette(pal)
-        combo.view().setPalette(pal)
-        # 用不透明背景覆盖半透明 combo_body_bg，防止单元格原文字透出重叠
-        bg = pal.color(QPalette.ColorRole.Base).name()
-        combo.setStyleSheet(f"QComboBox {{ background-color: {bg}; }}")
+        _setup_combo_editor(combo)
         return combo
 
     def setEditorData(self, editor: QComboBox, index) -> None:
@@ -228,7 +226,7 @@ class MainWindow(QMainWindow):
         self._tm.pixmap_paths = pixmaps
 
     def _do_apply_pixmaps(self) -> None:
-        self._tm.do_apply_pixmaps(self)
+        self._tm.do_apply_pixmaps(self._theme_widgets)
 
     def _show_status(self, msg: str) -> None:
         """更新状态栏消息。"""
@@ -439,10 +437,10 @@ class MainWindow(QMainWindow):
         return f"#{r:02x}{g:02x}{b:02x}"
 
     def _apply_static_button_palette(self) -> None:
-        self._tm.apply_static_button_palette(self)
+        self._tm.apply_static_button_palette(self._theme_widgets)
 
     def _apply_theme_to_widgets(self) -> None:
-        self._tm.apply_to_widgets(self)
+        self._tm.apply_to_widgets(self._theme_widgets)
 
     @classmethod
     def _readable_on(cls, hex_color: str) -> str:
@@ -452,10 +450,10 @@ class MainWindow(QMainWindow):
         return "#4a3a52" if luma > 170 else "#ffffff"
 
     def _apply_table_viewport_palette(self) -> None:
-        self._tm.apply_table_viewport_palette(self)
+        self._tm.apply_table_viewport_palette(self._theme_widgets)
 
     def _wrap_layouts_in_frames(self) -> None:
-        self._tm.wrap_layouts(self)
+        self._tm.wrap_layouts(self._theme_widgets)
 
     def __init__(self) -> None:
         """初始化主窗口：加载 .ui 界面文件、配置样式、连接信号、加载数据。"""
@@ -533,11 +531,6 @@ class MainWindow(QMainWindow):
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 
-        # 将顶部控制行与底部按钮行各自包进 QFrame，方便 QSS 给它们贴 panel_bg。
-        # .ui 里 ctrlLayout/bottomLayout 是裸 QHBoxLayout 直接挂在 rootLayout 上，
-        # 没有可绘制的容器；运行时改造一次即可。
-        self._wrap_layouts_in_frames()
-
         # 通过 objectName 获取各个控件的引用
         # _require_widget 将 findChild 的 X | None 收窄为 X，消除类型警告
         self._btn_start = _require_widget(content.findChild(QPushButton, "btn_start"), "btn_start")
@@ -565,9 +558,6 @@ class MainWindow(QMainWindow):
             self._config.get("window", {}).get("height", 700),
         )
         self._restore_main_window_pos()
-
-        # ---- 静态按钮调色板（macaron 主题用，给每个按钮分配不同的语义色） ----
-        self._apply_static_button_palette()
 
         # ---- 信号连接 ----
         self._btn_start.clicked.connect(self._on_start)
@@ -610,9 +600,6 @@ class MainWindow(QMainWindow):
         for table in (self._stats_table, self._record_table):
             table.horizontalHeader().setObjectName("horizontalHeader")
             table.verticalHeader().setObjectName("verticalHeader")
-
-        # 修复表格空白区域背景色（QSS 可能无法覆盖 viewport 的 palette 色）
-        self._apply_table_viewport_palette()
 
         # ---- 记录表格列委托（下拉菜单） ----
         # 赢硬币 (列 5): 是/否 下拉
@@ -672,6 +659,26 @@ class MainWindow(QMainWindow):
         self._btn_start.setStyleSheet(
             self._btn_style(self._theme_colors()["start_bg"], padding="6px 20px")
         )
+
+        # ---- 构建主题控件引用容器 ----
+        self._theme_widgets = ThemeWidgets(
+            stats_table=self._stats_table,
+            record_table=self._record_table,
+            btn_start=self._btn_start,
+            btn_stop=self._btn_stop,
+            btn_delete_last=self._btn_delete_last,
+            title_bar=self._title_bar,
+            status_frame=self._status_frame,
+            content=self._content,
+            refresh_stats_table=self._refresh_stats_table,
+            refresh_record_table=self._refresh_record_table,
+            update_manual_buttons=self._update_manual_buttons,
+        )
+
+        # ---- 控件调色板（需要在 _theme_widgets 构建后调用） ----
+        self._wrap_layouts_in_frames()
+        self._apply_table_viewport_palette()
+        self._apply_static_button_palette()
 
         # 延迟加载 CSV 数据：让窗口先渲染出来，数据在下一帧异步填充
         QTimer.singleShot(0, self._reload_tables)
