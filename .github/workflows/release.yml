@@ -1,0 +1,68 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'          # 推送 v1.4.0 这类 tag 时触发
+  workflow_dispatch:   # 允许手动触发
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 安装 Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: 安装依赖
+      run: pip install mss numpy opencv-python pyside6 pywin32 tomli pyinstaller
+
+    - name: 编译 .ui 文件
+      run: pyside6-uic ui/main_window.ui -o ui/main_window_ui.py
+
+    - name: PyInstaller 打包
+      run: pyinstaller MDStats.spec --noconfirm
+
+    - name: 组装发布目录
+      run: |
+        mkdir dist/release
+        cp dist/MDStats/MDStats.exe dist/release/
+        cp -r dist/MDStats/.runtime dist/release/
+        cp -r themes dist/release/
+        cp -r csv dist/release/
+        cp -r resource dist/release/
+        cp config.toml dist/release/
+        cp .app_state.json dist/release/
+        cp docs/README_release.md dist/release/README.md
+
+    - name: 打包 ZIP
+      run: |
+        python -c "
+        import zipfile, os
+        with zipfile.ZipFile('MDStats-${{ github.ref_name }}.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+            os.chdir('dist/release')
+            for root, dirs, files in os.walk('.'):
+                for f in files:
+                    fp = os.path.join(root, f)
+                    if f.endswith('.pyc') or '__pycache__' in fp:
+                        continue
+                    zf.write(fp, os.path.relpath(fp, '.'))
+        "
+
+    - name: 上传 ZIP
+      uses: actions/upload-artifact@v4
+      with:
+        name: MDStats-${{ github.ref_name }}
+        path: MDStats-${{ github.ref_name }}.zip
+
+    - name: 创建 GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: MDStats-${{ github.ref_name }}.zip
+        generate_release_notes: true
