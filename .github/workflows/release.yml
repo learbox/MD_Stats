@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows EXE and stage draft release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv (and Python 3.11)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Compile .ui to .py
+        run: uv run pyside6-uic ui/main_window.ui -o ui/main_window_ui.py
+
+      - name: Build EXE with PyInstaller
+        run: uv run --with 'pyinstaller>=6.10,<7' pyinstaller MDStats.spec --noconfirm
+
+      - name: Assemble release folder
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $tag = $env:TAG
+          $release = "dist/MDStats"
+          Copy-Item -Recurse themes $release
+          Copy-Item -Recurse csv $release
+          Copy-Item -Recurse resource $release
+          Copy-Item config.toml $release
+          Copy-Item .app_state.json $release
+          Copy-Item docs/README_release.md "$release/README.md"
+          Get-ChildItem -Path $release -Recurse -Include __pycache__ -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -Path $release -Recurse -Filter *.pyc -Force | Remove-Item -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path $release -DestinationPath "dist/MDStats-$tag.zip" -CompressionLevel Optimal
+
+      - name: Stage draft GitHub Release with zip attached
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MDStats-${{ github.ref_name }}.zip
+          name: MD Stats ${{ github.ref_name }}
+          draft: true
