@@ -6,6 +6,9 @@ on:
       - 'v*'          # 推送 v1.4.0 这类 tag 时触发
   workflow_dispatch:   # 允许手动触发
 
+permissions:
+  contents: write      # 允许创建 Release
+
 jobs:
   build:
     runs-on: windows-latest
