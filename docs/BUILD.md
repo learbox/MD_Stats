@@ -25,10 +25,16 @@ uv sync
 ### 3. 执行打包
 
 ```bash
-.venv/Scripts/pyinstaller.exe MDStats.spec --noconfirm
+pyinstaller main.py --name MDStats --icon app_icon.ico --noconsole --noupx --contents-directory .runtime --noconfirm
 ```
 
-打包产物在 `dist/MDStats/` 目录。`main_window_ui.py` 会被 PyInstaller 自动检测并打包，无需在 spec 中声明。
+或直接用 uv：
+
+```bash
+uv run --with 'pyinstaller>=6.10,<7' pyinstaller main.py --name MDStats --icon app_icon.ico --noconsole --noupx --contents-directory .runtime --noconfirm
+```
+
+打包产物在 `dist/MDStats/` 目录。`main_window_ui.py` 会被 PyInstaller 自动检测并打包。
 
 ### 4. 组装发布目录
 

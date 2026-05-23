@@ -30,7 +30,13 @@ jobs:
         run: uv run pyside6-uic ui/main_window.ui -o ui/main_window_ui.py
 
       - name: PyInstaller 打包
-        run: uv run --with 'pyinstaller>=6.10,<7' pyinstaller MDStats.spec --noconfirm
+        run: |
+          uv run --with 'pyinstaller>=6.10,<7' pyinstaller main.py `
+            --name MDStats `
+            --icon app_icon.ico `
+            --noconsole `
+            --noupx `
+            --contents-directory .runtime
 
       - name: 组装发布目录
         shell: pwsh
