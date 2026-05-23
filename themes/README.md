@@ -187,6 +187,7 @@ macaron 主题内置了两款 OFL 协议的开源字体：
 |------|------|------|
 | DymonShouXieTi | 呆萌手写体，圆润可爱 | OFL 1.1 |
 | LXGW WenKai | 霞鹜文楷，温润手写 | OFL 1.1 |
+| Yozai | 悠哉，松驰手写 | OFL 1.1 |
 
 OFL（SIL Open Font License）允许免费使用、嵌入、再分发，但字体文件本身不得单独售卖。使用 OFL 字体时，需要将许可证文件一并放入 `assets/`。
 
