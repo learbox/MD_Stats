@@ -219,6 +219,6 @@ class Ui_MainWindow(object):
         self.btn_float.setText(QCoreApplication.translate("MainWindow", u"\u60ac\u6d6e\u7a97", None))
         self.btn_about.setText(QCoreApplication.translate("MainWindow", u"\u5173\u4e8e", None))
         self.statusMessage.setText(QCoreApplication.translate("MainWindow", u"\u5c31\u7eea \u2014 \u8bf7\u70b9\u51fb\u300a\u542f\u52a8\u300b\u5f00\u59cb", None))
-        self.infoLabel.setText("")
+        self.infoLabel.setText(QCoreApplication.translate("MainWindow", u"\u6b63\u5728\u52a0\u8f7d\u2026", None))
     # retranslateUi
 

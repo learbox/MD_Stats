@@ -345,7 +345,7 @@
       <item>
        <widget class="QLabel" name="infoLabel">
         <property name="text">
-         <string/>
+         <string>正在加载…</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignVCenter</set>
