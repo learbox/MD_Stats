@@ -47,7 +47,7 @@ btn_close_hover = "#f0a5b5"
 #
 # macOS: HanziPen SC（毛笔）/ Hannotate SC（中性手写）/ Yuppy SC（圆体）
 # Windows: 华文琥珀 / 华文新魏 / 楷体 / Microsoft YaHei（兜底）
-font_family = '"DymonShouXieTi", "LXGW WenKai", "Yozai", "Yuppy SC", "Hannotate SC","HanziPen SC", "Chalkboard SE", "Comic Sans MS", "华文琥珀", "STHupo", "华文新魏", "STXinwei", "KaiTi", "楷体", "Microsoft YaHei", "PingFang SC"'
+font_family = '"Yozai", "DymonShouXieTi", "LXGW WenKai", "Yuppy SC", "Hannotate SC","HanziPen SC", "Chalkboard SE", "Comic Sans MS", "华文琥珀", "STHupo", "华文新魏", "STXinwei", "KaiTi", "楷体", "Microsoft YaHei", "PingFang SC"'
 # 全局字号（像素）
 font_size   = 14
 # 列标题字号（像素）
