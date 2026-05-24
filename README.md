@@ -10,7 +10,7 @@
 - **记录表格** — 每条对局的详细信息，支持倒序显示和单元格编辑（下拉菜单 + 自由输入）
 - **多分辨率** — 自动检测游戏分辨率，切换对应模板子目录
 - **撤销 / 删除** — 手动录入支持逐级撤销，支持删除最后一条记录
-- **配置热加载** — 修改 `config.toml` 后一键重载（包括主题切换），无需重启
+- **图形化设置** — 内置设置弹窗，可视化编辑所有配置项，无需手动修改文件
 - **主题系统** — 内置暗色/亮色/马卡龙三套主题，支持纯色和图片纹理，可自行制作
 - **悬浮统计窗** — 可拖拽的半透明悬浮窗，实时显示当前卡组关键数据，位置持久化
 
@@ -29,7 +29,7 @@
 │  # │ 日期  │ 时间  │ 使用卡组 │ ... │ 赢硬币 │ 先后攻 │ 结果 │ 备注 │  ← 记录表格
 │  1 │ 05-18 │ 09:54 │  炎王   │ ... │   是  │  先攻 │  胜  │     │
 ├───────────────────────────────────────────────────────────────────┤
-│  [加载] [复制] [打开CSV] [编辑配置] [重载配置] [删除最后]            │
+│  [加载] [复制] [打开CSV] [删除最后] [悬浮窗] [设置] [关于]            │
 │  就绪 — 请点击《启动》开始                          📁 data.csv     │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -90,27 +90,26 @@ python main.py
 
 ## 配置
 
-编辑项目根目录下的 `config.toml`：
+点击主界面的「设置」按钮打开图形化设置弹窗，可视化编辑所有配置项。也可以直接编辑 `config.toml` 后点击「设置 → 确定」重载。
 
 | 配置项 | 说明 | 默认值 |
 |---|---|---|
 | `detection.interval` | 截图间隔（秒） | `0.3` |
 | `detection.confidence_threshold` | 匹配置信度阈值 (0.0~1.0) | `0.8` |
-| `window.width` / `height` | 主窗口尺寸（像素） | `1100` / `700` |
-| `appearance.theme` | 界面主题，填写 `themes/` 下的文件夹名 | `"dark"` |
+| `window.width` / `height` | 主窗口尺寸（像素） | `1300` / `700` |
+| `appearance.theme` | 界面主题，填写 `themes/` 下的文件夹名 | `"macaron"` |
 | `opponent_decks.presets` | 对方卡组预设列表 | `["炎兽", "闪刀姬", ...]` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
-| `floating_window.width` / `height` | 悬浮窗尺寸 | `300` |
-| `floating_window.bg_color` | 悬浮窗背景色 | `#98d4bb` |
+| `clipboard.vertical_layout` | 剪贴板竖排模式 | `false` |
+| `clipboard.scope` | 复制范围（`"all"` / `"current"`） | `"all"` |
+| `floating_window.width` / `height` | 悬浮窗尺寸 | `250` / `300` |
+| `floating_window.bg_color` | 悬浮窗背景色 | `#BDEF0A` |
 | `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
-| `floating_window.font_size` | 悬浮窗文字字号 | `20` |
-| `floating_window.text_color` | 悬浮窗文字颜色 | `#000000` |
-
-修改后点击"重新载入配置"即时生效，无需重启。
+| `floating_window.rows` | 悬浮窗显示数据行 | 8 项默认 |
 
 ### 主题
 
-内置三套主题：`dark`（暗色沉浸）、`light`（亮色清爽）、`macaron`（马卡龙水彩纹理）。切换主题改 `config.toml` 中 `appearance.theme` 即可。
+内置三套主题：`dark`（暗色沉浸）、`light`（亮色清爽）、`macaron`（马卡龙水彩纹理）。通过设置弹窗或 `config.toml` 切换。
 
 **制作自定义主题**：在 `themes/` 下新建文件夹 → 放入 `theme.toml`（修改颜色/字体/图片）+ `style.qss`（复制内置模板）+ `assets/`（图片和字体） → 在 `config.toml` 中填写文件夹名。详见 `themes/README.md`。
 
@@ -144,11 +143,13 @@ mdstats_py/
 │   └── stats_worker.py      # 后台识别线程（QThread）
 └── ui/
     ├── main_window.py       # 主窗口逻辑
-    ├── main_window.ui       # Qt Designer 界面文件
+    ├── main_window.ui       # Qt Designer 界面文件（源文件）
+    ├── main_window_ui.py    # 编译后的 UI（pyside6-uic 生成）
+    ├── config_dialog.py     # 设置弹窗（GUI 配置编辑器）
+    ├── about_dialog.py      # 关于弹窗 + 版本号等元数据
     ├── titlebar.py          # 自定义标题栏
     ├── theme_manager.py     # 主题管理器
-    ├── floating_window.py   # 悬浮统计窗
-    └── meta.py              # 关于对话框元数据
+    └── floating_window.py   # 悬浮统计窗
 ```
 
 ## 致谢

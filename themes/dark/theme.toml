@@ -81,6 +81,8 @@ button_bg    = { file = "", mode = "tile" }
 statusbar_bg = { file = "", mode = "stretch" }
 # 悬浮窗背景图（可选）                               建议: 250×330
 float_bg     = { file = "", mode = "stretch" }
+# 设置弹窗背景图（可选）                              建议: 680×560
+settings_bg  = { file = "", mode = "stretch" }
 
 
 # ==============================================================================

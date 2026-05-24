@@ -99,7 +99,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
-from ui.meta import VERSION, AUTHOR, LICENSE, DESCRIPTION, REPO_URL, ACKNOWLEDGMENTS
+from ui.about_dialog import VERSION, AUTHOR, LICENSE, DESCRIPTION, REPO_URL, ACKNOWLEDGMENTS
 from src.config import get_project_root, load_config
 from src.recorder import (
     add_record,
@@ -1411,40 +1411,18 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def _on_about(self) -> None:
-        """显示"关于"对话框，包含版本号、作者、协议、仓库链接、鸣谢。
-
-        使用 HTML 格式显示，支持超链接点击（通过 setOpenExternalLinks）。
-        ACKNOWLEDGMENTS 中允许 HTML 标签（超链接），不做转义。
-        """
-        import html as _html
-
-        lines = [
-            "<h3>MD Stats</h3>",
-            f"<p>版本: {_html.escape(VERSION)}<br>",
-            f"作者: {_html.escape(AUTHOR)}<br>",
-            f"协议: {_html.escape(LICENSE)}</p>",
-        ]
-        if REPO_URL:
-            lines.append(
-                f'<p>仓库: <a href="{_html.escape(REPO_URL, quote=True)}">{_html.escape(REPO_URL)}</a></p>'
-            )
-        lines.append(f"<p>{_html.escape(DESCRIPTION).replace(chr(10), '<br>')}</p>")
-        if ACKNOWLEDGMENTS:
-            ack = ACKNOWLEDGMENTS.replace("\n", "<br>")
-            lines.append(f"<p><b>特别鸣谢</b><br>{ack}</p>")
-
-        msg = QMessageBox(self)
-        msg.setWindowTitle("关于 MD Stats")
-        msg.setText("".join(lines))
-        msg.setWindowIcon(self.windowIcon())
-        msg.setIcon(QMessageBox.Icon.Information)
-        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-        msg.button(QMessageBox.StandardButton.Ok).setText("确定")
-        # 启用超链接点击
-        for label in msg.findChildren(QLabel):
-            label.setOpenExternalLinks(True)
-            label.setTextFormat(Qt.TextFormat.RichText)
-        msg.exec()
+        """显示"关于"对话框，与设置弹窗风格一致。"""
+        from ui.about_dialog import AboutDialog
+        close_hover = "#e74c3c"
+        bg_path = None
+        if self._tm.titlebar_cfg:
+            close_hover = self._tm.titlebar_cfg.get("btn_close_hover", close_hover)
+        if self._tm.pixmap_paths:
+            bg_path = self._tm.pixmap_paths.get("__settings_bg__")
+        dlg = AboutDialog(close_hover=close_hover,
+                          assets_dir=self._tm.assets_dir,
+                          bg_path=bg_path, parent=self)
+        dlg.exec()
 
     # =========================================================================
     # 复制统计 / 打开文件
@@ -1538,7 +1516,16 @@ class MainWindow(QMainWindow):
     def _on_settings(self) -> None:
         """打开图形化设置弹窗，确定后自动写配置 + 重载。"""
         from ui.config_dialog import ConfigDialog
-        dialog = ConfigDialog(self._config, self)
+        bg_path = None
+        close_hover = "#e74c3c"
+        if self._tm.pixmap_paths:
+            bg_path = self._tm.pixmap_paths.get("__settings_bg__")
+        if self._tm.titlebar_cfg:
+            close_hover = self._tm.titlebar_cfg.get("btn_close_hover", close_hover)
+        dialog = ConfigDialog(self._config, self,
+                              bg_path=bg_path,
+                              close_hover=close_hover,
+                              assets_dir=self._tm.assets_dir)
         dialog.config_saved.connect(self._on_reload_config)
         dialog.exec()
 

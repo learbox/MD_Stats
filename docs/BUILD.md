@@ -124,6 +124,6 @@ MDStats-vX.Y.Z.zip
 
 - `themes/`、`csv/`、`resource/` 不打包进 EXE，用户可自行修改。
 
-- 打包前确认 `ui/meta.py` 中的版本号已更新。
+- 打包前确认 `ui/about_dialog.py` 中的 `VERSION` 已更新。
 
 - CI 和本地打包前都应执行 `uv sync --frozen`，确保依赖版本一致。

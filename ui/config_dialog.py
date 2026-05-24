@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QPoint, QTranslator, QLibraryInfo, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
     QDoubleSpinBox, QFontComboBox, QGroupBox, QHBoxLayout, QLabel,
@@ -197,9 +197,20 @@ class ConfigDialog(QDialog):
     _ALL_KEYS = list(_ROW_KEY_MAP.keys())
 
     def __init__(self, config: dict[str, Any],
-                 parent: QWidget | None = None) -> None:
+                 parent: QWidget | None = None,
+                 bg_path: str | None = None,
+                 close_hover: str = "#e74c3c",
+                 assets_dir: Path | None = None) -> None:
         super().__init__(parent)
         self._config = config
+        self._close_hover = close_hover
+        self._assets_dir = assets_dir
+        self._bg_pixmap: QPixmap | None = None
+        if bg_path:
+            pm = QPixmap(bg_path)
+            if not pm.isNull():
+                self._bg_pixmap = pm
+
         self._dragging = False
         self._drag_start = QPoint()
 
@@ -209,6 +220,7 @@ class ConfigDialog(QDialog):
             | Qt.WindowType.Window
             | Qt.WindowType.Dialog
         )
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setMinimumSize(660, 540)
         self.resize(680, 560)
         self.setObjectName("configDialog")
@@ -220,6 +232,17 @@ class ConfigDialog(QDialog):
         outer.addWidget(self._make_titlebar())
 
         self._tabs = QTabWidget()
+        # 标签页 50% 半透明白底，透出背景图但保持可读性
+        self._tabs.setStyleSheet(
+            "QTabWidget::pane { background: rgba(255,255,255,180); border: none; }"
+            "QTabBar::tab { background: transparent; padding: 6px 16px; }"
+            "QTabBar::tab:selected { background: rgba(255,255,255,210); }"
+        )
+        self.setStyleSheet(
+            "QGroupBox { background: transparent; border: 1px solid rgba(128,128,128,80);"
+            "  border-radius: 6px; margin-top: 8px; padding-top: 16px; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 12px; }"
+        )
         self._tabs.addTab(self._make_detection_tab(), "识别")
         self._tabs.addTab(self._make_appearance_tab(), "外观")
         self._tabs.addTab(self._make_clipboard_tab(), "剪贴板")
@@ -247,13 +270,15 @@ class ConfigDialog(QDialog):
         layout.addWidget(title)
         layout.addStretch()
 
-        btn_close = QPushButton("×")
-        btn_close.setFixedSize(36, 24)
-        btn_close.setFlat(True)
+        # 关闭按钮：复用主标题栏 _TitleBarButton（自带 hover 遮罩和图标填充）
+        from ui.titlebar import _TitleBarButton
+        assets = self._assets_dir or (get_project_root() / "resource")
+        btn_close = _TitleBarButton("title_close", assets, bar)
         btn_close.setStyleSheet(
-            "QPushButton { font-size: 16px; font-weight: bold; "
-            "background: transparent; border: none; border-radius: 4px; }"
-            "QPushButton:hover { background-color: #e74c3c; color: white; }"
+            "QPushButton { background: transparent; border: 1px solid transparent; "
+            "border-radius: 4px; }"
+            f"QPushButton:hover {{ background-color: {self._close_hover}; "
+            f"border-color: {self._close_hover}; }}"
         )
         btn_close.clicked.connect(self.reject)
         layout.addWidget(btn_close)
@@ -337,11 +362,17 @@ class ConfigDialog(QDialog):
             "Qt 从第一个开始尝试，如果系统没装就试下一个，直到找到可用的。\n"
             "因此同一个主题在 Windows 和 macOS 上可能显示不同字体——这是正常行为。"
         )
+        from PySide6.QtWidgets import QScrollArea
         fl = QVBoxLayout(g_font)
+        scroll = QScrollArea()
+        scroll.setMaximumHeight(100)
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         self._font_stack_label = QLabel()
         self._font_stack_label.setStyleSheet("font-size: 12px; background: transparent;")
         self._font_stack_label.setWordWrap(True)
-        fl.addWidget(self._font_stack_label)
+        scroll.setWidget(self._font_stack_label)
+        fl.addWidget(scroll)
 
         # 字体预览
         self._font_preview = QLabel("字体预览 ABC 123 中文示例 勝負 先攻 後攻")
@@ -355,11 +386,12 @@ class ConfigDialog(QDialog):
         # ---- 字体选择器 ----
         fr = QHBoxLayout()
         fr.addWidget(QLabel("更换字体:"))
-        self._font_picker = QFontComboBox()
+        self._font_picker = QComboBox()
+        self._font_picker.setMinimumWidth(180)
         self._font_picker.setToolTip(
-            "选择新字体后点击 [应用] 将其写入主题文件。\n"
-            "只替换字体栈的第一个字体，后面的回退字体保留不变。\n"
-            "修改后会自动重载主题。"
+            "当前主题字体栈中已安装的字体。\n"
+            "选择后点击 [应用] 将其设为栈顶主力字体。\n"
+            "修改后自动写入主题文件并重载。"
         )
         fr.addWidget(self._font_picker)
         btn_apply_font = QPushButton("应用")
@@ -452,11 +484,16 @@ class ConfigDialog(QDialog):
         # 预览实际渲染字体
         actual_font = QFont(fonts_in_stack[0] if fonts_in_stack else "")
         self._font_preview.setFont(actual_font)
-        # 字体选择器同步主力字体
-        if fonts_in_stack and fonts_in_stack[0] in available:
-            idx = self._font_picker.findText(fonts_in_stack[0])
-            if idx >= 0:
-                self._font_picker.setCurrentIndex(idx)
+        # 字体下拉框：只列出本主题字体栈中系统已安装的字体
+        self._font_picker.clear()
+        for f in fonts_in_stack:
+            if f in available:
+                self._font_picker.addItem(f)
+        if self._font_picker.count() == 0:
+            self._font_picker.addItem("(无可用字体)")
+            self._font_picker.setEnabled(False)
+        else:
+            self._font_picker.setEnabled(True)
 
     def _on_apply_font(self) -> None:
         """把字体选择器中选中的字体写入当前主题的 font_family 首位。"""
@@ -595,6 +632,7 @@ class ConfigDialog(QDialog):
         tr.addWidget(self._fw_fs)
         tr.addWidget(QLabel("字体:"))
         self._fw_ff = QFontComboBox()
+        self._fw_ff.setMinimumWidth(160)
         tr.addWidget(self._fw_ff)
         tr.addStretch()
         lo.addLayout(tr)
@@ -742,45 +780,52 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _on_save(self) -> None:
-        """从控件取值 → 写回 config.toml → 通知主窗口重载。"""
-        config = self._config
+        """从控件取值 → 写回 config.toml → 通知主窗口重载。
 
-        config.setdefault("detection", {})
-        config["detection"]["interval"] = round(self._interval.value(), 1)
-        config["detection"]["confidence_threshold"] = round(self._threshold.value(), 2)
-
-        config.setdefault("appearance", {})
-        config["appearance"]["theme"] = self._theme_combo.currentText()
-
-        config.setdefault("window", {})
-        config["window"]["width"] = self._win_width.value()
-        config["window"]["height"] = self._win_height.value()
-
-        config.setdefault("clipboard", {})
-        config["clipboard"]["vertical_layout"] = self._cb_vert.isChecked()
-        config["clipboard"]["scope"] = "current" if self._cb_curr.isChecked() else "all"
-        config["clipboard"]["columns"] = self._cb_dual.get_selected()
-
-        config.setdefault("floating_window", {})
-        config["floating_window"]["width"] = self._fw_w.value()
-        config["floating_window"]["height"] = self._fw_h.value()
-        config["floating_window"]["bg_color"] = self._fw_bg.color().name()
-        config["floating_window"]["opacity"] = self._fw_op.value()
-        config["floating_window"]["text_color"] = self._fw_tc.color().name()
-        config["floating_window"]["font_size"] = self._fw_fs.value()
-        config["floating_window"]["font_family"] = self._fw_ff.currentFont().family()
-        config["floating_window"]["rows"] = self._fw_dual.get_selected()
-        config["floating_window"]["use_theme_bg"] = self._use_theme_bg.isChecked()
-
-        config.setdefault("opponent_decks", {})
+        关键：不能直接改 self._config（它是 MainWindow 的引用），
+        否则 _on_reload_config 在读取旧主题名时已经被覆盖，导致
+        主题切换检测失效。这里构建新字典，只写文件，让重载自己读。
+        """
         presets = [self._preset_list.item(i).text().strip()
                    for i in range(self._preset_list.count())]
-        config["opponent_decks"]["presets"] = [p for p in presets if p]
 
-        config.setdefault("recorder", {})
-        config["recorder"]["daily_files"] = self._daily_files.isChecked()
+        data: dict[str, Any] = {
+            "detection": {
+                "interval": round(self._interval.value(), 1),
+                "confidence_threshold": round(self._threshold.value(), 2),
+            },
+            "appearance": {
+                "theme": self._theme_combo.currentText(),
+            },
+            "window": {
+                "width": self._win_width.value(),
+                "height": self._win_height.value(),
+            },
+            "clipboard": {
+                "vertical_layout": self._cb_vert.isChecked(),
+                "scope": "current" if self._cb_curr.isChecked() else "all",
+                "columns": self._cb_dual.get_selected(),
+            },
+            "floating_window": {
+                "use_theme_bg": self._use_theme_bg.isChecked(),
+                "width": self._fw_w.value(),
+                "height": self._fw_h.value(),
+                "bg_color": self._fw_bg.color().name(),
+                "opacity": self._fw_op.value(),
+                "text_color": self._fw_tc.color().name(),
+                "font_size": self._fw_fs.value(),
+                "font_family": self._fw_ff.currentFont().family(),
+                "rows": self._fw_dual.get_selected(),
+            },
+            "opponent_decks": {
+                "presets": [p for p in presets if p],
+            },
+            "recorder": {
+                "daily_files": self._daily_files.isChecked(),
+            },
+        }
 
-        self._write_toml(config)
+        self._write_toml(data)
         self.config_saved.emit()
         self.accept()
 
@@ -869,6 +914,23 @@ class ConfigDialog(QDialog):
     def _del_preset(self) -> None:
         for item in self._preset_list.selectedItems():
             self._preset_list.takeItem(self._preset_list.row(item))
+
+    # =========================================================================
+    # 背景绘制
+    # =========================================================================
+
+    def paintEvent(self, event) -> None:
+        """手绘背景：有图则贴图填充，无图走默认 QDialog 背景。"""
+        painter = QPainter(self)
+        if self._bg_pixmap is not None:
+            scaled = self._bg_pixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            painter.drawPixmap(0, 0, scaled)
+        painter.end()
+        super().paintEvent(event)
 
     # =========================================================================
     # 拖拽
