@@ -235,16 +235,9 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="btn_edit_config">
+       <widget class="QPushButton" name="btn_settings">
         <property name="text">
-         <string>编辑配置</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btn_reload_config">
-        <property name="text">
-         <string>重新载入配置</string>
+         <string>设置</string>
         </property>
        </widget>
       </item>

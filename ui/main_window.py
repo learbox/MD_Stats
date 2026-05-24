@@ -711,8 +711,7 @@ class MainWindow(QMainWindow):
         self._btn_delete_last  = _require_widget(content.findChild(QPushButton, "btn_delete_last"), "btn_delete_last")
         self._btn_about        = _require_widget(content.findChild(QPushButton, "btn_about"), "btn_about")
         self._btn_open_csv     = _require_widget(content.findChild(QPushButton, "btn_open_csv"), "btn_open_csv")
-        self._btn_edit_config  = _require_widget(content.findChild(QPushButton, "btn_edit_config"), "btn_edit_config")
-        self._btn_reload_config= _require_widget(content.findChild(QPushButton, "btn_reload_config"), "btn_reload_config")
+        self._btn_settings = _require_widget(content.findChild(QPushButton, "btn_settings"), "btn_settings")
         self._splitter         = _require_widget(content.findChild(QSplitter, "splitter"), "splitter")
 
         # ---- 11. 窗口基础设置 ----
@@ -735,8 +734,7 @@ class MainWindow(QMainWindow):
         self._btn_delete_last.clicked.connect(self._on_delete_last)
         self._btn_about.clicked.connect(self._on_about)
         self._btn_open_csv.clicked.connect(self._open_csv_dir)
-        self._btn_edit_config.clicked.connect(self._on_edit_config)
-        self._btn_reload_config.clicked.connect(self._on_reload_config)
+        self._btn_settings.clicked.connect(self._on_settings)
 
         # ---- 13. 悬浮窗按钮 ----
         self._btn_float = _require_widget(content.findChild(QPushButton, "btn_float"), "btn_float")
@@ -829,13 +827,11 @@ class MainWindow(QMainWindow):
 
     def _disable_bottom_buttons(self) -> None:
         """运行时禁用高风险按钮。"""
-        self._btn_edit_config.setEnabled(False)
-        self._btn_reload_config.setEnabled(False)
+        self._btn_settings.setEnabled(False)
 
     def _enable_bottom_buttons(self) -> None:
         """停止时恢复底部按钮。"""
-        self._btn_edit_config.setEnabled(True)
-        self._btn_reload_config.setEnabled(True)
+        self._btn_settings.setEnabled(True)
 
     # =========================================================================
     # CSV 数据加载
@@ -1539,13 +1535,12 @@ class MainWindow(QMainWindow):
         except OSError:
             pass  # 打开失败时静默忽略
 
-    def _on_edit_config(self) -> None:
-        """用操作系统默认程序打开 config.toml 文件。"""
-        config_path = str(_CONFIG_PATH.resolve())
-        try:
-            os.startfile(config_path)
-        except OSError:
-            self._show_status(f"无法打开配置文件: {config_path}")
+    def _on_settings(self) -> None:
+        """打开图形化设置弹窗，确定后自动写配置 + 重载。"""
+        from ui.config_dialog import ConfigDialog
+        dialog = ConfigDialog(self._config, self)
+        dialog.config_saved.connect(self._on_reload_config)
+        dialog.exec()
 
     # =========================================================================
     # 重新载入配置

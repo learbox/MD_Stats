@@ -133,15 +133,10 @@ class Ui_MainWindow(object):
 
         self.bottomLayout.addWidget(self.btn_open_csv)
 
-        self.btn_edit_config = QPushButton(self.bottomPanel)
-        self.btn_edit_config.setObjectName(u"btn_edit_config")
+        self.btn_settings = QPushButton(self.bottomPanel)
+        self.btn_settings.setObjectName(u"btn_settings")
 
-        self.bottomLayout.addWidget(self.btn_edit_config)
-
-        self.btn_reload_config = QPushButton(self.bottomPanel)
-        self.btn_reload_config.setObjectName(u"btn_reload_config")
-
-        self.bottomLayout.addWidget(self.btn_reload_config)
+        self.bottomLayout.addWidget(self.btn_settings)
 
         self.spacerDelete = QSpacerItem(20, 20, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
 
@@ -213,8 +208,7 @@ class Ui_MainWindow(object):
         self.btn_reload.setText(QCoreApplication.translate("MainWindow", u"\u52a0\u8f7d\u6570\u636e", None))
         self.btn_copy.setText(QCoreApplication.translate("MainWindow", u"\u590d\u5236\u7edf\u8ba1", None))
         self.btn_open_csv.setText(QCoreApplication.translate("MainWindow", u"\u6253\u5f00 data.csv \u76ee\u5f55", None))
-        self.btn_edit_config.setText(QCoreApplication.translate("MainWindow", u"\u7f16\u8f91\u914d\u7f6e", None))
-        self.btn_reload_config.setText(QCoreApplication.translate("MainWindow", u"\u91cd\u65b0\u8f7d\u5165\u914d\u7f6e", None))
+        self.btn_settings.setText(QCoreApplication.translate("MainWindow", u"\u8bbe\u7f6e", None))
         self.btn_delete_last.setText(QCoreApplication.translate("MainWindow", u"\u5220\u9664\u6700\u540e\u8bb0\u5f55", None))
         self.btn_float.setText(QCoreApplication.translate("MainWindow", u"\u60ac\u6d6e\u7a97", None))
         self.btn_about.setText(QCoreApplication.translate("MainWindow", u"\u5173\u4e8e", None))
