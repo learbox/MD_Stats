@@ -974,8 +974,8 @@ class ConfigDialog(QDialog):
         _kv("opacity", fw.get("opacity", 50), "不透明度 0-100")
         _kv("font_size", fw.get("font_size", 20), "文字字号（像素）")
         _kv("text_color", fw.get("text_color", "#000000"), "文字颜色")
-        _kv("font_family", fw.get("font_family", "Microsoft YaHei"),
-            "字体（空则用全局字体）")
+        _kv("font_family", fw.get("font_family", "Microsoft YaHei, -apple-system, sans-serif"),
+            "字体（Qt 从前往后找第一个可用的，含 macOS/Windows 回退）")
         _kv("rows", fw.get("rows", []),
             "显示数据行（空 = 默认 8 项）")
 
