@@ -897,69 +897,87 @@ class ConfigDialog(QDialog):
         self.accept()
 
     @staticmethod
+    @staticmethod
     def _write_toml(data: dict) -> None:
-        """把配置字典写成 config.toml 文件。"""
+        """把配置字典写成带注释的 config.toml 文件。"""
         path = get_project_root() / "config.toml"
-        lines: list[str] = [
-            "# ==========================================================",
-            "# MD Stats 配置文件（由设置 GUI 生成）",
-            "# ==========================================================",
-            "",
-            "[detection]",
-        ]
 
-        def _k(key: str, value: Any, suffix: str = "") -> None:
+        def _kv(key: str, value: Any, comment: str = "") -> None:
+            """写入 key = value 行，前面可选注释。"""
+            if comment:
+                lines.append(f"# {comment}")
             if isinstance(value, bool):
-                lines.append(f"{key} = {str(value).lower()}{suffix}")
+                lines.append(f"{key} = {str(value).lower()}")
             elif isinstance(value, str):
-                lines.append(f'{key} = "{value}"{suffix}')
+                lines.append(f'{key} = "{value}"')
             elif isinstance(value, (int, float)):
-                lines.append(f"{key} = {value}{suffix}")
+                lines.append(f"{key} = {value}")
             elif isinstance(value, list):
                 if not value:
-                    lines.append(f"{key} = []{suffix}")
+                    lines.append(f"{key} = []")
                 else:
                     items = ", ".join(f'"{x}"' for x in value)
-                    lines.append(f"{key} = [{items}]{suffix}")
+                    lines.append(f"{key} = [{items}]")
 
+        # 先提取所有段的值
         d = data.get("detection", {})
-        _k("interval", d.get("interval", 0.3))
-        _k("confidence_threshold", d.get("confidence_threshold", 0.8))
+        w = data.get("window", {})
+        a = data.get("appearance", {})
+        od = data.get("opponent_decks", {})
+        r = data.get("recorder", {})
+        cb = data.get("clipboard", {})
+        fw = data.get("floating_window", {})
+
+        lines: list[str] = [
+            "# MD Stats 配置文件（由设置 GUI 生成，也可手动编辑）",
+            "# 修改后点击主窗口的「设置 → 确定」即时生效。",
+            "# 所有时间单位为秒，所有颜色使用十六进制格式。",
+            "",
+            "# 图像识别相关配置",
+            "[detection]",
+        ]
+        _kv("interval", d.get("interval", 0.3),
+            "截图间隔（秒），推荐 0.3 ~ 1.0")
+        _kv("confidence_threshold", d.get("confidence_threshold", 0.8),
+            "匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90")
 
         lines.extend(["", "[window]"])
-        w = data.get("window", {})
-        _k("width", w.get("width", 1300))
-        _k("height", w.get("height", 700))
+        _kv("width", w.get("width", 1300), "主窗口宽度（像素）")
+        _kv("height", w.get("height", 700), "主窗口高度（像素）")
 
-        lines.extend(["", "[appearance]"])
-        a = data.get("appearance", {})
-        _k("theme", a.get("theme", "dark"))
+        lines.extend(["", "# 界面外观", "[appearance]"])
+        _kv("theme", a.get("theme", "dark"),
+            '主题文件夹名（内置: "dark" / "light" / "macaron"）')
 
-        lines.extend(["", "[opponent_decks]"])
-        od = data.get("opponent_decks", {})
-        _k("presets", od.get("presets", []))
+        lines.extend(["", "# 对方卡组预设", "[opponent_decks]"])
+        _kv("presets", od.get("presets", []),
+            "记录表格下拉菜单的预设选项")
 
-        lines.extend(["", "[recorder]"])
-        r = data.get("recorder", {})
-        _k("daily_files", r.get("daily_files", False))
+        lines.extend(["", "# 数据存储", "[recorder]"])
+        _kv("daily_files", r.get("daily_files", False),
+            "是否按日期分文件存储 CSV")
 
-        lines.extend(["", "[clipboard]"])
-        cb = data.get("clipboard", {})
-        _k("vertical_layout", cb.get("vertical_layout", False))
-        _k("scope", cb.get("scope", "all"))
-        _k("columns", cb.get("columns", []))
+        lines.extend(["", "# 剪贴板复制行为", "[clipboard]"])
+        _kv("vertical_layout", cb.get("vertical_layout", False),
+            '竖排模式：true = 每行"key\\tvalue"，false = 横排 TSV')
+        _kv("scope", cb.get("scope", "all"),
+            '复制范围："current" = 当前卡组，"all" = 全部卡组')
+        _kv("columns", cb.get("columns", []),
+            "要复制的列名列表（空 = 默认 8 项）")
 
-        lines.extend(["", "[floating_window]"])
-        fw = data.get("floating_window", {})
-        _k("use_theme_bg", fw.get("use_theme_bg", False))
-        _k("width", fw.get("width", 250))
-        _k("height", fw.get("height", 300))
-        _k("bg_color", fw.get("bg_color", "#BDEF0A"))
-        _k("opacity", fw.get("opacity", 50))
-        _k("font_size", fw.get("font_size", 20))
-        _k("text_color", fw.get("text_color", "#000000"))
-        _k("font_family", fw.get("font_family", "Microsoft YaHei"))
-        _k("rows", fw.get("rows", []))
+        lines.extend(["", "# 悬浮统计窗", "[floating_window]"])
+        _kv("use_theme_bg", fw.get("use_theme_bg", False),
+            "是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）")
+        _kv("width", fw.get("width", 250), "悬浮窗宽度（像素）")
+        _kv("height", fw.get("height", 300), "悬浮窗高度（像素）")
+        _kv("bg_color", fw.get("bg_color", "#BDEF0A"), "背景色")
+        _kv("opacity", fw.get("opacity", 50), "不透明度 0-100")
+        _kv("font_size", fw.get("font_size", 20), "文字字号（像素）")
+        _kv("text_color", fw.get("text_color", "#000000"), "文字颜色")
+        _kv("font_family", fw.get("font_family", "Microsoft YaHei"),
+            "字体（空则用全局字体）")
+        _kv("rows", fw.get("rows", []),
+            "显示数据行（空 = 默认 8 项）")
 
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
