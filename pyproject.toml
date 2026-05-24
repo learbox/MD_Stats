@@ -9,5 +9,5 @@ dependencies = [
     "pyside6>=6.11.1",
     "pywin32>=306; sys_platform == 'win32'",
     "pyobjc-framework-Quartz; sys_platform == 'darwin'",
-    "tomli>=2.0.0; python_version < '3.11'",
+    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
 ]

@@ -55,8 +55,8 @@ uv sync
 ### 使用 pip
 
 ```bash
-pip install mss numpy opencv-python pyside6 tomli pywin32       # Windows
-pip install mss numpy opencv-python pyside6 tomli pyobjc-framework-Quartz pyobjc-framework-AppKit  # macOS
+pip install mss numpy opencv-python pyside6 pywin32       # Windows
+pip install mss numpy opencv-python pyside6 pyobjc-framework-Quartz pyobjc-framework-Cocoa  # macOS
 ```
 
 ## 准备模板图片
@@ -177,4 +177,3 @@ mdstats_py/
 | numpy | BSD-3-Clause |
 | mss | MIT |
 | pywin32 | PSF |
-| tomli | MIT |

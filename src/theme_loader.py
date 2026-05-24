@@ -102,10 +102,7 @@ from typing import Any
 from src.config import get_project_root
 
 # ---- TOML 解析：Python 3.11+ 内置，3.10 降级到 tomli ----
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib  # type: ignore[import-not-found]
+import tomllib
 
 # 字体加载（Qt 提供的跨平台字体管理 API）
 from PySide6.QtGui import QFontDatabase
