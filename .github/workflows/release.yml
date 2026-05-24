@@ -65,3 +65,55 @@ jobs:
           files: dist/MDStats-${{ github.ref_name }}.zip
           name: MD Stats ${{ github.ref_name }}
           draft: true
+
+  macos:
+    name: Build macOS App（实验性）
+    runs-on: macos-latest
+    continue-on-error: true  # macOS 构建失败不阻断整体 Release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 uv（含 Python 3.11）
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+
+      - name: 同步依赖（按 uv.lock 精确复现）
+        run: uv sync --frozen
+
+      - name: 编译 .ui 文件
+        run: uv run pyside6-uic ui/main_window.ui -o ui/main_window_ui.py
+
+      - name: PyInstaller 打包
+        run: |
+          uv run --with 'pyinstaller>=6.10,<7' pyinstaller main.py \
+            --name MDStats \
+            --windowed \
+            --contents-directory .runtime \
+            --noconfirm
+
+      - name: 组装发布目录
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist/release
+          cp -r "dist/MDStats.app" dist/release/
+          cp -r dist/MDStats/.runtime dist/release/
+          cp -r themes dist/release/
+          cp -r csv dist/release/
+          cp -r resource dist/release/
+          cp config.toml dist/release/
+          cp .app_state.json dist/release/
+          cp docs/README_release.md dist/release/README.md
+          find dist/release -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+          hdiutil create -volname "MDStats" -srcfolder dist/release \
+            -ov "dist/MDStats-$TAG.dmg"
+
+      - name: 上传 DMG 到 Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MDStats-${{ github.ref_name }}.dmg
+          name: MD Stats ${{ github.ref_name }}
+          draft: true
