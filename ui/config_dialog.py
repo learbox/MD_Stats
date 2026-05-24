@@ -488,9 +488,7 @@ class ConfigDialog(QDialog):
             6. 用栈顶字体渲染预览文字
             7. 同步字体下拉框：只列出已安装的字体供用户选择
         """
-        import tomllib, sys
-        if sys.version_info < (3, 11):
-            import tomli as tomllib
+        import tomllib
 
         theme_name = self._theme_combo.currentText()
         if not theme_name or theme_name == _BUILTIN_THEME:

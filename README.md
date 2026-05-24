@@ -52,7 +52,7 @@ uv sync
 ### 使用 pip
 
 ```bash
-pip install mss numpy opencv-python pyside6 pywin32 tomli
+pip install mss numpy opencv-python pyside6 pywin32
 ```
 
 ## 准备模板图片
@@ -173,4 +173,3 @@ mdstats_py/
 | numpy | BSD-3-Clause |
 | mss | MIT |
 | pywin32 | PSF |
-| tomli | MIT |

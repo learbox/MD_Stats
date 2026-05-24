@@ -8,5 +8,4 @@ dependencies = [
     "opencv-python>=4.13.0.92",
     "pyside6>=6.11.1",
     "pywin32>=306",
-    "tomli>=2.0.0; python_version < '3.11'",
 ]

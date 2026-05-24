@@ -54,10 +54,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # 兼容 Python 3.10 及以下版本：优先使用标准库 tomllib，否则降级到 tomli
 # ---------------------------------------------------------------------------
-if sys.version_info >= (3, 11):
-    import tomllib  # Python 3.11+ 内置
-else:
-    import tomli as tomllib  # type: ignore[import-not-found]
+import tomllib
 
 
 def get_project_root() -> Path:
