@@ -1421,7 +1421,8 @@ class MainWindow(QMainWindow):
             bg_path = self._tm.pixmap_paths.get("__settings_bg__")
         dlg = AboutDialog(close_hover=close_hover,
                           assets_dir=self._tm.assets_dir,
-                          bg_path=bg_path, parent=self)
+                          bg_path=bg_path, parent=self,
+                          widget_bg=self._tm.colors.get("widget_bg", "#ffffff"))
         dlg.exec()
 
     # =========================================================================
@@ -1525,7 +1526,8 @@ class MainWindow(QMainWindow):
         dialog = ConfigDialog(self._config, self,
                               bg_path=bg_path,
                               close_hover=close_hover,
-                              assets_dir=self._tm.assets_dir)
+                              assets_dir=self._tm.assets_dir,
+                              widget_bg=self._tm.colors.get("widget_bg", "#ffffff"))
         dialog.config_saved.connect(self._on_reload_config)
         dialog.exec()
 

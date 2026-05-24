@@ -80,7 +80,8 @@ class AboutDialog(QDialog):
     def __init__(self, close_hover: str = "#e74c3c",
                  assets_dir: Path | None = None,
                  bg_path: str | None = None,
-                 parent: QWidget | None = None) -> None:
+                 parent: QWidget | None = None,
+                 widget_bg: str = "#ffffff") -> None:
         """创建关于弹窗。
 
         参数:
@@ -115,7 +116,7 @@ class AboutDialog(QDialog):
         )
         self.setFixedSize(420, 320)        # 固定大小，不需要 resize
         self.setObjectName("aboutDialog")  # QSS 可通过 #aboutDialog 选择器定位
-        self.setStyleSheet("#aboutDialog { background: palette(window); }")
+        self.setStyleSheet(f"#aboutDialog {{ background: {widget_bg}; }}")
         self._apply_dwm()                  # Win11 原生圆角
 
         # ---- 整体布局 ----
@@ -173,7 +174,7 @@ class AboutDialog(QDialog):
         content.setText("".join(lines))
         content.setStyleSheet(
             "padding: 16px; font-size: 13px;"
-            "background: palette(window);"       # 跟随主题窗口背景色
+            f"background: {widget_bg};"          # 跟随主题背景色
             "color: palette(text);"              # 跟随主题文字颜色
         )
         outer.addWidget(content, 1)  # stretch=1，占据剩余空间

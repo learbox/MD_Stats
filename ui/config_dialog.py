@@ -232,7 +232,8 @@ class ConfigDialog(QDialog):
                  parent: QWidget | None = None,
                  bg_path: str | None = None,
                  close_hover: str = "#e74c3c",
-                 assets_dir: Path | None = None) -> None:
+                 assets_dir: Path | None = None,
+                 widget_bg: str = "#ffffff") -> None:
         super().__init__(parent)
         self._config = config
         self._close_hover = close_hover
@@ -257,7 +258,7 @@ class ConfigDialog(QDialog):
         self.resize(680, 560)
         self.setObjectName("configDialog")
         self.setStyleSheet(
-            "#configDialog { background: palette(window); }"
+            f"#configDialog {{ background: {widget_bg}; }}"
             "QGroupBox { background: transparent; border: 1px solid palette(mid);"
             "  border-radius: 6px; margin-top: 8px; padding-top: 16px; }"
             "QGroupBox::title { subcontrol-origin: margin; left: 12px; }"
@@ -270,11 +271,11 @@ class ConfigDialog(QDialog):
         outer.addWidget(self._make_titlebar())
 
         self._tabs = QTabWidget()
-        # 标签页背景跟随系统调色板（亮/暗主题自动适配）
+        # 标签页面板和选中标签用主题背景色
         self._tabs.setStyleSheet(
-            "QTabWidget::pane { background: palette(window); border: none; }"
+            f"QTabWidget::pane {{ background: {widget_bg}; border: none; }}"
             "QTabBar::tab { background: transparent; padding: 6px 16px; }"
-            "QTabBar::tab:selected { background: palette(base); }"
+            f"QTabBar::tab:selected {{ background: {widget_bg}; }}"
         )
         self._tabs.addTab(self._make_detection_tab(), "识别")
         self._tabs.addTab(self._make_appearance_tab(), "外观")
