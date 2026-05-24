@@ -63,26 +63,43 @@ _BUILTIN_THEME = "(内置亮色)"
 # ColorButton — 色块按钮，点击弹出系统取色器
 # =============================================================================
 
+# =============================================================================
+# ColorButton — 色块按钮
+#
+# 为什么不用 QLineEdit 让用户输入 #RRGGBB？
+#   十六进制颜色码对普通用户极不友好——需要知道红绿蓝各两位、
+#   大小写、要不要 # 号。色块按钮 + 取色器能做到"所见即所得"。
+#
+# 工作原理：
+#   1. 按钮背景色 = 当前选中的颜色（用户一眼就知道现在是什么色）
+#   2. 点击按钮 → 弹出系统取色器（QColorDialog）
+#   3. 用户在取色器中选色 → 按钮背景色即时更新
+# =============================================================================
+
 class ColorButton(QPushButton):
-    """显示当前颜色的小色块按钮。点击弹出系统取色器，避免手写 #RRGGBB。"""
+    """色块按钮：显示当前颜色，点击弹出取色器。"""
 
     def __init__(self, color: QColor, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._color = color
-        self.setFixedSize(48, 28)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._update_style()
-        self.clicked.connect(self._pick)
+        self._color = color                # 当前选中的颜色（QColor 对象）
+        self.setFixedSize(48, 28)          # 固定尺寸：宽 48px，高 28px
+        self.setCursor(Qt.CursorShape.PointingHandCursor)  # 手指光标提示可点击
+        self._update_style()               # 涂上初始颜色
+        self.clicked.connect(self._pick)    # 点击 → 弹出取色器
 
     def _update_style(self) -> None:
+        """把按钮背景涂成当前颜色。"""
         c = self._color
+        # name() 返回 #RRGGBB 格式的十六进制字符串
         self.setStyleSheet(
             f"QPushButton {{ background-color: {c.name()}; "
             f"border: 1px solid #888; border-radius: 4px; }}"
         )
 
     def _pick(self) -> None:
-        # DontUseNativeDialog 让 Qt 使用自己的取色器（支持中文界面）
+        """弹出 Qt 取色器弹窗，用户选色后更新按钮。"""
+        # DontUseNativeDialog — 用 Qt 自己的取色器而不是 Windows 原生版本，
+        #   因为 Qt 版本的 UI 可以被我们之前加载的中文翻译文件汉化
         dlg = QColorDialog(self._color, self)
         dlg.setWindowTitle("选择颜色")
         dlg.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
@@ -91,9 +108,11 @@ class ColorButton(QPushButton):
             self._update_style()
 
     def color(self) -> QColor:
+        """获取当前选中的颜色（供外部读取写入配置）。"""
         return self._color
 
     def set_color(self, color: QColor) -> None:
+        """外部设置颜色（如初始化时从 config.toml 读入）。"""
         self._color = color
         self._update_style()
 
@@ -102,8 +121,21 @@ class ColorButton(QPushButton):
 # DualListWidget — 双列选择 + 排序控件
 # =============================================================================
 
+# =============================================================================
+# DualListWidget — 双列选择 + 排序控件
+#
+# 这个控件用于「剪贴板列选择」和「悬浮窗行选择」两个标签页。
+# 界面类似：
+#   ┌──────────┐     ┌──────────┐
+#   │ 可选      │  →  │ 已选      │
+#   │ 先攻次数  │     │ 卡组      │
+#   │ 后攻次数  │  ←  │ 对局数    │
+#   │ ...      │  ↑  │ 胜/负     │
+#   └──────────┘  ↓  └──────────┘
+# =============================================================================
+
 class DualListWidget(QWidget):
-    """双列列表：左边"可选"，右边"已选"，箭头按钮移动和排序。"""
+    """双列选择列表：左边可选，右边已选，中间箭头按钮移动和排序。"""
 
     def __init__(self, available: list[str], selected: list[str],
                  parent: QWidget | None = None) -> None:
@@ -439,7 +471,17 @@ class ConfigDialog(QDialog):
         return w
 
     def _update_font_display(self) -> None:
-        """读取当前主题的 font_family 并显示字体栈可用性。"""
+        """读取当前主题的 font_family，显示字体栈可用性并更新预览。
+
+        流程：
+            1. 根据 theme_combo 的当前值找到主题文件夹
+            2. 打开 theme.toml，解析出 font_family（如 '"Yozai", "DymonShouXieTi", ...'）
+            3. 拆分逗号 → 去掉引号 → 得到 fonts_in_stack 列表
+            4. 用 QFontDatabase().families() 获取系统已安装字体列表
+            5. 逐个检查栈中字体是否已安装，用 ✓（绿色）/ ✗（灰色）标记
+            6. 用栈顶字体渲染预览文字
+            7. 同步字体下拉框：只列出已安装的字体供用户选择
+        """
         import tomllib, sys
         if sys.version_info < (3, 11):
             import tomli as tomllib
@@ -496,7 +538,19 @@ class ConfigDialog(QDialog):
             self._font_picker.setEnabled(True)
 
     def _on_apply_font(self) -> None:
-        """把字体选择器中选中的字体写入当前主题的 font_family 首位。"""
+        """把字体下拉框中选中的字体写入当前主题的 font_family 首位。
+
+        操作流程：
+            1. 读取当前主题的 theme.toml
+            2. 取出 font_family 行（如 '"Yozai", "DymonShouXieTi", "Microsoft YaHei"'）
+            3. 把用户选的新字体放到栈顶，保留剩余的字体作为回退栈
+            4. 用文本替换的方式写回 theme.toml（不破坏文件其余内容）
+
+        为什么只改第一个字体？
+            font_family 是优先级列表——Qt 从第一个开始尝试，找不到就试下一个。
+            只替换第一个意味着：如果用户选的字体在他的系统上存在，就用新字体；
+            如果不存在（比如换到另一台电脑），自动回退到原来的栈中字体。
+        """
         import tomllib, sys, re
         if sys.version_info < (3, 11):
             import tomli as tomllib
@@ -780,11 +834,16 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _on_save(self) -> None:
-        """从控件取值 → 写回 config.toml → 通知主窗口重载。
+        """用户点击「确定」→ 从各控件取值 → 写回 config.toml → 通知主窗口重载。
 
-        关键：不能直接改 self._config（它是 MainWindow 的引用），
-        否则 _on_reload_config 在读取旧主题名时已经被覆盖，导致
-        主题切换检测失效。这里构建新字典，只写文件，让重载自己读。
+        为什么不能直接改 self._config（MainWindow 的引用）？
+            MainWindow._on_reload_config 的第一步是读取旧主题名：
+                old_theme_name = self._config.get("appearance", {}).get("theme", "dark")
+            如果这里先把 self._config["appearance"]["theme"] 改成了新值，
+            那 old_theme_name 就等于新值，新旧相同 → 主题切换检测失效。
+
+        解决方案：构建一个全新的 data 字典（独立于 self._config），
+        写入文件后，由 _on_reload_config 自己从文件中读出新旧差异。
         """
         presets = [self._preset_list.item(i).text().strip()
                    for i in range(self._preset_list.count())]
