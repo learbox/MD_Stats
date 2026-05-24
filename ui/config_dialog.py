@@ -74,9 +74,12 @@ class ColorButton(QPushButton):
         )
 
     def _pick(self) -> None:
-        c = QColorDialog.getColor(self._color, self, "选择颜色")
-        if c.isValid():
-            self._color = c
+        # DontUseNativeDialog 让 Qt 使用自己的取色器（支持中文界面）
+        dlg = QColorDialog(self._color, self)
+        dlg.setWindowTitle("选择颜色")
+        dlg.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._color = dlg.currentColor()
             self._update_style()
 
     def color(self) -> QColor:
@@ -201,6 +204,7 @@ class ConfigDialog(QDialog):
         self.setMinimumSize(660, 540)
         self.resize(680, 560)
         self.setObjectName("configDialog")
+        self._apply_dwm_round_corners()
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -477,13 +481,13 @@ class ConfigDialog(QDialog):
         lo = QHBoxLayout(bar)
         lo.setContentsMargins(16, 8, 16, 8)
         lo.addStretch()
-        bc = QPushButton("取消")
-        bc.clicked.connect(self.reject)
-        lo.addWidget(bc)
         bo = QPushButton("确定")
         bo.clicked.connect(self._on_save)
         bo.setDefault(True)
         lo.addWidget(bo)
+        bc = QPushButton("取消")
+        bc.clicked.connect(self.reject)
+        lo.addWidget(bc)
         return bar
 
     # =========================================================================
@@ -718,3 +722,24 @@ class ConfigDialog(QDialog):
     def mouseReleaseEvent(self, event) -> None:
         self._dragging = False
         super().mouseReleaseEvent(event)
+
+    # =========================================================================
+    # DWM 圆角（Windows 11）
+    # =========================================================================
+
+    def _apply_dwm_round_corners(self) -> None:
+        """给无边框弹窗加 Win11 原生圆角。"""
+        import ctypes, os
+        if os.name != "nt":
+            return
+        try:
+            hwnd = int(self.winId())
+            dwmwa = 33  # DWMWA_WINDOW_CORNER_PREFERENCE
+            dwmwcp_round = 2  # 圆角
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, dwmwa,
+                ctypes.byref(ctypes.c_int(dwmwcp_round)),
+                ctypes.sizeof(ctypes.c_int),
+            )
+        except Exception:
+            pass
