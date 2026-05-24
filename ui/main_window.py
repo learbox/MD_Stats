@@ -1554,16 +1554,15 @@ class MainWindow(QMainWindow):
         init_active_csv_from_config()
         self._update_info_label()
 
-        # 主题变化 → 重新加载主题文件并全面应用
-        if old_theme_name != new_theme_name:
-            theme = load_theme(new_theme_name)
-            self._tm.colors = theme.colors
-            self._tm.titlebar_cfg = theme.titlebar
-            self._tm.assets_dir = theme.assets_dir
-            self.setStyleSheet(theme.qss)                  # 更新全局 QSS
-            self._tm.apply_app_palette()                   # 更新全局 QPalette
-            self._apply_theme_pixmaps(theme.pixmaps)
-            self._apply_theme_to_widgets()                 # 刷新所有控件
+        # 重新加载主题文件（字体等可能已通过设置弹窗修改）
+        theme = load_theme(new_theme_name)
+        self._tm.colors = theme.colors
+        self._tm.titlebar_cfg = theme.titlebar
+        self._tm.assets_dir = theme.assets_dir
+        self.setStyleSheet(theme.qss)
+        self._tm.apply_app_palette()
+        self._apply_theme_pixmaps(theme.pixmaps)
+        self._apply_theme_to_widgets()
 
         # 悬浮窗已打开 → 用新配置刷新外观和行
         if self._float_window is not None:

@@ -582,13 +582,11 @@ class ConfigDialog(QDialog):
 
         assets = data.get("assets", {})
         old_stack = assets.get("font_family", "")
-        # 把新字体放到栈顶，保留原来除第一个以外的其他字体
         if old_stack:
-            # 清理掉原有的第一个字体（可能含引号），把新字体塞到栈顶
+            # 拆出所有字体，去掉引号
             fonts = [f.strip().strip('"') for f in old_stack.split(",")]
-            rest = fonts[1:] if len(fonts) > 1 else []
-            # 去重
-            rest = [f for f in rest if f != new_font]
+            # 去重：移除 new_font 的旧位置（如果有），然后放到栈顶
+            rest = [f for f in fonts if f != new_font]
             new_stack = ", ".join(f'"{f}"' for f in [new_font] + rest)
         else:
             new_stack = f'"{new_font}"'
@@ -604,6 +602,9 @@ class ConfigDialog(QDialog):
                 break
         toml_path.write_text("\n".join(lines), encoding="utf-8")
 
+        # 字体改的是 theme.toml，不属于 config.toml，_on_reload_config 检测不到
+        # 变化。这里直接通知主窗口重载整个主题，使字体立即生效。
+        self.config_saved.emit()
         self._update_font_display()
 
     # =========================================================================
