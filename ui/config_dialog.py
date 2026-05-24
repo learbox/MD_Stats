@@ -244,6 +244,10 @@ class ConfigDialog(QDialog):
             if not pm.isNull():
                 self._bg_pixmap = pm
 
+        # 把 #RRGGBB 转成 rgba(r,g,b,0.7) 保留 30% 透明度
+        r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
+        bg_semi = f"rgba({r},{g},{b},180)"  # alpha≈70%
+
         self._dragging = False
         self._drag_start = QPoint()
 
@@ -271,9 +275,9 @@ class ConfigDialog(QDialog):
         outer.addWidget(self._make_titlebar())
 
         self._tabs = QTabWidget()
-        # 标签页面板和选中标签用主题背景色
+        # 标签页半透明：透出背景图但保持可读性
         self._tabs.setStyleSheet(
-            f"QTabWidget::pane {{ background: {widget_bg}; border: none; }}"
+            f"QTabWidget::pane {{ background: {bg_semi}; border: none; }}"
             "QTabBar::tab { background: transparent; padding: 6px 16px; }"
             f"QTabBar::tab:selected {{ background: {widget_bg}; }}"
         )
