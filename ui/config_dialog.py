@@ -36,17 +36,25 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QPoint, Signal
+from PySide6.QtCore import Qt, QPoint, QTranslator, QLibraryInfo, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QCheckBox, QColorDialog, QComboBox, QDialog, QDoubleSpinBox,
-    QFontComboBox, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QListWidget, QPushButton, QRadioButton, QSlider, QSpinBox,
-    QTabWidget, QVBoxLayout, QWidget, QButtonGroup,
+    QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
+    QDoubleSpinBox, QFontComboBox, QGroupBox, QHBoxLayout, QLabel,
+    QLineEdit, QListWidget, QPushButton, QRadioButton, QSlider,
+    QSpinBox, QTabWidget, QVBoxLayout, QWidget, QButtonGroup,
 )
 
 from src.config import get_project_root
 from ui.floating_window import _ROW_KEY_MAP, _DEFAULT_ROWS
+
+# 加载 Qt 内置中文翻译（让取色器等系统弹窗显示中文，翻译文件缺失时静默跳过）
+_qt_translator = QTranslator()
+if _qt_translator.load(
+    QLibraryInfo.location(QLibraryInfo.LibraryPath.TranslationsPath) + "/qt_zh_CN.qm"
+):
+    if _qapp := QApplication.instance():
+        _qapp.installTranslator(_qt_translator)
 
 _BUILTIN_THEME = "(内置亮色)"
 
