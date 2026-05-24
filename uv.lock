@@ -21,7 +21,6 @@ requires-dist = [
     { name = "opencv-python", specifier = ">=4.13.0.92" },
     { name = "pyside6", specifier = ">=6.11.1" },
     { name = "pywin32", specifier = ">=306" },
-    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0" },
 ]
 
 [[package]]

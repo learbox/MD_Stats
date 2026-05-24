@@ -73,6 +73,8 @@ theme.toml 完整结构（以 macaron 主题为例）
     corner_bg    = { file = "corner_bg.png", mode = "stretch" }
     button_bg    = { file = "button_texture.png", mode = "tile" }
     statusbar_bg = { file = "statusbar_bg.png", mode = "stretch" }
+    float_bg     = { file = "", mode = "stretch" }   # 悬浮窗背景图（可选）
+    settings_bg  = { file = "", mode = "stretch" }   # 设置弹窗背景图（可选）
 
     [colors]                           # 颜色表（所有值都是 #RRGGBB 格式）
     # ... 约 50 个颜色 key，详见 themes/dark/theme.toml 注释
@@ -188,7 +190,8 @@ _BUILTIN_TITLEBAR: dict[str, Any] = {
 }
 
 _BUILTIN_ASSETS: dict[str, Any] = {
-    "font_family": _DEFAULT_FONT, "font_size": 13,
+    "font_family": _DEFAULT_FONT,  # 含 macOS/Windows 回退栈
+    "font_size": 13,
     "header_font_size": 12, "row_header_font_size": 11,
     "table_font_size": 13,
     "fonts": [], "images": {},
