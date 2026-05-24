@@ -37,9 +37,9 @@ btn_close_hover = "#e74c3c"
 
 
 [assets]
-# 全局字体族名 — 单个名字如 "Microsoft YaHei"，或带引号的回退栈
-# 例: font_family = '"My Font", "Microsoft YaHei"'
-font_family = "Microsoft YaHei"
+# 全局字体族名 — 带引号的回退栈，Qt 从前往后找第一个可用的
+# Windows: Microsoft YaHei → macOS: -apple-system (SF Pro) → 通用兜底
+font_family = "Microsoft YaHei, -apple-system, sans-serif"
 # 全局字号（像素）
 font_size   = 13
 # 列标题字号（像素）
