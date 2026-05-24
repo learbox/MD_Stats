@@ -908,7 +908,10 @@ class MainWindow(QMainWindow):
             return
 
         # 通过 Steam URI 协议启动游戏（steam://rungameid/1449850 = Master Duel）
-        os.startfile("steam://rungameid/1449850")
+        if os.name == "nt":
+            os.startfile("steam://rungameid/1449850")
+        else:
+            subprocess.Popen(["open", "steam://rungameid/1449850"])
         self._show_status("正在等待 Master Duel 启动…")
 
         # 将启动按钮改为"终止等待"按钮
