@@ -599,7 +599,8 @@ class ConfigDialog(QDialog):
         for i, line in enumerate(lines):
             if line.strip().startswith("font_family"):
                 indent = line[:len(line) - len(line.lstrip())]
-                lines[i] = f"{indent}font_family = {new_stack}"
+                # TOML 值必须是字符串，外层用单引号包裹（内部双引号不需要转义）
+                lines[i] = f"{indent}font_family = '{new_stack}'"
                 break
         toml_path.write_text("\n".join(lines), encoding="utf-8")
 
