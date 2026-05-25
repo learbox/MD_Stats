@@ -59,7 +59,15 @@ jobs:
           Get-ChildItem -Path $release -Recurse -Filter *.pyc -Force | Remove-Item -Force -ErrorAction SilentlyContinue
           Compress-Archive -Path "$release/*" -DestinationPath "dist/MDStats-$tag.zip" -CompressionLevel Optimal
 
-      - name: 创建 GitHub Release（草稿）
+      - name: 上传 ZIP 为构建产物（非 tag 时在此下载）
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: MDStats-${{ github.ref_name }}
+          path: dist/MDStats-${{ github.ref_name }}.zip
+
+      - name: 创建 GitHub Release（草稿，仅 tag 触发）
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/MDStats-${{ github.ref_name }}.zip
