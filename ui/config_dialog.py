@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QPoint, QTranslator, QLibraryInfo, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
     QDoubleSpinBox, QFontComboBox, QGroupBox, QHBoxLayout, QLabel,
@@ -501,7 +501,7 @@ class ConfigDialog(QDialog):
         try:
             with open(toml_path, "rb") as f:
                 data = tomllib.load(f)
-        except Exception:
+        except (OSError, ValueError):
             return
         assets = data.get("assets", {})
         font_family = assets.get("font_family", "")
@@ -510,7 +510,6 @@ class ConfigDialog(QDialog):
             return
 
         # 按逗号拆分字体栈，去掉引号
-        import re
         fonts_in_stack = [
             f.strip().strip('"')
             for f in font_family.split(",")
@@ -1049,10 +1048,10 @@ class ConfigDialog(QDialog):
             hwnd = int(self.winId())
             dwmwa = 33  # DWMWA_WINDOW_CORNER_PREFERENCE
             dwmwcp_round = 2  # 圆角
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore[attr-defined]
                 hwnd, dwmwa,
                 ctypes.byref(ctypes.c_int(dwmwcp_round)),
                 ctypes.sizeof(ctypes.c_int),
             )
-        except Exception:
+        except OSError:
             pass
