@@ -101,7 +101,6 @@ from typing import Any
 
 from src.config import get_project_root
 
-# ---- TOML 解析：Python 3.11+ 内置，3.10 降级到 tomli ----
 import tomllib
 
 # 字体加载（Qt 提供的跨平台字体管理 API）
