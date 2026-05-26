@@ -27,17 +27,18 @@
     [clipboard]
     vertical_layout = false       # 竖排模式: true=key\\tvalue，false=横排 TSV
     scope = "all"                 # 复制范围: "current"=当前卡组, "all"=全部
-    columns = []                  # 要复制的列名列表（空=全部 16 列）
+    columns = []                  # 要复制的列名列表（空=默认 8 项，和悬浮窗一致）
 
     [floating_window]
+    use_theme_bg = false          # 是否使用主题背景图（false=纯色，方便 OBS 绿幕）
     width = 250                   # 悬浮窗宽度（像素）
     height = 300                  # 悬浮窗高度（像素）
     bg_color = "#BDEF0A"          # 悬浮窗背景色（十六进制 RGB）
-    opacity = 50                  # 不透明度 0-100（0=全透明, 100=不透明）
+    opacity = 50                  # 不透明度 0-100
     font_size = 20                # 悬浮窗文字字号（像素）
     text_color = "#000000"        # 悬浮窗文字颜色
-    font_family = "Microsoft YaHei"  # 悬浮窗字体（空则用全局字体）
-    rows = []                     # 悬浮窗数据行（空=默认 8 行）
+    font_family = "Microsoft YaHei, -apple-system, sans-serif"
+    rows = []                     # 悬浮窗数据行（空=默认 8 项）
 
 """
 
