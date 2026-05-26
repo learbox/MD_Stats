@@ -324,7 +324,8 @@ class TitleBar(QWidget):
             effect.setOffset(0, 1)
             self._title_label.setGraphicsEffect(effect)
         else:
-            self._title_label.setGraphicsEffect(None)  # 清除阴影（如从 macaron 切到 dark）
+            # noinspection PyTypeChecker
+            self._title_label.setGraphicsEffect(None)
 
         # 更新按钮悬停样式
         self._btn_min.setStyleSheet(

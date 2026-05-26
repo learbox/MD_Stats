@@ -238,7 +238,7 @@ class AboutDialog(QDialog):
             self._update_label.setText("网络连接失败")
         except HTTPError as e:
             self._update_label.setText(f"检查失败（{e.code}）")
-        except Exception:
+        except (json.JSONDecodeError, ValueError, LookupError):
             self._update_label.setText("检查失败")
 
     # ------------------------------------------------------------------
@@ -285,7 +285,7 @@ class AboutDialog(QDialog):
                 ctypes.byref(ctypes.c_int(2)),   # 2 = 圆角
                 ctypes.sizeof(ctypes.c_int),
             )
-        except Exception:
+        except (OSError, AttributeError, ValueError):
             pass  # DWM 不可用时静默跳过
 
     # =========================================================================

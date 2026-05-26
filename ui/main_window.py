@@ -485,7 +485,7 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _parse_hex(hex_color: str) -> tuple[int, int, int]:
         """将 #RRGGBB 解析为 (r, g, b) 整数元组。"""
-        return (int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16))
+        return int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
 
     @classmethod
     def _lighter(cls, hex_color: str, factor: float = 0.25) -> str:
@@ -1348,19 +1348,29 @@ class MainWindow(QMainWindow):
         self._float_window.show()
         self._btn_float.setText("关闭悬浮")
 
+    @staticmethod
+    def _read_app_state() -> dict:
+        """读取 .app_state.json，文件不存在或损坏时返回空字典。"""
+        try:
+            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+
+    @staticmethod
+    def _write_app_state(data: dict) -> None:
+        """写入 .app_state.json。"""
+        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
     def _save_float_window_pos(self) -> None:
         """将悬浮窗当前位置保存到 .app_state.json。"""
         if self._float_window is None:
             return
-        try:
-            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-                saved = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            saved = {}
+        saved = self._read_app_state()
         pos = self._float_window.pos()
         saved["float_pos"] = [pos.x(), pos.y()]
-        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(saved, f, ensure_ascii=False, indent=2)
+        self._write_app_state(saved)
 
     def _restore_float_window_pos(self) -> None:
         """从 .app_state.json 恢复悬浮窗位置。
@@ -1369,15 +1379,11 @@ class MainWindow(QMainWindow):
             1. 读取保存的位置 → 如果坐标合理（≥ -1000）则恢复
             2. 否则居中放置在主屏幕上
         """
-        try:
-            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-                saved = json.load(f)
-            pos = saved.get("float_pos")
-            if pos and len(pos) == 2 and pos[0] >= -1000 and pos[1] >= -1000:
-                self._float_window.move(pos[0], pos[1])
-                return
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
+        saved = self._read_app_state()
+        pos = saved.get("float_pos")
+        if pos and len(pos) == 2 and pos[0] >= -1000 and pos[1] >= -1000:
+            self._float_window.move(pos[0], pos[1])
+            return
         # 兜底: 主屏幕中央
         screen = QApplication.primaryScreen()
         if screen is not None and self._float_window is not None:
@@ -1665,11 +1671,7 @@ class MainWindow(QMainWindow):
             3. 如果保存数据不足（列数增加了），后面的用默认值
             4. 最后一列由 stretchLastSection 管理，不在此处理
         """
-        try:
-            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-                saved = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            saved = {}
+        saved = self._read_app_state()
 
         for table, key, defaults in [
             (self._stats_table, "stats", self._DEFAULT_COLUMN_WIDTHS["stats"]),
@@ -1687,15 +1689,10 @@ class MainWindow(QMainWindow):
 
         跳过最后一列（由 stretchLastSection 自动管理宽度）。
         """
-        try:
-            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            data = {}
+        data = self._read_app_state()
         for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
             data[key] = [table.columnWidth(c) for c in range(table.columnCount() - 1)]
-        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        self._write_app_state(data)
 
     # =========================================================================
     # 窗口关闭事件
@@ -1708,11 +1705,7 @@ class MainWindow(QMainWindow):
         取代原来的三次独立 I/O。
         """
         # ---- 合并状态保存（一次读 + 一次写） ----
-        try:
-            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            data = {}
+        data = self._read_app_state()
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]
         if self._float_window is not None:
@@ -1722,8 +1715,7 @@ class MainWindow(QMainWindow):
                          for c in range(self._stats_table.columnCount() - 1)]
         data["record"] = [self._record_table.columnWidth(c)
                           for c in range(self._record_table.columnCount() - 1)]
-        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        self._write_app_state(data)
 
         # ---- 停止所有定时器和工作线程 ----
         if self._info_timer is not None:
@@ -1742,23 +1734,14 @@ class MainWindow(QMainWindow):
 
         坐标验证: x ≥ -100, y ≥ -100（越界或负太多说明是异常值，不恢复）。
         """
-        try:
-            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            pos = data.get("main_pos")
-            if pos and len(pos) == 2 and pos[0] >= -100 and pos[1] >= -100:
-                self.move(pos[0], pos[1])
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
+        data = self._read_app_state()
+        pos = data.get("main_pos")
+        if pos and len(pos) == 2 and pos[0] >= -100 and pos[1] >= -100:
+            self.move(pos[0], pos[1])
 
     def _save_main_window_pos(self) -> None:
         """保存主窗口位置到 .app_state.json。"""
-        try:
-            with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            data = {}
+        data = self._read_app_state()
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]
-        with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        self._write_app_state(data)

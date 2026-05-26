@@ -821,12 +821,16 @@ class ConfigDialog(QDialog):
         )
 
     @staticmethod
-    def _replace_in_layout(parent: QWidget, old: QWidget, new: QWidget) -> None:
+    def _replace_in_layout(parent: QWidget | None, old: QWidget, new: QWidget) -> None:
         """把布局中的旧控件替换为新控件。"""
+        if parent is None:
+            return
         lo = parent.layout()
+        if lo is None:
+            return
         for i in range(lo.count()):
             item = lo.itemAt(i)
-            if item and item.widget() == old:
+            if item is not None and item.widget() is old:
                 lo.removeWidget(old)
                 old.deleteLater()
                 lo.addWidget(new)
