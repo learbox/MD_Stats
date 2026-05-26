@@ -35,28 +35,6 @@ from PySide6.QtWidgets import (
 
 from src.config import get_project_root
 
-
-def _compare_versions(a: str, b: str) -> int:
-    """比较两个三段式版本号（如 "1.5.2" vs "1.5.3"）。
-
-    返回：>0 表示 a 更新，<0 表示 b 更新，=0 相同。
-    处理不等长（如 "1.5" vs "1.5.2"）——缺失段当 0。
-    """
-    try:
-        pa = [int(x) for x in a.split(".")]
-        pb = [int(x) for x in b.split(".")]
-        # 补零到等长
-        while len(pa) < len(pb):
-            pa.append(0)
-        while len(pb) < len(pa):
-            pb.append(0)
-        for xa, xb in zip(pa, pb):
-            if xa != xb:
-                return xa - xb
-        return 0
-    except ValueError:
-        return 0  # 解析失败当相同，不误报
-
 # =============================================================================
 # 程序元数据 — 修改版本号、作者等请改这里
 # =============================================================================
@@ -72,6 +50,28 @@ ACKNOWLEDGMENTS = (      # 特别鸣谢，支持 HTML <a> 标签
     '<a href="https://github.com/ULeang">ULya_tooru</a>'
     " 提供原版设计思路（mdstats C++）"
 )
+
+
+def _compare_versions(a: str, b: str) -> int:
+    """比较两个三段式版本号（如 "1.5.2" vs "1.5.3"）。
+
+    用于"检查更新"功能，比较 GitHub 线上版本和本地 VERSION。
+    返回：>0 表示 a 更新，<0 表示 b 更新，=0 相同。
+    不等长版本号（如 "2.0" vs "1.9.9"）自动补零再比较。
+    """
+    try:
+        pa = [int(x) for x in a.split(".")]
+        pb = [int(x) for x in b.split(".")]
+        while len(pa) < len(pb):
+            pa.append(0)
+        while len(pb) < len(pa):
+            pb.append(0)
+        for xa, xb in zip(pa, pb):
+            if xa != xb:
+                return xa - xb
+        return 0
+    except ValueError:
+        return 0  # 解析失败当相同，不误报
 
 
 # =============================================================================
