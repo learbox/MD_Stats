@@ -99,7 +99,6 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
-from ui.about_dialog import VERSION, AUTHOR, LICENSE, DESCRIPTION, REPO_URL, ACKNOWLEDGMENTS
 from src.config import get_project_root, load_config
 from src.recorder import (
     add_record,
@@ -1460,12 +1459,10 @@ class MainWindow(QMainWindow):
             matched = [s for s in stats if s.get("卡组") == deck_name]
             stats = matched if matched else stats
         # all 模式但只有一个卡组 → 去掉合计行，等同于 current
+        # 只有一个卡组时去掉合计行
         actual_decks = [s for s in stats if s.get("卡组") != "合计"]
         if scope == "all" and len(actual_decks) <= 1:
             stats = actual_decks
-            is_single_deck = True
-        else:
-            is_single_deck = False
 
         if vertical:
             # 竖排模式：all 每卡组前放 [卡组名]，跳过"卡组"列避免重复
@@ -1548,7 +1545,6 @@ class MainWindow(QMainWindow):
             3. 如果 Worker 正在运行: 停止后用新配置重启（如新的检测间隔）
             4. 更新状态栏和信息标签
         """
-        old_theme_name = self._config.get("appearance", {}).get("theme", "dark")
         self._config = load_config()                       # 重新读取 config.toml
         self._tm._config = self._config                    # 同步到 ThemeManager
         new_theme_name = self._config.get("appearance", {}).get("theme", "dark")

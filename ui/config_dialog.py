@@ -572,7 +572,7 @@ class ConfigDialog(QDialog):
         try:
             with open(toml_path, "rb") as f:
                 data = tomllib.load(f)
-        except Exception:
+        except (OSError, ValueError):
             return
 
         assets = data.get("assets", {})
