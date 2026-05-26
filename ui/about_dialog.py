@@ -200,23 +200,46 @@ class AboutDialog(QDialog):
         outer.addWidget(bw)
 
     def _do_check_update(self) -> None:
-        """向 GitHub API 查询最新版本号，和当前 VERSION 比较。"""
+        """向 GitHub API 查询最新 Release 版本号，和当前 VERSION 比较。
+
+        流程：
+            1. 请求 api.github.com/repos/learbox/mdstats_py/releases/latest
+            2. 从返回 JSON 中取 tag_name（如 "v1.5.2"）→ 去掉前缀 v
+            3. 比较 latest 和 VERSION 常量
+            4. 结果显示在左下角 update_label 上
+
+        为什么用 urllib 而不是 requests？
+            urllib 是 Python 自带标准库，零依赖。requests 需要额外安装。
+
+        错误处理：
+            URLError / timeout    — 网络不通 → "网络连接失败"
+            HTTPError (403/404)   — API 限制或仓库不可达
+            其他异常              — "检查失败"
+        """
         self._update_label.setText("正在检查…")
         try:
             import urllib.request, json
+            from urllib.error import URLError, HTTPError
+
             url = "https://api.github.com/repos/learbox/mdstats_py/releases/latest"
             req = urllib.request.Request(url)
             req.add_header("Accept", "application/vnd.github+json")
             req.add_header("User-Agent", "MDStats")
+
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read())
+
             latest = data.get("tag_name", "").lstrip("v")
             if latest and latest != VERSION:
                 self._update_label.setText(f"新版本 v{latest} 已发布！")
             else:
-                self._update_label.setText("已是最新版本")
+                self._update_label.setText(f"已是最新版本")
+        except (URLError, TimeoutError, OSError):
+            self._update_label.setText("网络连接失败")
+        except HTTPError as e:
+            self._update_label.setText(f"检查失败（{e.code}）")
         except Exception:
-            self._update_label.setText("检查失败（网络不通）")
+            self._update_label.setText("检查失败")
 
     # =========================================================================
     # DWM 圆角（Windows 11 原生效果）
