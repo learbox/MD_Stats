@@ -215,9 +215,9 @@ class AboutDialog(QDialog):
             — 其他异常           → "检查失败"
         """
         self._update_label.setText("正在检查…")
+        import urllib.request, json
+        from urllib.error import URLError, HTTPError
         try:
-            import urllib.request, json
-            from urllib.error import URLError, HTTPError
 
             url = "https://api.github.com/repos/learbox/mdstats_py/releases/latest"
             req = urllib.request.Request(url)
