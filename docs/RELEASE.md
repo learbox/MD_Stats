@@ -1,0 +1,85 @@
+# 发布新版本流程
+
+## 1. 确认改动已提交
+
+```bash
+git status          # 确保核心改动已提交（忽略 .app_state.json / config.toml 本地修改）
+git log --oneline   # 确认提交链完整
+```
+
+## 2. 更新文档（如有必要）
+
+- `docs/README_release.md` — 发行包附带的使用说明（配置项、功能列表需与当前版本一致）
+- `docs/PRD.md` — 仅功能变更时更新
+- `README.md` — 仅项目级描述变更时更新
+- `themes/README.md` — 仅主题体系变更时更新
+
+## 3. 更新版本号
+
+涉及 3 个文件：
+
+| 文件 | 位置 | 说明 |
+|------|------|------|
+| `ui/about_dialog.py` | 第 42 行 `VERSION = "X.Y.Z"` | 运行时版本号源 |
+| `pyproject.toml` | 第 3 行 `version = "X.Y.Z"` | 项目元数据 |
+| `docs/README_release.md` | 标题 `# MD Stats vX.Y.Z` | 发行包说明标题
+
+版本号规则：
+- 修复 bug → Z + 1（如 1.5.3 → 1.5.4）
+- 新增小功能 → Z + 1
+- 大功能 / 架构变更 → Y + 1
+
+## 4. 提交版本号并打标签
+
+```bash
+git add ui/about_dialog.py pyproject.toml docs/README_release.md
+git commit -m "X.Y.Z"
+git tag -a vX.Y.Z -m "vX.Y.Z"
+```
+
+## 5. 推送
+
+```bash
+git push origin main --tags
+```
+
+推送后 GitHub Actions 自动触发构建，生成 `MDStats.zip` 和 `MDStats.exe`。
+
+## 6. 编写 Release Notes
+
+查看两个版本之间的提交：
+
+```bash
+git log v上一版本..v新版本 --oneline
+```
+
+按以下模板整理：
+
+```
+## 新功能
+- **功能名**：简述
+
+## 改进
+- 描述
+
+## 修复
+- 描述
+
+## 代码质量
+- 内部重构描述（用户不可见，可选）
+```
+
+## 7. 创建 GitHub Release
+
+打开 `https://github.com/learbox/mdstats_py/releases/tag/vX.Y.Z`，粘贴 Release Notes，下载 CI 构建产物并上传为附件，点击发布。
+
+注意：不要勾选「Set as latest release」之外的标签（Pre-release 仅限测试版）。
+
+## 速查
+
+```bash
+# 一键：提交 → 版本号 → tag → 推送
+git add <files> && git commit -m "<msg>"
+# 修改版本号后：
+git add ui/about_dialog.py pyproject.toml docs/README_release.md && git commit -m "X.Y.Z" && git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin main --tags
+```
