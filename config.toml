@@ -28,7 +28,9 @@ presets = ["闪刀姬", "烙印", "白银城", "k9vs"]
 # 数据存储
 [recorder]
 # 是否按日期分文件存储 CSV
-daily_files = false
+daily_files = true
+# 启动时自动填入最近一次使用的卡组（从 CSV 读取）
+remember_last_deck = true
 
 # 剪贴板复制行为
 [clipboard]
@@ -55,7 +57,7 @@ opacity = 50
 font_size = 20
 # 文字颜色
 text_color = "#000000"
-# 字体（Qt 从前往后找第一个可用的）
-font_family = "Microsoft YaHei, -apple-system, sans-serif"
+# 字体（Qt 从前往后找第一个可用的，含 macOS/Windows 回退）
+font_family = "Microsoft YaHei UI"
 # 显示数据行（空 = 默认 8 项）
 rows = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率", "赢硬币胜率", "输硬币胜率", "综合胜率"]

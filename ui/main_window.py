@@ -827,6 +827,12 @@ class MainWindow(QMainWindow):
         # ---- 22. 同步加载 CSV 数据（在 __init__ 末尾直接调用，确保列宽恢复先于 show） ----
         self._reload_tables()
 
+        # ---- 23. 若开启"记住上次卡组"，自动填入 ----
+        if self._config.get("recorder", {}).get("remember_last_deck", False):
+            last_deck = self._last_record_deck()
+            if last_deck:
+                self._deck_input.setText(last_deck)
+
 
     # =========================================================================
     # 底部按钮状态管理

@@ -732,6 +732,8 @@ class ConfigDialog(QDialog):
 
         self._daily_files = QCheckBox("按日期分文件存储 CSV")
         lo.addWidget(self._daily_files)
+        self._remember_deck = QCheckBox("启动时自动填入上次使用的卡组")
+        lo.addWidget(self._remember_deck)
         lo.addStretch()
         return w
 
@@ -819,6 +821,9 @@ class ConfigDialog(QDialog):
         self._daily_files.setChecked(
             c.get("recorder", {}).get("daily_files", False)
         )
+        self._remember_deck.setChecked(
+            c.get("recorder", {}).get("remember_last_deck", False)
+        )
 
     @staticmethod
     def _replace_in_layout(parent: QWidget | None, old: QWidget, new: QWidget) -> None:
@@ -888,6 +893,7 @@ class ConfigDialog(QDialog):
             },
             "recorder": {
                 "daily_files": self._daily_files.isChecked(),
+                "remember_last_deck": self._remember_deck.isChecked(),
             },
         }
 
@@ -954,6 +960,8 @@ class ConfigDialog(QDialog):
         lines.extend(["", "# 数据存储", "[recorder]"])
         _kv("daily_files", r.get("daily_files", False),
             "是否按日期分文件存储 CSV")
+        _kv("remember_last_deck", r.get("remember_last_deck", False),
+            "启动时自动填入最近一次使用的卡组（从 CSV 读取）")
 
         lines.extend(["", "# 剪贴板复制行为", "[clipboard]"])
         _kv("vertical_layout", cb.get("vertical_layout", False),
