@@ -16,13 +16,14 @@ git log --oneline   # 确认提交链完整
 
 ## 3. 更新版本号
 
-涉及 3 个文件：
+涉及 4 个文件，均用 grep 定位后修改：
 
-| 文件 | 位置 | 说明 |
-|------|------|------|
-| `ui/about_dialog.py` | 第 42 行 `VERSION = "X.Y.Z"` | 运行时版本号源 |
-| `pyproject.toml` | 第 3 行 `version = "X.Y.Z"` | 项目元数据 |
-| `docs/README_release.md` | 标题 `# MD Stats vX.Y.Z` | 发行包说明标题
+| 文件 | 搜索定位 | 修改为 |
+|------|---------|--------|
+| `ui/about_dialog.py` | `grep '^VERSION ='` | `VERSION = "X.Y.Z"` |
+| `pyproject.toml` | `grep '^version ='`（`[project]` 段下） | `version = "X.Y.Z"` |
+| `uv.lock` | `grep -A1 'name = "mdstats-py"'`，下一行 | `version = "X.Y.Z"` |
+| `docs/README_release.md` | 标题行 | `# MD Stats vX.Y.Z` |
 
 版本号规则：
 - 修复 bug → Z + 1（如 1.5.3 → 1.5.4）
@@ -32,7 +33,7 @@ git log --oneline   # 确认提交链完整
 ## 4. 提交版本号并打标签
 
 ```bash
-git add ui/about_dialog.py pyproject.toml docs/README_release.md
+git add ui/about_dialog.py pyproject.toml uv.lock docs/README_release.md
 git commit -m "X.Y.Z"
 git tag -a vX.Y.Z -m "vX.Y.Z"
 ```
@@ -81,5 +82,5 @@ git log v上一版本..v新版本 --oneline
 # 一键：提交 → 版本号 → tag → 推送
 git add <files> && git commit -m "<msg>"
 # 修改版本号后：
-git add ui/about_dialog.py pyproject.toml docs/README_release.md && git commit -m "X.Y.Z" && git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin main --tags
+git add ui/about_dialog.py pyproject.toml uv.lock docs/README_release.md && git commit -m "X.Y.Z" && git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin main --tags
 ```
