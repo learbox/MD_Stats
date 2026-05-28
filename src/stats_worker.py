@@ -266,9 +266,11 @@ class StatsWorker(QThread):
                 if (w, h) != last_size:                 # 分辨率变了
                     _det.set_resolution(w, h)            # 设置新分辨率
                     msg = _det.init_templates()          # 重新加载模板
-                    if msg is not None:                  # 模板加载失败
+                    if msg is not None:
                         self.status_update.emit(msg)
-                        return None
+                        # 仅可选模板缺失（如 rank_up/rank_down）→ 只提示，不阻止启动
+                        if "已跳过" not in msg:
+                            return None
                 return w, h
             case _:                                     # 窗口不可用
                 return None

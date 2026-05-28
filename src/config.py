@@ -149,6 +149,13 @@ log_mode = false
 # 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
 log_scope = ["status", "screenshots", "errors"]
 
+# 系统通知
+[notification]
+# 对局结束时弹出系统气泡通知
+enabled = false
+# 通知显示持续时间（秒）
+duration = 5
+
 # 悬浮统计窗
 [floating_window]
 # 是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）

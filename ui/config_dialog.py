@@ -410,6 +410,25 @@ class ConfigDialog(QDialog):
         )
         lo.addWidget(self._save_screenshots_cb)
 
+        # ---- 系统通知 ----
+        self._notify_cb = QCheckBox("对局结束系统通知")
+        self._notify_cb.setToolTip(
+            "开启后，每局结束时弹出系统气泡通知，\n"
+            "显示硬币输赢（含段位升降）、先后手和胜负结果。"
+        )
+        lo.addWidget(self._notify_cb)
+
+        notify_row = QHBoxLayout()
+        notify_row.setContentsMargins(24, 0, 0, 0)
+        notify_row.addWidget(QLabel("显示时长:"))
+        self._notify_duration = QSpinBox()
+        self._notify_duration.setRange(1, 30)
+        self._notify_duration.setSuffix(" 秒")
+        self._notify_duration.setToolTip("气泡通知在屏幕上的停留时间。")
+        notify_row.addWidget(self._notify_duration)
+        notify_row.addStretch()
+        lo.addLayout(notify_row)
+
         # ---- 日志模式 ----
         # 日志模式和截图保存是两个独立功能：
         #   - 截图保存 = 保存 PNG 文件到 screenshots/
@@ -875,6 +894,9 @@ class ConfigDialog(QDialog):
         # 根据日志模式的初始状态设置子复选框的启用/禁用
         self._on_log_mode_toggled(dbg.get("log_mode", False))
 
+        self._notify_cb.setChecked(c.get("notification", {}).get("enabled", False))
+        self._notify_duration.setValue(c.get("notification", {}).get("duration", 5))
+
         theme = c.get("appearance", {}).get("theme", "")
         idx = self._theme_combo.findText(theme)
         if idx >= 0:
@@ -1038,6 +1060,10 @@ class ConfigDialog(QDialog):
             "stats": {
                 "columns": self._stats_dual.get_selected(),
             },
+            "notification": {
+                "enabled": self._notify_cb.isChecked(),
+                "duration": self._notify_duration.value(),
+            },
         }
 
         self._write_toml(data)
@@ -1076,6 +1102,7 @@ class ConfigDialog(QDialog):
         cb = data.get("clipboard", {})
         fw = data.get("floating_window", {})
         dbg = data.get("debug", {})
+        ntfy = data.get("notification", {})
 
         lines: list[str] = [
             "# MD Stats 配置文件（由设置 GUI 生成，也可手动编辑）",
@@ -1127,6 +1154,12 @@ class ConfigDialog(QDialog):
             '复制范围："current" = 当前卡组，"all" = 全部卡组')
         _kv("columns", cb.get("columns", []),
             "要复制的列名列表（空 = 默认 8 项）")
+
+        lines.extend(["", "# 系统通知", "[notification]"])
+        _kv("enabled", ntfy.get("enabled", False),
+            "对局结束时弹出系统气泡通知")
+        _kv("duration", ntfy.get("duration", 5),
+            "通知显示持续时间（秒）")
 
         lines.extend(["", "# 悬浮统计窗", "[floating_window]"])
         _kv("use_theme_bg", fw.get("use_theme_bg", False),

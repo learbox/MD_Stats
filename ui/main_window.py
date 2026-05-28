@@ -85,6 +85,8 @@ from PySide6.QtGui import QIcon, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QMenu,
+    QSystemTrayIcon,
     QFileDialog,
     QFrame,
     QLabel,
@@ -644,6 +646,24 @@ class MainWindow(QMainWindow):
             _log.init_log(get_project_root() / "logs")
             _log.set_scopes(set(self._config.get("debug", {}).get("log_scope", ["status", "screenshots", "errors"])))
 
+        # ---- 1b. 初始化系统托盘（气泡通知） ----
+        icon_path = get_project_root() / "resource" / "icons" / "app_icon.png"
+        icon = QIcon(str(icon_path)) if icon_path.exists() else self.windowIcon()
+        if icon.isNull():
+            icon = QApplication.style().standardIcon(
+                QApplication.style().StandardPixmap.SP_MessageBoxInformation
+            )
+        self._tray = QSystemTrayIcon(icon, self)
+        self._tray.setToolTip("MD Stats")
+
+        # 托盘右键菜单
+        tray_menu = QMenu()
+        tray_menu.addAction("显示窗口", self.showNormal)
+        tray_menu.addAction("退出程序", self._quit_app)
+        self._tray.setContextMenu(tray_menu)
+
+        self._tray.show()  # 需要先 show 才能弹出气泡
+
         # ---- 2. 初始化主题管理器 ----
         self._tm = ThemeManager(self._config)
 
@@ -1096,6 +1116,19 @@ class MainWindow(QMainWindow):
         self._reload_tables()
         result_text = "胜" if result == "win" else "负"
         self._show_status(f"已记录: {result_text} — 等待下一局…")
+
+        # 系统气泡通知
+        if self._config.get("notification", {}).get("enabled", False):
+            coin_text = "赢硬币" if self._coin_cache == "win" else "输硬币"
+            rank_text = ""
+            if self._rank_cache == "up":
+                rank_text = "（升段局）"
+            elif self._rank_cache == "down":
+                rank_text = "（降段局）"
+            turn_text = "先攻" if self._turn_cache == "first" else "后攻"
+            msg = f"{coin_text}{rank_text} → {turn_text} → {result_text}"
+            duration = self._config.get("notification", {}).get("duration", 5) * 1000
+            self._tray.showMessage("MD Stats", msg, QSystemTrayIcon.MessageIcon.Information, duration)
 
     # =========================================================================
     # 卡组输入锁定
@@ -1777,6 +1810,10 @@ class MainWindow(QMainWindow):
     # =========================================================================
     # 窗口关闭事件
     # =========================================================================
+
+    def _quit_app(self) -> None:
+        """托盘右键退出：触发正常的窗口关闭流程。"""
+        self.close()
 
     def closeEvent(self, event: Any) -> None:
         """窗口关闭时保存所有持久化状态，安全停止后台线程和定时器。

@@ -111,6 +111,9 @@ def set_resolution(width: int, height: int) -> None:
 
 _REQUIRED_TEMPLATES = ["coin_win", "coin_lose", "go_first", "go_second", "victory", "defeat", "rank_up", "rank_down"]
 
+# 可选模板：缺失时不阻止检测启动，detect_rank() 会自动返回 None
+_OPTIONAL_TEMPLATES = {"rank_up", "rank_down"}
+
 # 模板内存缓存：init_templates() 预加载后填充，后续 _get_cached_template 直接取用
 # 键为模板名（不含扩展名），值为 numpy 数组或 None（加载失败时）
 _template_cache: dict[str, np.ndarray | None] = {}
@@ -152,22 +155,32 @@ def init_templates() -> str | None:
     """
     global _template_cache
     missing: list[str] = []
+    missing_opt: list[str] = []
 
     for name in _REQUIRED_TEMPLATES:
         img = _read_template_file(name)
         _template_cache[name] = img
         if img is None:
-            missing.append(f"{name}.png")
-
-    if not missing:
-        return None
+            if name in _OPTIONAL_TEMPLATES:
+                missing_opt.append(f"{name}.png")   # 可选模板缺失不影响启动
+            else:
+                missing.append(f"{name}.png")       # 必选模板缺失是严重问题
 
     search_dir = f"resource/templates/{_resolution_subdir}/" if _resolution_subdir else "resource/templates/"
-    count = len(missing)
-    if count == len(_REQUIRED_TEMPLATES):
-        return f"未找到任何模板 — 缺少目录: {search_dir}"
-    else:
-        return f"缺少 {count} 个模板: {', '.join(missing)}（路径: {search_dir}）"
+
+    # 必选模板缺失 → 返回警告，阻止检测
+    if missing:
+        if len(missing) == len(_REQUIRED_TEMPLATES) - len(_OPTIONAL_TEMPLATES):
+            # 所有必选模板都缺失 = 模板目录可能不存在
+            return f"未找到任何模板 — 缺少目录: {search_dir}"
+        else:
+            return f"缺少 {len(missing)} 个模板: {', '.join(missing)}（路径: {search_dir}）"
+
+    # 仅可选模板缺失 → 不阻止检测，但告知用户
+    if missing_opt:
+        return f"缺少段位检测模板: {', '.join(missing_opt)}（已跳过，视为普通局）"
+
+    return None
 
 
 def match_template(
