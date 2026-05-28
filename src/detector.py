@@ -199,6 +199,10 @@ def match_template(
         2. 截图尺寸小于模板尺寸 → 返回 (False, 0.0)，因为无法进行模板匹配
            （OpenCV 要求被搜索图像 >= 模板图像）
     """
+    # 0. 防御：截图可能因窗口消失等原因返回 None
+    if screenshot is None:
+        return False, 0.0
+
     # 1. 加载模板
     template = _get_cached_template(template_name)
     if template is None:

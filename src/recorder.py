@@ -161,20 +161,33 @@ def load_records() -> list[dict[str, str]]:
 def save_records(records: list[dict[str, str]]) -> None:
     """将所有对局记录写入 CSV 文件（全量覆写）。
 
+    先写临时文件，成功后再原子替换目标文件。这样即使写入中途
+    磁盘满或进程崩溃，也不会破坏原有 CSV 数据。
+
     Args:
         records: 完整的对局记录列表，每条为字典。
-
-    注意事项:
-        - 此函数执行全量覆写，而非增量追加。调用前应确保 records 包含所有记录。
-        - 写入时使用 COLUMNS 作为表头，确保字段顺序一致。
-        - newline="" 参数防止 Windows 下写入多余的 \r 字符。
     """
+    import os
+    import tempfile
     _ensure_csv()
-    with open(_active_csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=COLUMNS)
-        writer.writeheader()
-        for rec in records:
-            writer.writerow(rec)
+    csv_path = _active_csv_path
+    # 写临时文件（与目标文件同目录，保证原子 rename 在同一文件系统内）
+    fd, tmp_path = tempfile.mkstemp(dir=str(csv_path.parent), suffix='.csv')
+    try:
+        with os.fdopen(fd, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=COLUMNS)
+            writer.writeheader()
+            for rec in records:
+                writer.writerow(rec)
+        # 写入成功 → 原子替换
+        os.replace(tmp_path, csv_path)
+    except BaseException:
+        # 写入失败 → 清理临时文件，原 CSV 不受影响
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def add_record(

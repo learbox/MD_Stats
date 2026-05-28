@@ -68,27 +68,14 @@ def _get_config_path() -> Path:
 def load_config() -> dict[str, Any]:
     """加载并解析 config.toml，返回嵌套字典。
 
+    如果 config.toml 不存在，自动在当前目录生成一份默认配置文件，
+    包含所有内置默认值，然后正常返回。程序不会因配置文件丢失而崩溃。
+
     返回值示例:
         {
             "detection": {"interval": 0.3, "confidence_threshold": 0.8},
-            "window": {"width": 1300, "height": 700},
-            "appearance": {"theme": "macaron"},
-            "opponent_decks": {"presets": ["炎兽", "闪刀姬", "烙印", "白银城"]},
-            "recorder": {"daily_files": False},
-            "clipboard": {
-                "vertical_layout": False, "scope": "all", "columns": [],
-            },
-            "floating_window": {
-                "width": 250, "height": 300,
-                "bg_color": "#BDEF0A", "opacity": 50,
-                "font_size": 20, "text_color": "#000000",
-                "font_family": "Microsoft YaHei",
-                "rows": [],
-            },
+            ...
         }
-
-    异常:
-        FileNotFoundError: 如果项目根目录下不存在 config.toml 文件。
 
     注意事项:
         - TOML 文件必须以二进制模式 ("rb") 打开，这是 tomllib 的要求。
@@ -96,7 +83,90 @@ def load_config() -> dict[str, Any]:
     """
     path = _get_config_path()
     if not path.exists():
-        raise FileNotFoundError(f"配置文件不存在: {path}")
+        _generate_default_config(path)
 
     with open(path, "rb") as f:
         return tomllib.load(f)
+
+
+def _generate_default_config(path: Path) -> None:
+    """生成一份包含所有内置默认值的 config.toml。"""
+    path.write_text("""\
+# MD Stats 配置文件（由程序自动生成）
+# 修改后点击主窗口的「设置 → 确定」即时生效。
+# 所有时间单位为秒，所有颜色使用十六进制格式。
+
+# 图像识别相关配置
+[detection]
+# 截图间隔（秒），推荐 0.3 ~ 1.0
+interval = 0.3
+# 匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90
+confidence_threshold = 0.8
+
+[window]
+# 主窗口宽度（像素）
+width = 1300
+# 主窗口高度（像素）
+height = 700
+
+# 界面外观
+[appearance]
+# 主题文件夹名（内置: "dark" / "light" / "macaron"）
+theme = "macaron"
+
+# 对方卡组预设
+[opponent_decks]
+# 记录表格下拉菜单的预设选项
+presets = ["闪刀姬", "烙印", "白银城", "k9vs"]
+
+# 数据存储
+[recorder]
+# 是否按日期分文件存储 CSV
+daily_files = false
+# 启动时自动填入最近一次使用的卡组（从 CSV 读取）
+remember_last_deck = true
+
+# 统计表格显示
+[stats]
+# 统计表格显示的列名列表（空 = 全部显示）
+columns = []
+
+# 剪贴板复制行为
+[clipboard]
+# 竖排模式：true = 每行"key\\tvalue"，false = 横排 TSV
+vertical_layout = true
+# 复制范围："current" = 当前卡组，"all" = 全部卡组
+scope = "all"
+# 要复制的列名列表（空 = 默认 8 项）
+columns = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率", "赢硬币胜率", "输硬币胜率", "综合胜率"]
+
+# 调试与实验功能
+[debug]
+# 每次检测到关键事件（硬币/先后攻/胜负）时保存截图到 screenshots/
+save_screenshots = false
+# 开启日志模式：将运行信息写入 logs/ 目录
+log_mode = false
+# 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
+log_scope = ["status", "screenshots", "errors"]
+
+# 悬浮统计窗
+[floating_window]
+# 是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）
+use_theme_bg = false
+# 悬浮窗宽度（像素）
+width = 250
+# 悬浮窗高度（像素）
+height = 300
+# 背景色
+bg_color = "#bdef0a"
+# 不透明度 0-100
+opacity = 50
+# 文字字号（像素）
+font_size = 20
+# 文字颜色
+text_color = "#000000"
+# 字体（Qt 从前往后找第一个可用的，含 macOS/Windows 回退）
+font_family = "Microsoft YaHei UI"
+# 显示数据行（空 = 默认 8 项）
+rows = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率", "赢硬币胜率", "输硬币胜率", "综合胜率"]
+""", encoding="utf-8")

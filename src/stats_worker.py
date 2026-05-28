@@ -449,14 +449,18 @@ class StatsWorker(QThread):
         _last_resolution = None   # 上一次的分辨率（用于检测变化）
         _warned = False           # 是否已经发过"窗口最小化"的提示（避免刷屏）
         while self._running:
+            # 先检查最小化：GetClientRect 对最小化窗口也返回有效尺寸，
+            # 如果不提前拦截，_ensure_templates 会成功 → 直接 break → 跳过最小化提示
+            if _cap.is_window_minimized("masterduel"):
+                if not _warned:
+                    self.status_update.emit("Master Duel 窗口已最小化 — 请恢复窗口")
+                    _warned = True
+                self._skip()
+                continue
             size = self._ensure_templates(_last_resolution)  # 尝试获取分辨率+加载模板
             if size is not None:
                 _last_resolution = size
                 break  # 成功加载模板，跳出启动等待循环
-            # 窗口不可用：发提示（只发一次），然后休眠重试
-            if not _warned and _cap.is_window_minimized("masterduel"):
-                self.status_update.emit("Master Duel 窗口已最小化 — 请恢复窗口")
-                _warned = True
             self._skip()
         if not self._running:    # stop() 在等待期间被调用
             return
@@ -495,8 +499,9 @@ class StatsWorker(QThread):
             #     capture_window 内部用 mss 库做高性能截图（Windows 上走 DirectX）
             try:
                 screenshot = _cap.capture_window("masterduel")
-            except (OSError, RuntimeError) as e:
-                # 截图失败通常是因为窗口刚好关闭或失去焦点
+            except Exception as e:
+                # 截图失败的原因很多（窗口关闭/失去焦点/BitBlt拒绝访问等），
+                # 统一处理为跳过本帧，外层 run() 的 try/except 负责捕获真正的逻辑 bug
                 self.status_update.emit(f"截图失败: {e}")
                 self._skip()
                 continue

@@ -1250,8 +1250,7 @@ class MainWindow(QMainWindow):
         stats = compute_stats(records)
 
         # 读取用户选择的统计列（空列表 = 显示全部）
-        cfg = load_config()
-        selected = cfg.get("stats", {}).get("columns")
+        selected = self._config.get("stats", {}).get("columns")
         columns = selected if selected else list(STATS_COLUMNS)
 
         self._stats_table.setColumnCount(len(columns))
