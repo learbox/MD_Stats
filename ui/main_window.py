@@ -1821,10 +1821,10 @@ class MainWindow(QMainWindow):
         """窗口状态变化时触发。最小化时若开启了托盘隐藏，则隐藏窗口。"""
         from PySide6.QtCore import QEvent
         if event.type() == QEvent.Type.WindowStateChange:
-            if self.isMinimized() and self._config.get("notification", {}).get("minimize_to_tray", False):
-                self.hide()
-                event.ignore()
-                return
+            if self.windowState() & Qt.WindowState.WindowMinimized:
+                if self._config.get("notification", {}).get("minimize_to_tray", False):
+                    # 延迟到下一轮事件循环再隐藏，让 Qt 先完成窗口状态切换
+                    QTimer.singleShot(0, self.hide)
         super().changeEvent(event)
 
     def _quit_app(self) -> None:
