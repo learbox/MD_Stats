@@ -655,6 +655,7 @@ class MainWindow(QMainWindow):
             )
         self._tray = QSystemTrayIcon(icon, self)
         self._tray.setToolTip("MD Stats")
+        self._tray.activated.connect(self._on_tray_activated)  # 双击托盘显示窗口
 
         # 托盘右键菜单
         tray_menu = QMenu()
@@ -1811,6 +1812,11 @@ class MainWindow(QMainWindow):
     # 窗口关闭事件
     # =========================================================================
 
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        """双击托盘图标 → 显示窗口。"""
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self._show_from_tray()
+
     def _show_from_tray(self) -> None:
         """托盘右键"显示窗口"：恢复并置顶。"""
         self.showNormal()
@@ -1825,6 +1831,8 @@ class MainWindow(QMainWindow):
                 if self._config.get("notification", {}).get("minimize_to_tray", False):
                     # 延迟到下一轮事件循环再隐藏，让 Qt 先完成窗口状态切换
                     QTimer.singleShot(0, self.hide)
+                    self._tray.showMessage("MD Stats", "已最小化到托盘，程序在后台继续运行",
+                                           QSystemTrayIcon.MessageIcon.Information, 1500)
         super().changeEvent(event)
 
     def _quit_app(self) -> None:
