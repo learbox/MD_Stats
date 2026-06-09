@@ -28,25 +28,13 @@ uv sync --frozen
 ### 3. 执行打包
 
 ```bash
-.venv/Scripts/pyinstaller.exe main.py \
-  --name MDStats \
-  --icon app_icon.ico \
-  --noconsole \
-  --noupx \
-  --contents-directory .runtime \
-  --noconfirm
+.venv/Scripts/pyinstaller.exe MDStats.spec --noconfirm
 ```
 
-各参数含义：
+> AI 注意：打包前请对比本地 `MDStats.spec` 与 `.github/workflows/release.yml` 中
+> `PyInstaller 打包` 步骤的内联 spec 是否一致。如不一致，分析原因后决定以哪个为准。
 
-| 参数 | 作用 |
-|------|------|
-| `--name MDStats` | EXE 文件名 |
-| `--icon app_icon.ico` | 程序图标 |
-| `--noconsole` | 不弹出命令行窗口 |
-| `--noupx` | 不使用 UPX 压缩（兼容性更好） |
-| `--contents-directory .runtime` | 依赖文件放在 `.runtime/` 目录 |
-| `--noconfirm` | 自动覆盖旧产物，不询问 |
+优化：自动排除未用 Qt 模块（省 ~41MB）和非中文翻译（省 ~7MB）。
 
 打包产物在 `dist/MDStats/`：
 - `MDStats.exe` — 主程序

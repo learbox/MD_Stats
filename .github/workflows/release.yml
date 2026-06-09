@@ -29,15 +29,86 @@ jobs:
       - name: 编译 .ui 文件
         run: uv run pyside6-uic ui/main_window.ui -o ui/main_window_ui.py
 
-      - name: PyInstaller 打包
+      - name: PyInstaller 打包（内联 spec，自动排除未用 Qt 模块和多语翻译）
         run: |
-          uv run --with 'pyinstaller>=6.10,<7' pyinstaller main.py `
-            --name MDStats `
-            --icon app_icon.ico `
-            --noconsole `
-            --noupx `
-            --contents-directory .runtime `
-            --noconfirm
+          # ---------------------------------------------------------
+          # MDStats.spec — PyInstaller 构建配置
+          # 本文件不跟踪（*.spec 在 .gitignore 中），由 CI 内联生成。
+          # 本地构建时从 docs/MDStats_template.spec 复制到项目根目录使用。
+          # ---------------------------------------------------------
+          cat > MDStats.spec << 'PYISPEC'
+          # -*- mode: python ; coding: utf-8 -*-
+
+          _UNUSED_QT_DLLS = [
+              'qt6quick', 'qt6qml', 'qt6pdf', 'qt6svg',
+              'qt6virtualkeyboard', 'qt6network',
+              'qt63d', 'qt6opengl', 'opengl32sw',
+              'qt6webchannel', 'qt6webengine', 'qt6websockets',
+              'qt6bluetooth', 'qt6nfc', 'qt6serialport',
+              'qt6multimedia', 'qt6sensors', 'qt6positioning',
+              'qt6printsupport', 'qt6help', 'qt6sql', 'qt6test',
+              'qt6concurrent', 'qt6dbus',
+              'qt6xml', 'qt6designer', 'qt6axcontainer',
+          ]
+
+          a = Analysis(
+              ['main.py'],
+              pathex=[],
+              binaries=[],
+              datas=[],
+              hiddenimports=[],
+              hookspath=[],
+              hooksconfig={},
+              runtime_hooks=[],
+              excludes=[],
+              noarchive=False,
+              optimize=0,
+          )
+          a.binaries = [
+              (name, path, typ) for name, path, typ in a.binaries
+              if not any(kw in name.lower() for kw in _UNUSED_QT_DLLS)
+              and not ('translations' in path.lower() and 'qt_zh_cn' not in name.lower())
+          ]
+          pyz = PYZ(a.pure)
+
+          exe = EXE(
+              pyz,
+              a.scripts,
+              [],
+              exclude_binaries=True,
+              name='MDStats',
+              debug=False,
+              bootloader_ignore_signals=False,
+              strip=False,
+              upx=False,
+              console=False,
+              disable_windowed_traceback=False,
+              argv_emulation=False,
+              target_arch=None,
+              codesign_identity=None,
+              entitlements_file=None,
+              icon=['app_icon.ico'],
+              contents_directory='.runtime',
+          )
+          coll = COLLECT(
+              exe,
+              a.binaries,
+              a.datas,
+              strip=False,
+              upx=False,
+              upx_exclude=[],
+              name='MDStats',
+          )
+
+          import os as _os, glob as _glob
+          _tr_dir = 'dist/MDStats/.runtime/PySide6/translations'
+          if _os.path.isdir(_tr_dir):
+              for _f in _glob.glob(f'{_tr_dir}/qt*.qm'):
+                  if 'zh_cn' not in _os.path.basename(_f).lower():
+                      _os.remove(_f)
+          PYISPEC
+
+          uv run --with 'pyinstaller>=6.10,<7' pyinstaller MDStats.spec --noconfirm
 
       - name: 组装发布目录
         shell: pwsh
