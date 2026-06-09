@@ -821,12 +821,10 @@ class MainWindow(QMainWindow):
         # ---- 16. 记录表格编辑 → CSV 同步 ----
         self._record_table.cellChanged.connect(self._on_record_cell_changed)
 
-        # QSplitter 默认比例（统计表格 2 : 记录表格 3）
+        # QSplitter 分割比例：首次运行用默认值，后续从 .app_state.json 恢复
         self._splitter.setStretchFactor(0, 2)
         self._splitter.setStretchFactor(1, 3)
-        saved_splitter = self._read_app_state().get("splitter")
-        if saved_splitter:
-            self._splitter.setSizes(saved_splitter)
+        self._splitter.setSizes(self._read_app_state()["splitter"])
 
         # ---- 17. 状态栏（从 .ui 文件加载的控件） ----
         self._status_frame = _require_widget(content.findChild(QFrame, "customStatusBar"), "customStatusBar")
@@ -1435,14 +1433,34 @@ class MainWindow(QMainWindow):
         self._float_window.show()
         self._btn_float.setText("关闭悬浮")
 
+    # .app_state.json 各字段默认值（集中管理兜底，新增字段在此添加）
+    # stats / record 为全部列宽（像素），record 不含隐藏列 0
+    # splitter 为 [上, 下] 分割条绝对尺寸，main_pos / float_pos 为 [x, y]
+    _APP_STATE_DEFAULTS: dict[str, object] = {
+        "stats":     [80, 60, 45, 45, 70, 75, 75, 75, 85, 85, 80, 75, 70, 70, 75],
+        "record":    [115, 90, 75, 80, 65, 70, 50, 65],
+        "splitter":  [200, 300],
+        "main_pos":  [100, 100],
+        "float_pos": [100, 100],
+    }
+
     @staticmethod
     def _read_app_state() -> dict:
-        """读取 .app_state.json，文件不存在或损坏时返回空字典。"""
+        """读取 .app_state.json，文件不存在/缺字段时用默认值补齐。
+
+        用户手动删除文件或升级到新版本时，缺失的字段自动回填默认值，
+        下次关闭窗口时写回完整文件。
+        """
         try:
             with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            return {}
+            data = {}
+        # 用默认值补齐缺失字段（不覆盖已有值）
+        for key, default in MainWindow._APP_STATE_DEFAULTS.items():
+            if key not in data:
+                data[key] = default
+        return data
 
     @staticmethod
     def _write_app_state(data: dict) -> None:
@@ -1747,10 +1765,10 @@ class MainWindow(QMainWindow):
     # record 列序: 0=序号(隐藏,不记录) 1=日期 2=时间 3=使用卡组 4=对方卡组
     #              5=赢硬币 6=先后攻 7=结果 8=段位升降 9=备注(stretch,不记录)
     # record 记录 8 列（跳过隐藏列 0 和拉伸列 9）
-    _DEFAULT_COLUMN_WIDTHS = {
-        "stats":  [80, 60, 45, 45, 70, 75, 75, 75, 85, 85, 80, 75, 70, 70, 75],
-        "record": [115, 90, 75, 80, 65, 70, 50, 65],
-    }
+    # 列宽默认值已迁移至 _APP_STATE_DEFAULTS（集中管理）
+    # 列序注释保留，方便对照：
+    # stats  列 0-14（15 列），列 15 由 stretchLastSection 填充
+    # record 列 1-8（8 列），列 0（序号）隐藏 + 列 9（备注）stretch
 
     def showEvent(self, event) -> None:
         """窗口首次显示后，恢复列宽并应用背景图片。
@@ -1781,10 +1799,9 @@ class MainWindow(QMainWindow):
         """
         saved = self._read_app_state()
 
-        for table, key, defaults in [
-            (self._stats_table, "stats", self._DEFAULT_COLUMN_WIDTHS["stats"]),
-            (self._record_table, "record", self._DEFAULT_COLUMN_WIDTHS["record"]),
-        ]:
+        defaults_map = self._APP_STATE_DEFAULTS
+        for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
+            defaults = defaults_map[key]
             widths = saved.get(key, [])
             # record 表跳过多余的列 0（旧格式曾保存隐藏列"序号"的宽度 0）
             if key == "record" and widths and widths[0] == 0:

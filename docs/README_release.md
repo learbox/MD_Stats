@@ -1,4 +1,4 @@
-# MD Stats v1.6.4
+# MD Stats v1.6.5
 
 基于图像识别的 **Master Duel 对局自动统计工具**。
 
