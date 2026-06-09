@@ -30,13 +30,9 @@ jobs:
         run: uv run pyside6-uic ui/main_window.ui -o ui/main_window_ui.py
 
       - name: PyInstaller 打包（内联 spec，自动排除未用 Qt 模块和多语翻译）
+        shell: pwsh
         run: |
-          # ---------------------------------------------------------
-          # MDStats.spec — PyInstaller 构建配置
-          # 本文件不跟踪（*.spec 在 .gitignore 中），由 CI 内联生成。
-          # 本地构建时从 docs/MDStats_template.spec 复制到项目根目录使用。
-          # ---------------------------------------------------------
-          cat > MDStats.spec << 'PYISPEC'
+          @'
           # -*- mode: python ; coding: utf-8 -*-
 
           _UNUSED_QT_DLLS = [
@@ -106,7 +102,7 @@ jobs:
               for _f in _glob.glob(f'{_tr_dir}/qt*.qm'):
                   if 'zh_cn' not in _os.path.basename(_f).lower():
                       _os.remove(_f)
-          PYISPEC
+          '@ | Set-Content MDStats.spec -Encoding UTF8
 
           uv run --with 'pyinstaller>=6.10,<7' pyinstaller MDStats.spec --noconfirm
 

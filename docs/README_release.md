@@ -1,4 +1,4 @@
-# MD Stats v1.6.6
+# MD Stats v1.6.7
 
 基于图像识别的 **Master Duel 对局自动统计工具**。
 
@@ -76,6 +76,10 @@ MDStats/
 ├── themes/                  # 主题目录（自定义主题文件放这）
 └── .runtime/                # 运行时依赖（请勿修改）
 ```
+
+## 遇到问题？
+
+常见问题的排查方法请参考 [TROUBLESHOOTING.md](https://github.com/learbox/mdstats_py/blob/main/docs/TROUBLESHOOTING.md)。
 
 ## 免责声明
 

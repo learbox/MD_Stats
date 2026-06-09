@@ -13,6 +13,8 @@ git log --oneline   # 确认提交链完整
 - `docs/PRD.md` — 仅功能变更时更新
 - `README.md` — 仅项目级描述变更时更新
 - `themes/README.md` — 仅主题体系变更时更新
+- `docs/TROUBLESHOOTING.md` — 新增常见问题时补充
+- `CHANGELOG.md` — 每次发布前按版本号追加更新条目
 
 ## 3. 更新版本号
 
