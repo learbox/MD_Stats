@@ -277,7 +277,8 @@ class ConfigDialog(QDialog):
                  bg_path: str | None = None,
                  close_hover: str = "#e74c3c",
                  assets_dir: Path | None = None,
-                 widget_bg: str = "#ffffff") -> None:
+                 widget_bg: str = "#ffffff",
+                 main_bg: str = "#f0f0f0") -> None:
         super().__init__(parent)
         self._config = config
         self._close_hover = close_hover
@@ -291,6 +292,7 @@ class ConfigDialog(QDialog):
         # 把 #RRGGBB 转成 rgba(r,g,b,0.7) 保留 30% 透明度
         r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
         bg_semi = f"rgba({r},{g},{b},180)"  # alpha≈70%
+        self._main_bg = main_bg
 
         self._dragging = False
         self._drag_start = QPoint()
@@ -305,8 +307,18 @@ class ConfigDialog(QDialog):
         self.setMinimumSize(660, 540)
         self.resize(680, 560)
         self.setObjectName("configDialog")
+        # 对话框底色：有背景图用 widget_bg（图穿透面板），纯色用 main_bg 偏移版
+        dialog_bg = widget_bg
+        if self._bg_pixmap is None:
+            # 双向偏移：浅色变暗、深色变亮，确保任意配色（含纯黑/纯白）都有对比
+            mr, mg, mb = int(self._main_bg[1:3], 16), int(self._main_bg[3:5], 16), int(self._main_bg[5:7], 16)
+            shift = 5
+            dr = mr + shift if mr <= 128 else mr - shift
+            dg = mg + shift if mg <= 128 else mg - shift
+            db = mb + shift if mb <= 128 else mb - shift
+            dialog_bg = f"#{dr:02x}{dg:02x}{db:02x}"
         self.setStyleSheet(
-            f"#configDialog {{ background: {widget_bg}; }}"
+            f"#configDialog {{ background: {dialog_bg}; }}"
             "QGroupBox { background: transparent; border: 1px solid palette(mid);"
             "  border-radius: 6px; margin-top: 8px; padding-top: 16px; }"
             "QGroupBox::title { subcontrol-origin: margin; left: 12px; }"
@@ -319,12 +331,20 @@ class ConfigDialog(QDialog):
         outer.addWidget(self._make_titlebar())
 
         self._tabs = QTabWidget()
-        # 标签页半透明：透出背景图但保持可读性
-        self._tabs.setStyleSheet(
-            f"QTabWidget::pane {{ background: {bg_semi}; border: none; }}"
-            "QTabBar::tab { background: transparent; padding: 6px 16px; }"
-            f"QTabBar::tab:selected {{ background: {widget_bg}; }}"
-        )
+        # 标签页样式：背景图主题用半透明（透出图片），纯色主题用实色+边框
+        if self._bg_pixmap is not None:
+            self._tabs.setStyleSheet(
+                f"QTabWidget::pane {{ background: {bg_semi}; border: none; }}"
+                "QTabBar::tab { background: transparent; padding: 6px 16px; }"
+                f"QTabBar::tab:selected {{ background: {widget_bg}; }}"
+            )
+        else:
+            # 纯色主题：对话框用 main_bg，面板用 widget_bg，卡片自然浮现
+            self._tabs.setStyleSheet(
+                f"QTabWidget::pane {{ background: {widget_bg}; border: none; }}"
+                "QTabBar::tab { background: transparent; padding: 6px 16px; }"
+                f"QTabBar::tab:selected {{ background: {widget_bg}; }}"
+            )
         self._tabs.addTab(self._make_detection_tab(), "识别")
         self._tabs.addTab(self._make_appearance_tab(), "外观")
         self._tabs.addTab(self._make_clipboard_tab(), "剪贴板")
@@ -538,7 +558,7 @@ class ConfigDialog(QDialog):
         fl.addWidget(scroll)
 
         # 字体预览
-        self._font_preview = QLabel("字体预览 ABC 123 中文示例 勝負 先攻 後攻")
+        self._font_preview = QLabel("字体预览 ABC 123 中文示例 胜负 先攻 后攻")
         self._font_preview.setStyleSheet(
             "font-size: 16px; padding: 8px; background: transparent;"
             "border: 1px dashed #888; border-radius: 4px;"

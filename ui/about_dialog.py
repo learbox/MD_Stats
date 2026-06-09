@@ -39,7 +39,7 @@ from src.config import get_project_root
 # 程序元数据 — 修改版本号、作者等请改这里
 # =============================================================================
 
-VERSION = "1.6.7"       # 当前版本号，发版前更新
+VERSION = "1.6.8"       # 当前版本号，发版前更新
 AUTHOR = "learbox"       # 作者名
 LICENSE = "MIT"          # 开源协议
 REPO_URL = "https://github.com/learbox/mdstats_py"  # 项目仓库，留空则不显示链接
