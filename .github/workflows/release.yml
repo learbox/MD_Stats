@@ -44,15 +44,25 @@ jobs:
               'qt6multimedia', 'qt6sensors', 'qt6positioning',
               'qt6printsupport', 'qt6help', 'qt6sql', 'qt6test',
               'qt6concurrent', 'qt6dbus',
-              'qt6xml', 'qt6designer', 'qt6axcontainer',
+              'qt6designer', 'qt6axcontainer',
           ]
 
+          import os as _os, glob as _glob, shutil as _sh
+          import PySide6
+          _pydir = _os.path.dirname(PySide6.__file__)
+          _icu_src = _os.path.join(_pydir, 'resources', 'icudtl.dat')
+          # 只收集中文翻译（qt_zh_CN.qm 是聚合文件，需要子模块 *_zh_CN.qm 才能加载）
+          _tl_tmp = '_tmp_translations'
+          _os.makedirs(_tl_tmp, exist_ok=True)
+          for _f in _glob.glob(_os.path.join(_pydir, 'translations/*zh_CN*')):
+              _sh.copy(_f, _tl_tmp)
           a = Analysis(
               ['main.py'],
               pathex=[],
               binaries=[],
-              datas=[],
-              hiddenimports=[],
+              datas=[(_tl_tmp, 'PySide6/translations')] +
+                  ([(_icu_src, 'resources')] if _os.path.exists(_icu_src) else []),
+              hiddenimports=['PySide6.QtXml'],  # Qt 翻译解析 .qm 文件需要
               hookspath=[],
               hooksconfig={},
               runtime_hooks=[],
@@ -63,7 +73,6 @@ jobs:
           a.binaries = [
               (name, path, typ) for name, path, typ in a.binaries
               if not any(kw in name.lower() for kw in _UNUSED_QT_DLLS)
-              and not ('translations' in path.lower() and 'qt_zh_cn' not in name.lower())
           ]
           pyz = PYZ(a.pure)
 
@@ -96,12 +105,6 @@ jobs:
               name='MDStats',
           )
 
-          import os as _os, glob as _glob
-          _tr_dir = 'dist/MDStats/.runtime/PySide6/translations'
-          if _os.path.isdir(_tr_dir):
-              for _f in _glob.glob(f'{_tr_dir}/qt*.qm'):
-                  if 'zh_cn' not in _os.path.basename(_f).lower():
-                      _os.remove(_f)
           '@ | Set-Content MDStats.spec -Encoding UTF8
 
           uv run --with 'pyinstaller>=6.10,<7' pyinstaller MDStats.spec --noconfirm

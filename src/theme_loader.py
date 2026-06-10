@@ -94,7 +94,6 @@ theme.toml 完整结构（以 macaron 主题为例）
 from __future__ import annotations
 
 import re
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any

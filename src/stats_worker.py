@@ -291,7 +291,8 @@ class StatsWorker(QThread):
     #   整个等待下一局的时间来慢慢查看截图。
     # =========================================================================
 
-    def _clear_screenshots(self) -> None:
+    @staticmethod
+    def _clear_screenshots() -> None:
         """清空 screenshots/ 目录下的所有 PNG 截图文件。
 
         采用逐文件删除的方式（而非 shutil.rmtree 整目录删除），原因：

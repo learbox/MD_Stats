@@ -64,9 +64,9 @@ class FloatingWindow(QWidget):
         if obs:
             from PySide6.QtGui import QIcon
             from src.config import get_project_root
-            icon_path = get_project_root() / "resource" / "icons" / "floating_window_icon.png"
-            if icon_path.exists():
-                self.setWindowIcon(QIcon(str(icon_path)))
+            ico = get_project_root() / "resource" / "icons" / "floating_window_icon.png"
+            if ico.exists():
+                self.setWindowIcon(QIcon(str(ico)))
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(self._DEFAULT_W,
                           40 + len(self._rows) * 26)

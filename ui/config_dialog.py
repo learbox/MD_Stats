@@ -1047,7 +1047,10 @@ class ConfigDialog(QDialog):
                 sub = w.layout()
                 if sub is not None:
                     for j in range(sub.count()):
-                        sw = sub.itemAt(j).widget()
+                        item = sub.itemAt(j)
+                        if item is None:
+                            continue
+                        sw = item.widget()
                         if sw is old:
                             sub.replaceWidget(old, new)
                             old.setParent(None)
@@ -1287,7 +1290,8 @@ class ConfigDialog(QDialog):
         for cb in (self._log_scope_status, self._log_scope_screenshots, self._log_scope_errors):
             cb.setEnabled(enabled)
 
-    def _open_logs_dir(self) -> None:
+    @staticmethod
+    def _open_logs_dir() -> None:
         """在 Windows 文件资源管理器中打开日志文件夹。
 
         如果日志文件夹不存在（从未开启过日志模式），先创建空文件夹再打开，

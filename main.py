@@ -77,7 +77,7 @@ def main() -> None:
     """
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    window = MainWindow()  # show() 已在 __init__ 中调用，提前显示窗口减少感知延迟
+    _window = MainWindow()  # 必须存引用以防 GC 回收（窗口在 app.exec() 期间存活）
     sys.exit(app.exec())
 
 
