@@ -28,21 +28,12 @@ uv sync --frozen
 ### 3. 执行打包
 
 ```bash
-# 收集中文翻译（qt_zh_CN.qm 依赖子模块 *_zh_CN.qm 才能加载）
-mkdir -p _tmp_translations
-cp .venv/Lib/site-packages/PySide6/translations/*zh_CN* _tmp_translations/
-
-.venv/Scripts/pyinstaller.exe main.py \
-  --name MDStats --noconsole --noupx \
-  --contents-directory .runtime --noconfirm \
-  --add-data ".venv/Lib/site-packages/PySide6/resources/icudtl.dat:resources" \
-  --add-data "_tmp_translations:PySide6/translations" \
-  --hidden-import PySide6.QtXml
-
-rm -rf _tmp_translations
+.venv/Scripts/pyinstaller.exe MDStats.spec --noconfirm
 ```
 
-> AI 注意：打包前请对比本地打包命令与 `.github/workflows/release.yml` 中
+`MDStats.spec` 自动排除未用 Qt 模块（省 ~41MB）、收集中文翻译。
+
+> AI 注意：打包前请对比 `MDStats.spec` 与 `.github/workflows/release.yml` 中
 > `PyInstaller 打包` 步骤的内联 spec 是否一致。如不一致，分析原因后决定以哪个为准。
 
 优化：自动排除未用 Qt 模块（省 ~41MB）。
