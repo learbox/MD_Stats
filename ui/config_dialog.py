@@ -605,18 +605,6 @@ class ConfigDialog(QDialog):
         r3.addStretch()
         lo.addLayout(r3)
 
-        # ---- 悬浮窗背景开关 ----
-        r4 = QHBoxLayout()
-        self._use_theme_bg = QCheckBox("悬浮窗使用主题背景图")
-        self._use_theme_bg.setToolTip(
-            "勾选后优先使用主题文件夹中的 float_bg 图片。\n"
-            "图片不存在时自动回退到下方 [悬浮窗] 标签页设置的纯色。\n"
-            "不勾选则始终使用纯色（适合 OBS 颜色键捕捉绿幕）。"
-        )
-        r4.addWidget(self._use_theme_bg)
-        r4.addStretch()
-        lo.addLayout(r4)
-
         lo.addStretch()
         self._update_font_display()
         return w
@@ -851,6 +839,20 @@ class ConfigDialog(QDialog):
         gl.addWidget(self._fw_dual)
         lo.addWidget(g)
 
+        self._use_theme_bg = QCheckBox("使用主题背景图")
+        self._use_theme_bg.setToolTip(
+            "勾选后优先使用主题文件夹中的 float_bg 图片。\n"
+            "图片不存在时自动回退到下方设置的纯色。"
+        )
+        lo.addWidget(self._use_theme_bg)
+
+        self._obs_mode_cb = QCheckBox("OBS 捕获模式（悬浮窗显示任务栏图标）")
+        self._obs_mode_cb.setToolTip(
+            "开启后悬浮窗显示任务栏图标，OBS 窗口捕获可以正常识别。\n"
+            "关闭后无任务栏图标，OBS 需用显示器捕获替代。"
+        )
+        lo.addWidget(self._obs_mode_cb)
+
         return w
 
     # =========================================================================
@@ -946,7 +948,9 @@ class ConfigDialog(QDialog):
 
         self._notify_cb.setChecked(c.get("notification", {}).get("enabled", False))
         self._notify_duration.setValue(c.get("notification", {}).get("duration", 5))
-        self._tray_minimize_cb.setChecked(c.get("notification", {}).get("minimize_to_tray", False))
+        n = c.get("notification", {})
+        self._tray_minimize_cb.setChecked(n.get("minimize_to_tray", False))
+        self._obs_mode_cb.setChecked(n.get("obs_mode", False))
 
         theme = c.get("appearance", {}).get("theme", "")
         idx = self._theme_combo.findText(theme)
@@ -1115,6 +1119,7 @@ class ConfigDialog(QDialog):
                 "enabled": self._notify_cb.isChecked(),
                 "duration": self._notify_duration.value(),
                 "minimize_to_tray": self._tray_minimize_cb.isChecked(),
+                "obs_mode": self._obs_mode_cb.isChecked(),
             },
         }
 
@@ -1214,6 +1219,8 @@ class ConfigDialog(QDialog):
             "通知显示持续时间（秒）")
         _kv("minimize_to_tray", ntfy.get("minimize_to_tray", False),
             "最小化时隐藏到系统托盘（而非任务栏）")
+        _kv("obs_mode", ntfy.get("obs_mode", False),
+            "OBS 捕获模式（悬浮窗显示任务栏图标以允许 OBS 捕获）")
 
         lines.extend(["", "# 悬浮统计窗", "[floating_window]"])
         _kv("use_theme_bg", fw.get("use_theme_bg", False),

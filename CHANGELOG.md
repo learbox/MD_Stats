@@ -1,5 +1,26 @@
 # 更新日志
 
+## v1.6.9 (2026-06-10)
+
+### 新增
+- OBS 捕获模式：悬浮窗可选 Window 类型以支持 OBS 窗口捕获
+- 悬浮窗 OBS 模式下显示专属任务栏图标（`resource/icons/floating_window_icon.png`）
+- 设置标签页重组：悬浮窗背景图和 OBS 模式移至悬浮窗标签页
+
+### 修复
+- X 按钮正确响应 minimize_to_tray 设置（托盘模式点 X 隐藏、非托盘模式关闭）
+- 最小化按钮恢复为正常最小化（不再误隐藏到托盘）
+- 字体预览文字改为简体中文
+
+### 改进
+- 纯色主题（dark/light）设置弹窗选项卡增加卡片层次感（基于 main_bg 双向微调）
+- 悬浮窗添加窗口标题便于 OBS 和任务管理器识别
+- closeEvent 死代码清理
+
+### 文档
+- TROUBLESHOOTING.md 新增 OBS 与直播排错
+- RELEASE.md 新增 AI 编写 Release Notes 提醒
+
 ## v1.6.8 (2026-06-10)
 
 ### 改进

@@ -157,6 +157,8 @@ enabled = false
 duration = 5
 # 最小化时隐藏到系统托盘（而非任务栏）
 minimize_to_tray = false
+# OBS 捕获模式（悬浮窗显示任务栏图标以允许 OBS 捕获）
+obs_mode = false
 
 # 悬浮统计窗
 [floating_window]

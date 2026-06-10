@@ -50,6 +50,9 @@ git push origin main --tags
 
 ## 6. 编写 Release Notes
 
+> AI 注意：发版时请主动为本次发布编写 Release Notes（Markdown 格式），
+> 方便用户快速粘贴到 GitHub Release 输入框。
+
 查看两个版本之间的提交：
 
 ```bash

@@ -1851,28 +1851,25 @@ class MainWindow(QMainWindow):
         self.raise_()
 
     def changeEvent(self, event: Any) -> None:
-        """窗口状态变化时触发。最小化时若开启了托盘隐藏，则隐藏窗口。"""
-        from PySide6.QtCore import QEvent
-        if event.type() == QEvent.Type.WindowStateChange:
-            if self.windowState() & Qt.WindowState.WindowMinimized:
-                if self._config.get("notification", {}).get("minimize_to_tray", False):
-                    # 延迟到下一轮事件循环再隐藏，让 Qt 先完成窗口状态切换
-                    QTimer.singleShot(0, self.hide)
-                    self._tray.showMessage("MD Stats", "已最小化到托盘，程序在后台继续运行",
-                                           QSystemTrayIcon.MessageIcon.Information, 1500)
+        """窗口状态变化时触发。最小化按钮正常最小化，不拦截。"""
         super().changeEvent(event)
 
     def _quit_app(self) -> None:
-        """托盘右键退出：触发正常的窗口关闭流程。"""
-        self.close()
+        """托盘右键退出：绕过托盘模式，直接保存状态并退出。"""
+        self._real_close()
 
     def closeEvent(self, event: Any) -> None:
-        """窗口关闭时保存所有持久化状态，安全停止后台线程和定时器。
+        """关闭窗口：最小化到托盘模式 → 隐藏，否则正常退出。"""
+        if self._config.get("notification", {}).get("minimize_to_tray", False):
+            self.hide()
+            self._tray.showMessage("MD Stats", "已最小化到托盘，程序在后台继续运行",
+                                   QSystemTrayIcon.MessageIcon.Information, 1500)
+            event.ignore()
+        else:
+            self._real_close()
 
-        合并读写：一次读 .app_state.json → 写入全部状态 → 一次写回，
-        取代原来的三次独立 I/O。
-        """
-        # ---- 合并状态保存（一次读 + 一次写） ----
+    def _real_close(self) -> None:
+        """绕过托盘模式强制退出：保存状态 → 停止线程 → 退出。"""
         data = self._read_app_state()
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]
@@ -1882,21 +1879,17 @@ class MainWindow(QMainWindow):
         data["stats"] = [self._stats_table.columnWidth(c)
                          for c in range(self._stats_table.columnCount() - 1)]
         data["record"] = [self._record_table.columnWidth(c)
-                          for c in range(1, self._record_table.columnCount() - 1)]  # 跳过隐藏列0
+                          for c in range(1, self._record_table.columnCount() - 1)]
         data["splitter"] = self._splitter.sizes()
         self._write_app_state(data)
-
-        # ---- 停止所有定时器和工作线程 ----
         if self._info_timer is not None:
             self._info_timer.stop()
-            self._info_timer = None
         if self._wait_timer is not None:
             self._wait_timer.stop()
-            self._wait_timer = None
         if self._worker is not None:
             self._worker.stop()
-            self._worker.wait(1000)          # 线程在 interval 秒内退出，1s 有充裕余量
-        event.accept()
+            self._worker.wait(1000)
+        QApplication.quit()
 
     def _restore_main_window_pos(self) -> None:
         """从 .app_state.json 恢复主窗口位置。

@@ -41,6 +41,7 @@ class FloatingWindow(QWidget):
     def __init__(self, parent: QWidget | None = None,
                  rows: list[str] | None = None) -> None:
         super().__init__(parent)
+        self.setWindowTitle("MD Stats 悬浮窗")
         self._dragging = False
         self._drag_start = QPoint()
         self._bg_color = QColor(152, 212, 187, 128)
@@ -50,12 +51,22 @@ class FloatingWindow(QWidget):
         self._font_family = ""
         self._rows: tuple[str, ...] = tuple(rows) if rows else _DEFAULT_ROWS
 
+        # 根据 obs_mode 决定窗口类型：Window（OBS 可捕获，有任务栏图标）
+        #                         或 Tool（无任务栏图标，OBS 需用显示器捕获）
+        from src.config import load_config
+        obs = load_config().get("notification", {}).get("obs_mode", False)
         self.setWindowFlags(
-            Qt.WindowType.Window
+            (Qt.WindowType.Window if obs else Qt.WindowType.Tool)
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
         )
+        # OBS 模式下的任务栏图标
+        if obs:
+            from PySide6.QtGui import QIcon
+            from src.config import get_project_root
+            icon_path = get_project_root() / "resource" / "icons" / "floating_window_icon.png"
+            if icon_path.exists():
+                self.setWindowIcon(QIcon(str(icon_path)))
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(self._DEFAULT_W,
                           40 + len(self._rows) * 26)
