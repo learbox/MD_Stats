@@ -80,6 +80,7 @@ class ColorButton(QPushButton):
     """色块按钮：显示当前颜色，点击弹出取色器。"""
 
     def __init__(self, color: QColor, parent: QWidget | None = None) -> None:
+        """创建色块按钮，初始颜色为 color。"""
         super().__init__(parent)
         self._color = color                # 当前选中的颜色（QColor 对象）
         self.setFixedSize(48, 28)          # 固定尺寸：宽 48px，高 28px
@@ -175,6 +176,13 @@ class DualListWidget(QWidget):
 
     def __init__(self, available: list[str], selected: list[str],
                  parent: QWidget | None = None) -> None:
+        """创建双列选择列表控件。
+
+        Args:
+            available: 左侧可选项目列表。
+            selected: 右侧已选项目列表（初始选中项）。
+            parent: 父控件。
+        """
         super().__init__(parent)
 
         layout = QHBoxLayout(self)
@@ -233,16 +241,19 @@ class DualListWidget(QWidget):
             self._right.addItem(item)
 
     def _move_right(self) -> None:
+        """将左侧选中的项移动到右侧已选列表。"""
         for item in self._left.selectedItems():
             self._right.addItem(item.text())
             self._left.takeItem(self._left.row(item))
 
     def _move_left(self) -> None:
+        """将右侧选中的项移回左侧可选列表。"""
         for item in self._right.selectedItems():
             self._left.addItem(item.text())
             self._right.takeItem(self._right.row(item))
 
     def _move_up(self) -> None:
+        """将右侧列表中当前选中项上移一位。"""
         row = self._right.currentRow()
         if row > 0:
             item = self._right.takeItem(row)
@@ -250,6 +261,7 @@ class DualListWidget(QWidget):
             self._right.setCurrentRow(row - 1)
 
     def _move_down(self) -> None:
+        """将右侧列表中当前选中项下移一位。"""
         row = self._right.currentRow()
         if row < self._right.count() - 1:
             item = self._right.takeItem(row)
@@ -257,6 +269,10 @@ class DualListWidget(QWidget):
             self._right.setCurrentRow(row + 1)
 
     def get_selected(self) -> list[str]:
+        """返回右侧已选列表中所有项的文本列表。
+
+                顺序与列表中的显示顺序一致，用于写入 config.toml。
+                """
         return [self._right.item(i).text()
                 for i in range(self._right.count())]
 
@@ -361,6 +377,7 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _make_titlebar(self) -> QWidget:
+        """创建弹窗顶部的自定义标题栏（可拖拽 + 关闭按钮）。"""
         bar = QWidget()
         bar.setObjectName("configDialogTitle")
         bar.setFixedHeight(36)
@@ -392,6 +409,7 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _make_detection_tab(self) -> QWidget:
+        """创建"识别"标签页：截图间隔、匹配阈值、保存截图、热键设置。"""
         w = QWidget()
         lo = QVBoxLayout(w)
         lo.setSpacing(12)
@@ -497,6 +515,7 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _make_notification_tab(self) -> QWidget:
+        """创建"系统"标签页：日志模式、系统通知、最小化到托盘。"""
         w = QWidget()
         lo = QVBoxLayout(w)
         lo.setSpacing(12)
@@ -567,6 +586,7 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _make_appearance_tab(self) -> QWidget:
+        """创建"外观"标签页：主题选择、字体栈、字体更换、窗口尺寸。"""
         w = QWidget()
         lo = QVBoxLayout(w)
         lo.setSpacing(12)
@@ -794,6 +814,7 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _make_clipboard_tab(self) -> QWidget:
+        """创建"剪贴板"标签页：复制格式（横排/竖排）、范围、列选择。"""
         w = QWidget()
         lo = QVBoxLayout(w)
         lo.setSpacing(8)
@@ -836,6 +857,7 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _make_float_tab(self) -> QWidget:
+        """创建"悬浮窗"标签页：尺寸、颜色、透明度、字体、行选择、OBS模式。"""
         w = QWidget()
         lo = QVBoxLayout(w)
         lo.setSpacing(8)
@@ -919,6 +941,7 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _make_data_tab(self) -> QWidget:
+        """创建"数据"标签页：对方卡组预设、统计列选择、按日期分文件。"""
         w = QWidget()
         lo = QVBoxLayout(w)
         lo.setSpacing(8)
@@ -965,6 +988,7 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _make_button_bar(self) -> QWidget:
+        """创建底部按钮栏：[取消] [确定]。"""
         bar = QWidget()
         lo = QHBoxLayout(bar)
         lo.setContentsMargins(16, 8, 16, 8)
@@ -983,6 +1007,10 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _load_from_config(self) -> None:
+        """从 config 字典读取所有配置项的值，填入各标签页的控件中。
+
+                在弹窗创建完成后调用一次，确保控件显示的值与当前配置一致。
+                """
         c = self._config
 
         d = c.get("detection", {})
@@ -1344,6 +1372,7 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def _add_preset(self) -> None:
+        """将输入框中的文本添加到预设列表（重复项自动跳过）。"""
         name = self._preset_input.text().strip()
         if not name:
             return
@@ -1354,6 +1383,7 @@ class ConfigDialog(QDialog):
         self._preset_input.clear()
 
     def _del_preset(self) -> None:
+        """删除预设列表中当前选中的项。"""
         for item in self._preset_list.selectedItems():
             self._preset_list.takeItem(self._preset_list.row(item))
 
@@ -1377,6 +1407,7 @@ class ConfigDialog(QDialog):
         return scopes
 
     def _on_hk_enabled_toggled(self, enabled: bool) -> None:
+        """热键启用开关切换时，联动启用/禁用热键相关控件。"""
         for w in (self._hk_snapshot, self._hk_periodic, self._hk_interval):
             w.setEnabled(enabled)
 
@@ -1493,12 +1524,14 @@ class ConfigDialog(QDialog):
     # =========================================================================
 
     def mousePressEvent(self, event) -> None:
+        """鼠标按下 — 左键按下时记录起始位置，进入拖拽模式。"""
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
             self._drag_start = event.globalPosition().toPoint()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
+        """鼠标移动 — 拖拽模式下移动弹窗位置。"""
         if self._dragging:
             delta = event.globalPosition().toPoint() - self._drag_start
             self.move(self.pos() + delta)
@@ -1506,6 +1539,7 @@ class ConfigDialog(QDialog):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
+        """鼠标释放 — 退出拖拽模式。"""
         self._dragging = False
         super().mouseReleaseEvent(event)
 

@@ -231,6 +231,12 @@ class EditableComboDelegate(QStyledItemDelegate):
     """
 
     def __init__(self, items: list[str], parent: QTableWidget | None = None) -> None:
+        """初始化可编辑下拉委托。
+
+        Args:
+            items: 下拉预设选项列表（如对方卡组预设）。
+            parent: 所属的 QTableWidget（用于生命周期管理）。
+        """
         super().__init__(parent)
         self._items = items
 
