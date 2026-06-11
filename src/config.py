@@ -146,6 +146,14 @@ columns = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率",
 save_screenshots = false
 # 下一局开始时自动清除上一局的截图
 auto_clear_screenshots = true
+# 启用截图热键（全局热键，游戏全屏时也可用）
+hotkey_enabled = false
+# 单次截图热键（优先截取 Master Duel 窗口）
+snapshot_hotkey = "Ctrl+Shift+S"
+# 周期截图热键（按一下开始，再按停止）
+periodic_hotkey = "Ctrl+Shift+D"
+# 周期截图间隔（秒）
+periodic_interval = 0.5
 # 开启日志模式：将运行信息写入 logs/ 目录
 log_mode = false
 # 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
