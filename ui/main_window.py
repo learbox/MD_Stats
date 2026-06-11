@@ -103,6 +103,7 @@ from PySide6.QtWidgets import (
 
 from src.app_state import read_app_state, write_app_state, parse_pos, APP_STATE_DEFAULTS
 from src.config import get_project_root, load_config
+from src.match_state import MatchState
 from src.snapshot_controller import SnapshotController
 from src import logger as _log
 from src.recorder import (
@@ -567,10 +568,7 @@ class MainWindow(QMainWindow):
         self._worker: Any = None              # 后台识别线程（StatsWorker）
         self._wait_timer: QTimer | None = None# 等待游戏启动的轮询定时器
         self._info_timer: QTimer | None = None# 右下角信息标签刷新定时器
-        self._stage: int = 0                  # 统一阶段: 0=等硬币, 1=等先后攻, 2=等胜负
-        self._coin_cache: str = ""            # 硬币结果缓存（"win"/"lose"）
-        self._turn_cache: str = ""            # 先后攻结果缓存（"first"/"second"）
-        self._rank_cache: str = ""            # 段位升降缓存（"up"/"down"/""）
+        self._match = MatchState()               # 三阶段对局状态机
         # rank_detected 在硬币阶段触发，但写入 CSV 需等到胜负阶段 —
         # 中间隔着先后攻和对局本身，所以需要缓存。
         self._suppress_cell_changed: bool = False # 刷新记录表时抑制 cellChanged（避免误写 CSV）
@@ -971,13 +969,11 @@ class MainWindow(QMainWindow):
     def _on_coin_win_detected(self, coin_win: str) -> None:
         """自动识别到硬币结果 → 缓存并推进到阶段1。
 
-        仅当手动尚未抢先选择时生效（_stage == 0 才处理）。
+        仅当手动尚未抢先选择时生效（stage == 0 才处理）。
         状态栏消息由 worker 统一发送（含段位升降信息），此处不再重复。
         """
-        if self._stage != 0:
+        if not self._match.advance_coin(coin_win):
             return
-        self._coin_cache = coin_win
-        self._stage = 1
         self._update_manual_buttons()
 
     def _on_rank_detected(self, rank: str) -> None:
@@ -986,19 +982,17 @@ class MainWindow(QMainWindow):
         rank 可能的值: 'up'（升段）、'down'（降段）、''（普通局）。
         结果在 _on_result_detected 中随记录一起写入 CSV。
         """
-        self._rank_cache = rank
+        self._match.set_rank(rank)
 
     def _on_turn_detected(self, turn: str) -> None:
         """自动识别到先后攻 → 缓存并推进到阶段2。
 
-        仅当手动尚未抢先选择时生效（_stage == 1 才处理）。
+        仅当手动尚未抢先选择时生效（stage == 1 才处理）。
         注意: 此时卡组名直接从输入框读取（不缓存），因为用户可能在识别期间
                修改了卡组名，放在写入 CSV 时再读可以拿到最新值。
         """
-        if self._stage != 1:
+        if not self._match.advance_turn(turn):
             return
-        self._turn_cache = turn
-        self._stage = 2
         self._update_manual_buttons()
         turn_text = "先攻" if turn == "first" else "后攻"
         self._show_status(f"已识别: {turn_text} — 等待胜负…")
@@ -1006,19 +1000,20 @@ class MainWindow(QMainWindow):
     def _on_result_detected(self, result: str) -> None:
         """自动识别到胜负 → 取统一缓存写入 CSV，完成一局对局记录。
 
-        仅当手动尚未抢先选择时生效（_stage == 2 才处理）。
+        仅当手动尚未抢先选择时生效（stage == 2 才处理）。
         写入 CSV 后重置状态机回到阶段0，等待下一局。
         """
-        if self._stage != 2:
+        if self._match.stage != 2:
             return
-        add_record(coin_win=self._coin_cache, turn=self._turn_cache,
+        add_record(coin_win=self._match.coin_cache, turn=self._match.turn_cache,
                    result=result, deck=self._deck_input.text().strip(),
-                   rank=self._rank_cache)
+                   rank=self._match.rank_cache)
 
         # 先提取通知所需信息，再 reset（reset 会清空缓存）
-        coin_cache = self._coin_cache
-        turn_cache = self._turn_cache
-        rank_cache = self._rank_cache
+        cached = self._match.snapshot()
+        coin_cache = cached["coin"]
+        turn_cache = cached["turn"]
+        rank_cache = cached["rank"]
         result_text = "胜" if result == "win" else "负"
 
         self._reset_stage()
@@ -1084,28 +1079,25 @@ class MainWindow(QMainWindow):
 
     def _manual_step_clicked(self, side: str) -> None:
         """手动按钮被点击，根据当前阶段解释 side 的语义并推进。"""
-        if self._stage == 0:
+        if self._match.stage == 0:
             # 阶段0: 选择赢硬币/输硬币
-            self._coin_cache = side
-            self._stage = 1
+            self._match.manual_step(side)
             self._update_manual_buttons()
             self._sync_worker_stage()
             coin_text = "赢硬币" if side == "win" else "输硬币"
             self._show_status(f"手动: {coin_text} — 请选择先后攻")
 
-        elif self._stage == 1:
+        elif self._match.stage == 1:
             # 阶段1: 选择先攻/后攻
-            turn = "first" if side == "win" else "second"
-            self._turn_cache = turn
-            self._stage = 2
+            _, turn = self._match.manual_step(side)
             self._update_manual_buttons()
             self._sync_worker_stage()
             turn_text = "先攻" if turn == "first" else "后攻"
             self._show_status(f"手动: {turn_text} — 请选择胜负")
 
-        elif self._stage == 2:
+        elif self._match.stage == 2:
             # 阶段2: 选择胜/负 → 完成一局，写入 CSV
-            add_record(coin_win=self._coin_cache, turn=self._turn_cache,
+            add_record(coin_win=self._match.coin_cache, turn=self._match.turn_cache,
                        result=side, deck=self._deck_input.text().strip())
             self._reset_stage()
             self._sync_worker_stage()
@@ -1115,15 +1107,10 @@ class MainWindow(QMainWindow):
 
     def _on_undo(self) -> None:
         """撤销上一阶段的选择，逐级回退并同步 worker。"""
-        if self._stage == 1:
-            self._coin_cache = ""                # 清除硬币缓存
-            self._stage = 0                      # 回到阶段0
-        elif self._stage == 2:
-            self._turn_cache = ""                # 清除先后攻缓存
-            self._stage = 1                      # 回到阶段1
+        stage = self._match.undo()
         self._update_manual_buttons()
         self._sync_worker_stage()
-        label = {0: "硬币", 1: "先后攻"}[self._stage]
+        label = {0: "硬币", 1: "先后攻"}[stage]
         self._show_status(f"已撤销到: {label}")
 
     def _sync_worker_stage(self) -> None:
@@ -1133,14 +1120,11 @@ class MainWindow(QMainWindow):
         例如手动选择了"赢硬币"→ worker 直接从 WAITING_TURN 状态开始检测先后攻。
         """
         if self._worker is not None:
-            self._worker.jump_to(self._stage)
+            self._worker.jump_to(self._match.stage)
 
     def _reset_stage(self) -> None:
         """重置所有阶段到初始状态（一局完成后调用）。"""
-        self._stage = 0
-        self._coin_cache = ""
-        self._turn_cache = ""
-        self._rank_cache = ""
+        self._match.reset()
         self._update_manual_buttons()
 
     def _update_manual_buttons(self) -> None:
@@ -1151,11 +1135,11 @@ class MainWindow(QMainWindow):
         _stage==2: "胜"     / "负"     (绿/红), 撤销按钮可见
         """
         colors = self._theme_colors()
-        if self._stage == 0:
+        if self._match.stage == 0:
             left_text, right_text = "赢硬币", "输硬币"
             left_color = right_color = colors["coin"]          # 橙色
             self._btn_undo.setVisible(False)                   # 阶段0无撤销对象
-        elif self._stage == 1:
+        elif self._match.stage == 1:
             left_text, right_text = "先攻", "后攻"
             left_color = right_color = colors["turn"]          # 蓝色
             self._btn_undo.setVisible(True)
