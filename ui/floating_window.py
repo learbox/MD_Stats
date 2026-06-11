@@ -101,6 +101,43 @@ class FloatingWindow(QWidget):
 
         self._apply_style()
 
+    # ------------------------------------------------------------------
+    # 尺寸计算
+    # ------------------------------------------------------------------
+
+    def _content_height(self) -> int:
+        """计算当前内容所需的最小高度（行 + 可选状态行 + margin）。
+
+        考虑三个因素：
+            1. 行数 × 行高（行高随 font_size 动态估算）
+            2. show_status 时的额外 24px
+            3. 上下 margin 40px
+        返回值保证不低于 60px。
+        """
+        # font_size 越大行高越大；粗体 20px 字约需 28px 行高
+        line_h = max(26, self._font_size + 8)
+        spacing = 6
+        n = len(self._rows)
+        rows_h = n * line_h + max(n - 1, 0) * spacing
+        extra = 24 if self._show_status else 0
+        return max(40 + rows_h + extra, 60)
+
+    def _update_size_constraints(self) -> None:
+        """根据当前行数、font_size、show_status 同步更新窗口尺寸约束。
+
+        minimumSize / maximumSize 只在 __init__ 中设置过一次，
+        如果行数或 status 行发生变化而不同步更新，resize 时
+        Windows 可能因约束不一致而发出 setGeometry 警告。
+        """
+        w0 = self._DEFAULT_W
+        content_h = self._content_height()
+        self.setMinimumSize(w0, content_h)
+        self.setMaximumSize(w0 + 200, content_h + 200)
+
+    # ------------------------------------------------------------------
+    # 状态行
+    # ------------------------------------------------------------------
+
     def enable_status(self, enabled: bool) -> None:
         """显示/隐藏底部状态行并调整窗口高度。"""
         self._show_status = enabled
@@ -112,8 +149,8 @@ class FloatingWindow(QWidget):
             self._status_label.hide()
             self._grid.removeWidget(self._status_label)
             self._status_label.setMaximumSize(0, 0)  # sizeHint 归零
-        extra = 24 if enabled else 0  # 一行小字空间
-        h = max(40 + len(self._rows) * 26 + extra, 60)
+        self._update_size_constraints()
+        h = self._content_height()
         self.resize(self._DEFAULT_W, h)
 
     def update_status(self, text: str) -> None:
@@ -191,14 +228,18 @@ class FloatingWindow(QWidget):
                        图片不存在或为空时回退纯色。
         """
         w = cfg.get("width", self._DEFAULT_W)
-        h = cfg.get("height", 40 + len(self._rows) * 26)
-        self.resize(w, max(h, 40 + len(self._rows) * 26))
-
-        bg = cfg.get("bg_color", "#98d4bb")
-        opacity_pct = cfg.get("opacity", 50)
+        # 先更新 font_size，再计算内容高度（_content_height 依赖 _font_size）
         self._font_size = cfg.get("font_size", 14)
         self._text_color = cfg.get("text_color", "#000000")
         self._font_family = cfg.get("font_family", "")
+        content_h = self._content_height()
+        h = cfg.get("height", content_h)
+        # 确保配置高度不小于实际内容高度，避免 Windows setGeometry 警告
+        self._update_size_constraints()
+        self.resize(w, max(h, content_h))
+
+        bg = cfg.get("bg_color", "#98d4bb")
+        opacity_pct = cfg.get("opacity", 50)
 
         r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
         alpha = int(opacity_pct / 100 * 255)
@@ -243,7 +284,8 @@ class FloatingWindow(QWidget):
             self._values.append(val)
 
         self._apply_style()
-        h = 40 + len(self._rows) * 26
+        self._update_size_constraints()
+        h = self._content_height()
         self.resize(self.width(), h)
 
     # ------------------------------------------------------------------

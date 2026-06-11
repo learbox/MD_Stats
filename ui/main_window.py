@@ -1437,10 +1437,10 @@ class MainWindow(QMainWindow):
         if cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
             float_bg = self._tm.pixmap_paths.get("__float_bg__")
         self._float_window.update_style(cfg, float_bg_path=float_bg)
+        self._float_window.enable_status(cfg.get("show_status", False))
         self._refresh_float_window()                   # 填入当前统计数据
         self._restore_float_window_pos()               # 恢复上次位置
         self._float_window.show()
-        self._float_window.enable_status(cfg.get("show_status", False))
         self._btn_float.setText("关闭悬浮")
 
     # .app_state.json 各字段默认值（集中管理兜底，新增字段在此添加）
@@ -1676,6 +1676,8 @@ class MainWindow(QMainWindow):
             3. 如果 Worker 正在运行: 停止后用新配置重启（如新的检测间隔）
             4. 更新状态栏和信息标签
         """
+        # 在覆盖旧配置前先记录需要比较的旧值
+        old_obs_mode = self._config.get("notification", {}).get("obs_mode", False)
         self._config = load_config()                       # 重新读取 config.toml
         if self._config.get("debug", {}).get("log_mode", False):
             _log.init_log(get_project_root() / "logs")
@@ -1699,14 +1701,26 @@ class MainWindow(QMainWindow):
         if self._float_window is not None:
             new_cfg = self._config.get("floating_window", {})
             new_rows = new_cfg.get("rows")
-            if new_rows:
-                self._float_window.set_rows(new_rows)
-            float_bg = None
-            if new_cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
-                float_bg = self._tm.pixmap_paths.get("__float_bg__")
-            self._float_window.enable_status(new_cfg.get("show_status", False))
-            self._float_window.update_style(new_cfg, float_bg_path=float_bg)
-            self._refresh_float_window()
+
+            # obs_mode 变化时需要重建悬浮窗（WindowFlags 无法运行时修改）
+            new_obs = self._config.get("notification", {}).get("obs_mode", False)
+            if old_obs_mode != new_obs:
+                # obs_mode 变了 → 关闭旧窗口，重新创建
+                self._save_float_window_pos()
+                self._float_window.close()
+                self._float_window = None
+                self._on_toggle_float()  # 用新配置重建
+            else:
+                if new_rows:
+                    self._float_window.set_rows(new_rows)
+                float_bg = None
+                if new_cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
+                    float_bg = self._tm.pixmap_paths.get("__float_bg__")
+                # 先 update_style（设置样式 + resize），再 enable_status
+                # 这样 update_style 的 resize 能正确计算内容高度
+                self._float_window.update_style(new_cfg, float_bg_path=float_bg)
+                self._float_window.enable_status(new_cfg.get("show_status", False))
+                self._refresh_float_window()
 
         # 对方卡组预设更新
         new_presets = self._config.get("opponent_decks", {}).get("presets", [])
