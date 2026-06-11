@@ -987,7 +987,9 @@ class ConfigDialog(QDialog):
         bg = fw.get("bg_color", "#98d4bb")
         r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
         self._fw_bg.set_color(QColor(r, g, b))
-        self._fw_op.setValue(fw.get("opacity", 50))
+        v = fw.get("opacity", 50)
+        self._fw_op.setValue(v)
+        self._fw_opl.setText(f"{v}%")  # 显式更新 label（setValue 在值不变时不触发信号）
         tc = fw.get("text_color", "#000000")
         r2, g2, b2 = int(tc[1:3], 16), int(tc[3:5], 16), int(tc[5:7], 16)
         self._fw_tc.set_color(QColor(r2, g2, b2))
