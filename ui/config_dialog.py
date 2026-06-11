@@ -441,6 +441,16 @@ class ConfigDialog(QDialog):
         ss_row.addStretch()
         lo.addLayout(ss_row)
 
+        # 子复选框（缩进，仅截图保存开启时可用）
+        self._auto_clear_cb = QCheckBox("下一局开始时自动清除截图")
+        self._auto_clear_cb.setToolTip("勾选后截图只保留最近一局。取消后截图持续累积。")
+        auto_row = QHBoxLayout()
+        auto_row.setContentsMargins(24, 0, 0, 0)
+        auto_row.addWidget(self._auto_clear_cb)
+        auto_row.addStretch()
+        lo.addLayout(auto_row)
+        self._save_screenshots_cb.toggled.connect(self._auto_clear_cb.setEnabled)
+
         lo.addStretch()
         return w
 
@@ -859,6 +869,10 @@ class ConfigDialog(QDialog):
         )
         lo.addWidget(self._obs_mode_cb)
 
+        self._show_status_cb = QCheckBox("底部显示检测状态")
+        self._show_status_cb.setToolTip("在悬浮窗最底部显示当前检测到的硬币/先后攻/胜负。")
+        lo.addWidget(self._show_status_cb)
+
         return w
 
     # =========================================================================
@@ -943,6 +957,8 @@ class ConfigDialog(QDialog):
         #   log_scope (list[str])    — 日志记录范围
         dbg = c.get("debug", {})
         self._save_screenshots_cb.setChecked(dbg.get("save_screenshots", False))
+        self._auto_clear_cb.setChecked(dbg.get("auto_clear_screenshots", True))
+        self._auto_clear_cb.setEnabled(dbg.get("save_screenshots", False))
         self._log_mode_cb.setChecked(dbg.get("log_mode", False))
         # log_scope 是 TOML 数组，转成集合后分别设置三个子复选框
         scopes = set(dbg.get("log_scope", ["status", "screenshots", "errors"]))
@@ -1006,6 +1022,7 @@ class ConfigDialog(QDialog):
             self._replace_in_layout(self._tabs.widget(3), old, self._fw_dual)
 
         self._use_theme_bg.setChecked(fw.get("use_theme_bg", False))
+        self._show_status_cb.setChecked(fw.get("show_status", False))
 
         presets = c.get("opponent_decks", {}).get("presets", [])
         self._preset_list.clear()
@@ -1090,6 +1107,7 @@ class ConfigDialog(QDialog):
             },
             "debug": {
                 "save_screenshots": self._save_screenshots_cb.isChecked(),
+                "auto_clear_screenshots": self._auto_clear_cb.isChecked(),
                 "log_mode": self._log_mode_cb.isChecked(),
                 "log_scope": self._get_log_scope(),
             },
@@ -1107,6 +1125,7 @@ class ConfigDialog(QDialog):
             },
             "floating_window": {
                 "use_theme_bg": self._use_theme_bg.isChecked(),
+                "show_status": self._show_status_cb.isChecked(),
                 "width": self._fw_w.value(),
                 "height": self._fw_h.value(),
                 "bg_color": self._fw_bg.color().name(),
@@ -1187,7 +1206,9 @@ class ConfigDialog(QDialog):
 
         lines.extend(["", "# 调试与实验功能", "[debug]"])
         _kv("save_screenshots", dbg.get("save_screenshots", False),
-            "检测到关键事件时保存截图到 screenshots/，下一局开始时自动清除")
+            "检测到关键事件时保存截图到 screenshots/")
+        _kv("auto_clear_screenshots", dbg.get("auto_clear_screenshots", True),
+            "下一局开始时自动清除上一局的截图")
         _kv("log_mode", dbg.get("log_mode", False),
             "开启日志模式：将运行信息写入 logs/ 目录")
         _kv("log_scope", dbg.get("log_scope", ["status", "screenshots", "errors"]),
@@ -1236,6 +1257,8 @@ class ConfigDialog(QDialog):
         lines.extend(["", "# 悬浮统计窗", "[floating_window]"])
         _kv("use_theme_bg", fw.get("use_theme_bg", False),
             "是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）")
+        _kv("show_status", fw.get("show_status", False),
+            "在悬浮窗底部显示当前的检测状态（硬币/先后攻/胜负分数）")
         _kv("width", fw.get("width", 250), "悬浮窗宽度（像素）")
         _kv("height", fw.get("height", 300), "悬浮窗高度（像素）")
         _kv("bg_color", fw.get("bg_color", "#BDEF0A"), "背景色")

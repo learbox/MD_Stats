@@ -68,10 +68,13 @@ class FloatingWindow(QWidget):
             if ico.exists():
                 self.setWindowIcon(QIcon(str(ico)))
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(self._DEFAULT_W,
-                          40 + len(self._rows) * 26)
+        w0, h0 = self._DEFAULT_W, 40 + len(self._rows) * 26
+        self.setMinimumSize(w0, h0)
+        self.setMaximumSize(w0 + 200, h0 + 200)
+        self.resize(w0, h0)
 
         self._grid = QGridLayout(self)
+        self._grid.setSizeConstraint(QGridLayout.SizeConstraint.SetNoConstraint)
         self._grid.setContentsMargins(20, 20, 20, 20)
         self._grid.setHorizontalSpacing(16)
         self._grid.setVerticalSpacing(6)
@@ -89,7 +92,43 @@ class FloatingWindow(QWidget):
             self._grid.addWidget(val, r, 1)
             self._values.append(val)
 
+        # 状态行（默认不加入布局，由 enable_status() 控制）
+        self._status_label = QLabel("")
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_label.setWordWrap(True)
+        self._status_label.hide()
+        self._show_status = False
+
         self._apply_style()
+
+    def enable_status(self, enabled: bool) -> None:
+        """显示/隐藏底部状态行并调整窗口高度。"""
+        self._show_status = enabled
+        if enabled:
+            self._grid.addWidget(self._status_label, len(self._rows), 0, 1, 2)
+            self._status_label.setMaximumSize(16777215, 16777215)
+            self._status_label.show()
+        else:
+            self._status_label.hide()
+            self._grid.removeWidget(self._status_label)
+            self._status_label.setMaximumSize(0, 0)  # sizeHint 归零
+        extra = 24 if enabled else 0  # 一行小字空间
+        h = max(40 + len(self._rows) * 26 + extra, 60)
+        self.resize(self._DEFAULT_W, h)
+
+    def update_status(self, text: str) -> None:
+        """更新底部状态行文字，字号自动缩放填满一行。"""
+        if not self._show_status:
+            return
+        self._status_label.setText(text)
+        from PySide6.QtGui import QFontMetrics
+        avail = self._DEFAULT_W - 50
+        font = self._status_label.font()
+        for sz in range(16, 8, -1):  # 上限 16px，不超出固定行高
+            font.setPixelSize(sz)
+            if QFontMetrics(font).horizontalAdvance(text) <= avail:
+                break
+        self._status_label.setFont(font)
 
     # ------------------------------------------------------------------
     # 绘制
@@ -140,6 +179,9 @@ class FloatingWindow(QWidget):
             lbl.setStyleSheet(ss)
         for val in self._values:
             val.setStyleSheet(ss)
+        # 状态行字号由 update_status 自动缩放，这里只设颜色
+        self._status_label.setStyleSheet(
+            f"color: {self._text_color}; font-weight: bold; background: transparent; border: none;")
 
     def update_style(self, cfg: dict,
                      float_bg_path: str | None = None) -> None:
@@ -150,7 +192,7 @@ class FloatingWindow(QWidget):
         """
         w = cfg.get("width", self._DEFAULT_W)
         h = cfg.get("height", 40 + len(self._rows) * 26)
-        self.setFixedSize(w, max(h, 40 + len(self._rows) * 26))
+        self.resize(w, max(h, 40 + len(self._rows) * 26))
 
         bg = cfg.get("bg_color", "#98d4bb")
         opacity_pct = cfg.get("opacity", 50)
@@ -202,7 +244,7 @@ class FloatingWindow(QWidget):
 
         self._apply_style()
         h = 40 + len(self._rows) * 26
-        self.setFixedSize(self.width(), h)
+        self.resize(self.width(), h)
 
     # ------------------------------------------------------------------
     # 内容刷新

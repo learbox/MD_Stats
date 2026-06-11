@@ -11,10 +11,12 @@ confidence_threshold = 0.8
 
 # 调试与实验功能
 [debug]
-# 检测到关键事件时保存截图到 screenshots/，下一局开始时自动清除
+# 检测到关键事件时保存截图到 screenshots/
 save_screenshots = false
+# 下一局开始时自动清除上一局的截图
+auto_clear_screenshots = true
 # 开启日志模式：将运行信息写入 logs/ 目录
-log_mode = false
+log_mode = true
 # 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
 log_scope = ["status", "screenshots", "errors"]
 
@@ -32,7 +34,7 @@ theme = "macaron"
 # 对方卡组预设
 [opponent_decks]
 # 记录表格下拉菜单的预设选项
-presets = ["闪刀姬", "烙印", "白银城", "k9vs", "杀手旋律", "绚岚"]
+presets = ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"]
 
 # 数据存储
 [recorder]
@@ -70,6 +72,8 @@ obs_mode = true
 [floating_window]
 # 是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）
 use_theme_bg = false
+# 在悬浮窗底部显示当前的检测状态（硬币/先后攻/胜负分数）
+show_status = true
 # 悬浮窗宽度（像素）
 width = 250
 # 悬浮窗高度（像素）

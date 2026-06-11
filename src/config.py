@@ -144,6 +144,8 @@ columns = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率",
 [debug]
 # 每次检测到关键事件（硬币/先后攻/胜负）时保存截图到 screenshots/
 save_screenshots = false
+# 下一局开始时自动清除上一局的截图
+auto_clear_screenshots = true
 # 开启日志模式：将运行信息写入 logs/ 目录
 log_mode = false
 # 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
@@ -164,6 +166,8 @@ obs_mode = false
 [floating_window]
 # 是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）
 use_theme_bg = false
+# 在悬浮窗底部显示检测状态（硬币/先后攻/胜负分数）
+show_status = false
 # 悬浮窗宽度（像素）
 width = 250
 # 悬浮窗高度（像素）

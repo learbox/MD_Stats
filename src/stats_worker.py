@@ -187,6 +187,7 @@ class StatsWorker(QThread):
         #       截图文件仍然会保存，只是不会在日志中写"已保存"消息。
         dbg = cfg.get("debug", {})
         self._save_screenshots: bool = dbg.get("save_screenshots", False)
+        self._auto_clear: bool = dbg.get("auto_clear_screenshots", True)
         if dbg.get("log_mode", False):
             _log.init_log(get_project_root() / "logs")       # 初始化日志文件
             _log.set_scopes(set(dbg.get("log_scope",         # 设置记录范围
@@ -529,8 +530,9 @@ class StatsWorker(QThread):
 
                     # 调试截图：如果开启了截图保存，在新一局开始前先清除旧截图
                     if self._save_screenshots:
-                        if self._new_game:
+                        if self._new_game and self._auto_clear:
                             self._clear_screenshots()        # 清除上一局的所有截图
+                        if self._new_game:
                             self._new_game = False
                         self._save_detection_screenshot(screenshot, f"coin_{coin_win}")
                         if rank_result:                      # 如果是升段/降段局也保存一张

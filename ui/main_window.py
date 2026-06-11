@@ -1062,6 +1062,9 @@ class MainWindow(QMainWindow):
         """
         _log.write("STATUS", msg)
         self._show_status(msg)
+        # 同步到悬浮窗状态行
+        if self._float_window is not None:
+            self._float_window.update_status(msg)
         if msg.startswith("程序已关闭"):
             self._btn_start.setEnabled(True)
             self._btn_stop.setEnabled(False)
@@ -1437,6 +1440,7 @@ class MainWindow(QMainWindow):
         self._refresh_float_window()                   # 填入当前统计数据
         self._restore_float_window_pos()               # 恢复上次位置
         self._float_window.show()
+        self._float_window.enable_status(cfg.get("show_status", False))
         self._btn_float.setText("关闭悬浮")
 
     # .app_state.json 各字段默认值（集中管理兜底，新增字段在此添加）
@@ -1700,6 +1704,7 @@ class MainWindow(QMainWindow):
             float_bg = None
             if new_cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
                 float_bg = self._tm.pixmap_paths.get("__float_bg__")
+            self._float_window.enable_status(new_cfg.get("show_status", False))
             self._float_window.update_style(new_cfg, float_bg_path=float_bg)
             self._refresh_float_window()
 
