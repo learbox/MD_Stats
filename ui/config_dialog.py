@@ -41,7 +41,7 @@ from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
     QDoubleSpinBox, QFontComboBox, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QListWidget, QPushButton, QRadioButton, QSlider,
+    QLineEdit, QListWidget, QMessageBox, QPushButton, QRadioButton, QSlider,
     QSpinBox, QTabWidget, QVBoxLayout, QWidget, QButtonGroup,
 )
 
@@ -451,6 +451,44 @@ class ConfigDialog(QDialog):
         lo.addLayout(auto_row)
         self._save_screenshots_cb.toggled.connect(self._auto_clear_cb.setEnabled)
 
+        # ---- 截图热键 ----
+        self._hk_enabled = QCheckBox("启用截图热键（全局热键，游戏全屏时也可用）")
+        self._hk_enabled.setToolTip("开启后热键生效，关闭后热键注销。独立于识别启停。")
+        self._hk_enabled.toggled.connect(self._on_hk_enabled_toggled)
+        lo.addWidget(self._hk_enabled)
+
+        g_hk = QGroupBox("热键设置")
+        g_hk.setToolTip("全局热键，游戏全屏时也能触发。点击输入框后按目标快捷键绑定。")
+        gl_hk = QVBoxLayout(g_hk)
+        r1 = QHBoxLayout()
+        r1.addWidget(QLabel("单次截图:"))
+        self._hk_snapshot = QLineEdit()
+        self._hk_snapshot.setPlaceholderText("点击后按快捷键")
+        self._hk_snapshot.setReadOnly(True)
+        self._hk_snapshot.mousePressEvent = lambda e: self._capture_hotkey(self._hk_snapshot)
+        r1.addWidget(self._hk_snapshot)
+        gl_hk.addLayout(r1)
+
+        r2 = QHBoxLayout()
+        r2.addWidget(QLabel("周期截图:"))
+        self._hk_periodic = QLineEdit()
+        self._hk_periodic.setPlaceholderText("点击后按快捷键")
+        self._hk_periodic.setReadOnly(True)
+        self._hk_periodic.mousePressEvent = lambda e: self._capture_hotkey(self._hk_periodic)
+        r2.addWidget(self._hk_periodic)
+        gl_hk.addLayout(r2)
+
+        r3 = QHBoxLayout()
+        r3.addWidget(QLabel("周期间隔:"))
+        self._hk_interval = QDoubleSpinBox()
+        self._hk_interval.setRange(0.1, 10.0)
+        self._hk_interval.setSingleStep(0.1)
+        self._hk_interval.setSuffix(" 秒")
+        r3.addWidget(self._hk_interval)
+        r3.addStretch()
+        gl_hk.addLayout(r3)
+
+        lo.addWidget(g_hk)
         lo.addStretch()
         return w
 
@@ -960,6 +998,12 @@ class ConfigDialog(QDialog):
         self._save_screenshots_cb.setChecked(dbg.get("save_screenshots", False))
         self._auto_clear_cb.setChecked(dbg.get("auto_clear_screenshots", True))
         self._auto_clear_cb.setEnabled(dbg.get("save_screenshots", False))
+        hk_on = dbg.get("hotkey_enabled", False)
+        self._hk_enabled.setChecked(hk_on)
+        self._on_hk_enabled_toggled(hk_on)
+        self._hk_snapshot.setText(dbg.get("snapshot_hotkey", "Ctrl+Shift+S"))
+        self._hk_periodic.setText(dbg.get("periodic_hotkey", "Ctrl+Shift+D"))
+        self._hk_interval.setValue(dbg.get("periodic_interval", 0.5))
         self._log_mode_cb.setChecked(dbg.get("log_mode", False))
         # log_scope 是 TOML 数组，转成集合后分别设置三个子复选框
         scopes = set(dbg.get("log_scope", ["status", "screenshots", "errors"]))
@@ -1098,6 +1142,15 @@ class ConfigDialog(QDialog):
         解决方案：构建一个全新的 data 字典（独立于 self._config），
         写入文件后，由 _on_reload_config 自己从文件中读出新旧差异。
         """
+        # 热键冲突检查：两个热键不能相同
+        if self._hk_enabled.isChecked():
+            snap = self._hk_snapshot.text()
+            periodic = self._hk_periodic.text()
+            if snap and periodic and snap == periodic:
+                QMessageBox.warning(self, "热键冲突",
+                                    "单次截图和周期截图的热键不能相同，\n请修改后重试。")
+                return
+
         presets = [self._preset_list.item(i).text().strip()
                    for i in range(self._preset_list.count())]
 
@@ -1109,6 +1162,10 @@ class ConfigDialog(QDialog):
             "debug": {
                 "save_screenshots": self._save_screenshots_cb.isChecked(),
                 "auto_clear_screenshots": self._auto_clear_cb.isChecked(),
+                "hotkey_enabled": self._hk_enabled.isChecked(),
+                "snapshot_hotkey": self._hk_snapshot.text(),
+                "periodic_hotkey": self._hk_periodic.text(),
+                "periodic_interval": round(self._hk_interval.value(), 1),
                 "log_mode": self._log_mode_cb.isChecked(),
                 "log_scope": self._get_log_scope(),
             },
@@ -1210,6 +1267,14 @@ class ConfigDialog(QDialog):
             "检测到关键事件时保存截图到 screenshots/")
         _kv("auto_clear_screenshots", dbg.get("auto_clear_screenshots", True),
             "下一局开始时自动清除上一局的截图")
+        _kv("hotkey_enabled", dbg.get("hotkey_enabled", False),
+            "启用截图热键（全局热键，游戏全屏时也可用）")
+        _kv("snapshot_hotkey", dbg.get("snapshot_hotkey", "Ctrl+Shift+S"),
+            "单次截图热键")
+        _kv("periodic_hotkey", dbg.get("periodic_hotkey", "Ctrl+Shift+D"),
+            "周期截图热键（按一下开始，再按停止）")
+        _kv("periodic_interval", dbg.get("periodic_interval", 0.5),
+            "周期截图间隔（秒）")
         _kv("log_mode", dbg.get("log_mode", False),
             "开启日志模式：将运行信息写入 logs/ 目录")
         _kv("log_scope", dbg.get("log_scope", ["status", "screenshots", "errors"]),
@@ -1311,6 +1376,10 @@ class ConfigDialog(QDialog):
             scopes.append("errors")
         return scopes
 
+    def _on_hk_enabled_toggled(self, enabled: bool) -> None:
+        for w in (self._hk_snapshot, self._hk_periodic, self._hk_interval):
+            w.setEnabled(enabled)
+
     def _on_log_mode_toggled(self, enabled: bool) -> None:
         """日志模式开关切换时，联动启用/禁用三个子复选框。
 
@@ -1321,6 +1390,65 @@ class ConfigDialog(QDialog):
         """
         for cb in (self._log_scope_status, self._log_scope_screenshots, self._log_scope_errors):
             cb.setEnabled(enabled)
+
+    def _capture_hotkey(self, target: QLineEdit) -> None:
+        """点击热键输入框 → 进入捕获模式，等待用户按下快捷键。按 Esc 取消。"""
+        self._hk_capture_original = target.text()  # 保存原始值，Esc 时恢复
+        target.setText("按快捷键…（Esc 取消）")
+        target.setFocus()
+        target.keyPressEvent = self._make_hotkey_handler(target)
+
+    def _make_hotkey_handler(self, target: QLineEdit):
+        """生成 keyPressEvent 处理器——把按键组合转为 'Ctrl+Shift+S' 文本。"""
+        def handler(event):
+            key = event.key()
+            # Esc 取消捕获，恢复原值
+            if key == Qt.Key.Key_Escape:
+                original = getattr(self, "_hk_capture_original", "")
+                target.setText(original)
+                # 重新检查与另一个热键的冲突
+                other = self._hk_periodic if target is self._hk_snapshot else self._hk_snapshot
+                if original and other.text() == original:
+                    target.setStyleSheet("color: red;")
+                    other.setStyleSheet("color: red;")
+                else:
+                    target.setStyleSheet("")
+                    other.setStyleSheet("")
+                # 恢复默认 keyPressEvent，退出捕获模式
+                target.keyPressEvent = lambda e: QLineEdit.keyPressEvent(target, e)
+                return
+
+            mods = event.modifiers()
+            parts = []
+            if mods & Qt.KeyboardModifier.ControlModifier:
+                parts.append("Ctrl")
+            if mods & Qt.KeyboardModifier.ShiftModifier:
+                parts.append("Shift")
+            if mods & Qt.KeyboardModifier.AltModifier:
+                parts.append("Alt")
+            if mods & Qt.KeyboardModifier.MetaModifier:
+                parts.append("Win")
+            if Qt.Key.Key_F1 <= key <= Qt.Key.Key_F12:
+                parts.append(f"F{key - Qt.Key.Key_F1 + 1}")
+            elif Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
+                parts.append(chr(key))
+            elif Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
+                parts.append(chr(key))
+            if parts:
+                combo = "+".join(parts)
+                target.setText(combo)
+                other = self._hk_periodic if target is self._hk_snapshot else self._hk_snapshot
+                if other.text() == combo:
+                    target.setStyleSheet("color: red;")
+                    other.setStyleSheet("color: red;")
+                else:
+                    target.setStyleSheet("")
+                    other.setStyleSheet("")
+                target.keyPressEvent = self._make_hotkey_handler(target)
+            else:
+                # 非热键按键（如 Tab），让 Qt 正常处理焦点切换
+                QLineEdit.keyPressEvent(target, event)
+        return handler
 
     @staticmethod
     def _open_screenshots_dir() -> None:

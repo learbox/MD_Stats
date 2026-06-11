@@ -117,6 +117,7 @@ from src.recorder import (
 # capture / stats_worker 延迟导入（启动时才需要 OpenCV，避免程序启动等待 ~260ms）
 from src.theme_loader import Theme, load_theme
 from ui.floating_window import FloatingWindow, _ROW_KEY_MAP
+from ui.hotkey_listener import HotkeyListener
 from ui.theme_manager import ThemeManager, ThemeWidgets
 from ui.titlebar import TitleBar
 
@@ -655,7 +656,13 @@ class MainWindow(QMainWindow):
             )
         self._tray = QSystemTrayIcon(icon, self)
         self._tray.setToolTip("MD Stats")
-        self._tray.activated.connect(self._on_tray_activated)  # 双击托盘显示窗口
+        self._tray.activated.connect(self._on_tray_activated)
+
+        # 截图热键
+        self._periodic_timer: QTimer | None = None
+        self._hotkey_listener = HotkeyListener(self)
+        self._hotkey_listener.hotkey_pressed.connect(self._on_hotkey_pressed)
+        self._hotkey_listener.register_failed.connect(self._on_hotkey_register_failed)
 
         # 托盘右键菜单
         tray_menu = QMenu()
@@ -872,6 +879,9 @@ class MainWindow(QMainWindow):
             if last_deck:
                 self._deck_input.setText(last_deck)
 
+        # 初始化完成后再注册热键（__init__ 早期 _status_label 尚未创建）
+        self._sync_hotkeys()
+
 
     # =========================================================================
     # 底部按钮状态管理
@@ -1022,6 +1032,7 @@ class MainWindow(QMainWindow):
         self._worker.finished.connect(lambda: setattr(self, "_worker", None))
 
         self._worker.start()                     # QThread.start() → 后台线程执行 run()
+        self._sync_hotkeys()
 
         # 更新 UI 状态: 禁用启动、启用停止、锁定卡组、禁用危险按钮
         self._btn_start.setEnabled(False)
@@ -1041,6 +1052,7 @@ class MainWindow(QMainWindow):
             self._worker.stop()
             self._worker.wait(1000)
 
+        self._unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
@@ -1682,6 +1694,7 @@ class MainWindow(QMainWindow):
         if self._config.get("debug", {}).get("log_mode", False):
             _log.init_log(get_project_root() / "logs")
             _log.set_scopes(set(self._config.get("debug", {}).get("log_scope", ["status", "screenshots", "errors"])))
+        self._sync_hotkeys()
         self._tm._config = self._config                    # 同步到 ThemeManager
         new_theme_name = self._config.get("appearance", {}).get("theme", "dark")
         init_active_csv_from_config()
@@ -1912,6 +1925,7 @@ class MainWindow(QMainWindow):
         if self._worker is not None:
             self._worker.stop()
             self._worker.wait(1000)
+        self._unregister_hotkeys()
         QApplication.quit()
 
     def _restore_main_window_pos(self) -> None:
@@ -1929,3 +1943,135 @@ class MainWindow(QMainWindow):
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]
         self._write_app_state(data)
+
+    # =========================================================================
+    # 截图热键（Windows RegisterHotKey + 独立线程消息循环）
+    #
+    # 背景：用户需要截取游戏画面来制作模板图片。之前只能靠"保存检测截图"
+    # 自动截取检测瞬间的画面，不方便主动截取特定 UI。
+    #
+    # 方案：用 Windows 原生 RegisterHotKey API 注册全局热键，即使游戏窗口
+    # 全屏也能响应。通过独立线程的 Windows 消息循环接收 WM_HOTKEY（绕过
+    # PySide6 的 nativeEvent，避免无边框窗口下收不到消息的问题）。
+    #
+    # 两个热键：
+    #   热键 1 — 单次截图：按一次截一张，存 screenshots/screenshot_时间戳.png
+    #   热键 2 — 周期截图：按一下开始定时截、再按一下停止，间隔可配置
+    #
+    # 热键独立于检测启停，由 hotkey_enabled 开关控制（_sync_hotkeys）。
+    # 如果注册失败（如被其他程序占用），状态栏提示用户。
+    # =========================================================================
+
+    def _parse_hotkey(self, combo: str) -> tuple[int, int]:
+        """解析热键字符串为 Windows API 所需的 (修饰键位掩码, 虚拟键码)。
+
+        例如 "Ctrl+Shift+S" → (MOD_CONTROL | MOD_SHIFT = 0x0006, ord('S') = 0x53)
+
+        RegisterHotKey 需要两个参数：
+            fsModifiers — 修饰键的位掩码（MOD_ALT=0x0001, MOD_CONTROL=0x0002,
+                          MOD_SHIFT=0x0004, MOD_WIN=0x0008）
+            vk          — 主键的虚拟键码（A-Z → ord('A')-ord('Z'),
+                          F1-F12 → 0x70-0x7B）
+        """
+        MOD = {"Ctrl": 0x0002, "Shift": 0x0004, "Alt": 0x0001, "Win": 0x0008}
+        keys = combo.split("+")
+        mod = 0
+        vk = 0
+        for k in keys:
+            k = k.strip()
+            if k in MOD:
+                mod |= MOD[k]                    # 累加修饰键位掩码
+            elif len(k) == 1:
+                vk = ord(k.upper())              # 单个字母/数字的虚拟键码
+            else:
+                for i in range(1, 13):           # F1-F12
+                    if k == f"F{i}":
+                        vk = 0x70 + i - 1
+                        break
+        return mod, vk
+
+    def _snapshot_single(self) -> None:
+        """热键 1 回调：截取 Master Duel 窗口并保存到 screenshots/ 目录。
+
+        与自动检测截图不同——此方法不管是否有对局在进行、是否检测到任何
+        事件，直接截取当前窗口。适合用户手动截取特定 UI 画面作为模板。
+        文件名格式：screenshot_20260612_143025_123.png（含毫秒时间戳）。
+        """
+        try:
+            from src import capture as _cap
+            screenshot = _cap.capture_window("masterduel")
+            from datetime import datetime
+            import cv2
+            ss_dir = get_project_root() / "screenshots"
+            ss_dir.mkdir(parents=True, exist_ok=True)
+            h, w = screenshot.shape[:2]
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 去掉最后3位微秒
+            fname = f"screenshot_{w}x{h}_{ts}.png"
+            success, buf = cv2.imencode('.png', screenshot)
+            if success:
+                (ss_dir / fname).write_bytes(buf.tobytes())
+                self._show_status(f"截图已保存: {fname}")
+            else:
+                self._show_status("截图保存失败")
+        except Exception as e:
+            self._show_status(f"截图失败: {e}")
+
+    def _periodic_tick(self) -> None:
+        """周期截图定时器回调：直接复用单次截图逻辑。"""
+        self._snapshot_single()
+
+    def _toggle_periodic(self) -> None:
+        """热键 2 回调：切换周期截图开关。
+
+        第一次按 → 启动 QTimer（间隔取 debug.periodic_interval，默认 0.5s）
+        第二次按 → 停止定时器，不再截图
+        """
+        if self._periodic_timer is not None:
+            self._periodic_timer.stop()
+            self._periodic_timer = None
+            self._show_status("周期截图已停止")
+            return
+        interval = self._config.get("debug", {}).get("periodic_interval", 0.5)
+        self._periodic_timer = QTimer(self)
+        self._periodic_timer.timeout.connect(self._periodic_tick)
+        self._periodic_timer.start(int(interval * 1000))
+        self._show_status(f"周期截图已开始（{interval}s 间隔）")
+
+    def _on_hotkey_pressed(self, hotkey_id: int) -> None:
+        """热键按下回调（由 HotkeyListener 信号触发，在主线程中执行）。"""
+        if hotkey_id == 1:
+            self._snapshot_single()
+        elif hotkey_id == 2:
+            self._toggle_periodic()
+
+    def _on_hotkey_register_failed(self, combo: str) -> None:
+        """热键注册失败回调。"""
+        self._show_status(f"热键 {combo} 注册失败（可能被其他程序占用）")
+
+    def _sync_hotkeys(self) -> None:
+        """根据 hotkey_enabled 开关同步热键注册/注销。独立于检测启停。"""
+        if self._config.get("debug", {}).get("hotkey_enabled", False):
+            self._register_hotkeys()
+        else:
+            self._unregister_hotkeys()
+
+    def _register_hotkeys(self) -> None:
+        """注册全局热键。被占用时状态栏提示。"""
+        cfg = self._config.get("debug", {})
+        hotkeys = []
+        for hid, name in [(1, "snapshot_hotkey"), (2, "periodic_hotkey")]:
+            combo = cfg.get(name, "")
+            if not combo:
+                continue
+            mod, vk = self._parse_hotkey(combo)
+            if vk:
+                hotkeys.append((hid, mod, vk, combo))
+        if hotkeys:
+            self._hotkey_listener.start(hotkeys)
+        if cfg.get("hotkey_enabled", False):
+            self._show_status("截图热键已启用")
+
+    def _unregister_hotkeys(self) -> None:
+        """注销所有热键。"""
+        self._hotkey_listener.stop()
+
