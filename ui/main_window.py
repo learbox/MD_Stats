@@ -1346,11 +1346,11 @@ class MainWindow(QMainWindow):
         """从 .app_state.json 恢复悬浮窗位置。
 
         恢复逻辑:
-            1. 读取保存的位置 → 如果坐标合理（≥ -1000）则恢复
+            1. 读取保存的位置 → 坐标格式有效且在屏幕范围内 → 恢复
             2. 否则居中放置在主屏幕上
         """
         pos = parse_pos(read_app_state().get("float_pos"), min_val=-1000)
-        if pos is not None:
+        if pos is not None and self._is_pos_on_screen(pos[0], pos[1]):
             self._float_window.move(pos[0], pos[1])
             return
         # 兜底: 主屏幕中央
@@ -1776,13 +1776,36 @@ class MainWindow(QMainWindow):
         self._snapshot_ctrl.unregister_hotkeys()
         QApplication.quit()
 
+    @staticmethod
+    def _is_pos_on_screen(x: int, y: int, margin: int = 50) -> bool:
+        """检查坐标 (x, y) 是否在任一屏幕的可见区域内。
+
+        多显示器环境下，保存的位置可能在副屏上。只要坐标落在
+        任意一块屏幕的可见区域内（含 margin 像素容差），就认为有效。
+
+        未找到屏幕信息时（极罕见），保守返回 True，不阻止恢复。
+
+        Args:
+            x:     窗口左上角 X 坐标
+            y:     窗口左上角 Y 坐标
+            margin: 容差像素（窗口边缘可以稍微超出屏幕）
+        """
+        for screen in QApplication.screens():
+            geo = screen.availableGeometry()
+            if (geo.x() - margin <= x <= geo.x() + geo.width() + margin and
+                    geo.y() - margin <= y <= geo.y() + geo.height() + margin):
+                return True
+        return False
+
     def _restore_main_window_pos(self) -> None:
         """从 .app_state.json 恢复主窗口位置。
 
-        坐标验证: x ≥ -100, y ≥ -100（越界或负太多说明是异常值，不恢复）。
+        恢复逻辑:
+            1. 读取保存的位置 → 坐标格式有效（x ≥ -100）且在屏幕范围内 → 恢复
+            2. 否则不恢复（使用 Qt 默认位置，通常在主屏幕中央）
         """
         pos = parse_pos(read_app_state().get("main_pos"))
-        if pos is not None:
+        if pos is not None and self._is_pos_on_screen(pos[0], pos[1]):
             self.move(pos[0], pos[1])
 
     def _save_main_window_pos(self) -> None:
