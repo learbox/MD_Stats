@@ -650,7 +650,7 @@ class MainWindow(QMainWindow):
         self._btn_lock_deck.setText("锁定卡组")  # 初始: 输入框未锁定
         self._stats_table      = _require_widget(content.findChild(QTableWidget, "stats_table"), "stats_table")
         self._record_table     = _require_widget(content.findChild(QTableWidget, "record_table"), "record_table")
-        self._btn_reload       = _require_widget(content.findChild(QPushButton, "btn_reload"), "btn_reload")
+        self._btn_reload       = _require_widget(content.findChild(QToolButton, "btn_reload"), "btn_reload")
         self._btn_copy         = _require_widget(content.findChild(QPushButton, "btn_copy"), "btn_copy")
         self._btn_delete_last  = _require_widget(content.findChild(QToolButton, "btn_delete_last"), "btn_delete_last")
         self._btn_about        = _require_widget(content.findChild(QPushButton, "btn_about"), "btn_about")
@@ -674,6 +674,11 @@ class MainWindow(QMainWindow):
         self._btn_undo.clicked.connect(self._on_undo)
         self._btn_lock_deck.clicked.connect(self._on_toggle_deck_lock)
         self._btn_reload.clicked.connect(self._on_load_data)
+
+        # QToolButton MenuButtonPopup 模式：左侧点击加载数据，右侧箭头弹出菜单
+        reload_menu = QMenu(self._btn_reload)
+        reload_menu.addAction("备份数据", self._on_backup_data)
+        self._btn_reload.setMenu(reload_menu)
         self._btn_copy.clicked.connect(self._copy_to_clipboard)
         self._btn_delete_last.clicked.connect(self._on_delete_last)
 
@@ -755,6 +760,7 @@ class MainWindow(QMainWindow):
             btn_start=self._btn_start,
             btn_stop=self._btn_stop,
             btn_delete_last=self._btn_delete_last,
+            btn_reload=self._btn_reload,
             title_bar=self._title_bar,
             status_frame=self._status_frame,
             content=self._content,
@@ -823,6 +829,39 @@ class MainWindow(QMainWindow):
         set_active_csv(filename)                # 切换到新文件
         self._reload_tables()                   # 重新读取并刷新
         self._show_status(f"已加载: {filename}")
+
+    def _on_backup_data(self) -> None:
+        """备份当前活跃 CSV 文件到新文件。
+
+        弹出保存对话框，默认文件名为原文件名加 new 后缀（如 datanew.csv），
+        默认目录为当前 CSV 所在目录。保存后询问用户是否切换到备份文件。
+        """
+        current_path = get_active_csv_path()
+        # 默认文件名：原文件名加 new，如 data.csv → datanew.csv
+        stem = current_path.stem
+        default_name = f"{stem}new.csv"
+
+        csv_dir = str(current_path.parent.resolve())
+        path, _ = QFileDialog.getSaveFileName(
+            self, "备份数据", str(Path(csv_dir) / default_name),
+            "CSV 文件 (*.csv);;所有文件 (*)",
+        )
+        if not path:
+            return
+
+        # 复制当前 CSV 到目标路径
+        import shutil
+        shutil.copy2(str(current_path), path)
+
+        saved_name = Path(path).name
+        self._show_status(f"已备份: {saved_name}")
+
+        # 询问是否切换到备份文件
+        if self._ask_yes_no("切换数据文件",
+                            f"备份已保存为 {saved_name}。\n\n是否切换到该文件？"):
+            set_active_csv(saved_name)
+            self._reload_tables()
+            self._show_status(f"已切换到: {saved_name}")
 
     # =========================================================================
     # 启动 / 停止识别

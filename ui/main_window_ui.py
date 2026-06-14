@@ -118,8 +118,9 @@ class Ui_MainWindow(object):
         self.bottomLayout.setSpacing(10)
         self.bottomLayout.setObjectName(u"bottomLayout")
         self.bottomLayout.setContentsMargins(14, 6, 14, 6)
-        self.btn_reload = QPushButton(self.bottomPanel)
+        self.btn_reload = QToolButton(self.bottomPanel)
         self.btn_reload.setObjectName(u"btn_reload")
+        self.btn_reload.setPopupMode(QToolButton.MenuButtonPopup)
 
         self.bottomLayout.addWidget(self.btn_reload)
 

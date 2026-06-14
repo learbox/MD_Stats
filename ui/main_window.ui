@@ -214,9 +214,12 @@
        <number>6</number>
       </property>
       <item>
-       <widget class="QPushButton" name="btn_reload">
+       <widget class="QToolButton" name="btn_reload">
         <property name="text">
          <string>加载数据</string>
+        </property>
+        <property name="popupMode">
+         <enum>QToolButton::MenuButtonPopup</enum>
         </property>
        </widget>
       </item>
