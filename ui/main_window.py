@@ -853,6 +853,7 @@ class MainWindow(QMainWindow):
             else:
                 # 直接关弹窗 → 视为取消
                 return False
+        return False  # 不可达，消除类型检查器误报
 
     def _on_load_data(self) -> None:
         """弹出文件对话框切换活跃 CSV 数据文件。
