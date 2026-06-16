@@ -1168,23 +1168,9 @@ class MainWindow(QMainWindow):
         else:
             self._show_status(f"{result_text} 暂存失败 — 请关闭占用 CSV 的程序")
 
-        # 系统气泡通知（在 reset 之后弹，但内容用之前缓存的值）
-        if self._config.get("notification", {}).get("enabled", False):
-            coin_text = "赢硬币" if coin_cache == "win" else "输硬币"
-            rank_text = ""
-            if rank_cache == "up":
-                rank_text = "（升段局）"
-            elif rank_cache == "down":
-                rank_text = "（降段局）"
-            turn_text = "先攻" if turn_cache == "first" else "后攻"
-            msg = f"{coin_text}{rank_text} → {turn_text} → {result_text}"
-            if new_record is None:
-                msg += "\n⚠ CSV 文件被占用，记录已暂存"
-            duration = self._config.get("notification", {}).get("duration", 5) * 1000
-            self._tray.showMessage("MD Stats", msg,
-                                   QSystemTrayIcon.MessageIcon.Warning if new_record is None
-                                   else QSystemTrayIcon.MessageIcon.Information,
-                                   duration)
+        # 系统气泡通知
+        self._notify_result(coin_cache, turn_cache, rank_cache,
+                            result_text, new_record)
 
     # =========================================================================
     # 卡组输入锁定
@@ -1270,22 +1256,30 @@ class MainWindow(QMainWindow):
                 self._show_status(f"手动添加: {result_text} — 暂存失败，请关闭占用 CSV 的程序")
 
             # 系统气泡通知
-            if self._config.get("notification", {}).get("enabled", False):
-                coin_text = "赢硬币" if coin_cache == "win" else "输硬币"
-                rank_text = ""
-                if rank_cache == "up":
-                    rank_text = "（升段局）"
-                elif rank_cache == "down":
-                    rank_text = "（降段局）"
-                turn_text = "先攻" if turn_cache == "first" else "后攻"
-                msg = f"{coin_text}{rank_text} → {turn_text} → {result_text}"
-                if new_record is None:
-                    msg += "\n⚠ CSV 文件被占用，记录已暂存"
-                duration = self._config.get("notification", {}).get("duration", 5) * 1000
-                self._tray.showMessage("MD Stats", msg,
-                                       QSystemTrayIcon.MessageIcon.Warning if new_record is None
-                                       else QSystemTrayIcon.MessageIcon.Information,
-                                       duration)
+            self._notify_result(coin_cache, turn_cache, rank_cache,
+                                result_text, new_record)
+
+    def _notify_result(self, coin_cache: str, turn_cache: str,
+                       rank_cache: str, result_text: str,
+                       new_record: dict | None) -> None:
+        """对局结束时弹出系统气泡通知。"""
+        if not self._config.get("notification", {}).get("enabled", False):
+            return
+        coin_text = "赢硬币" if coin_cache == "win" else "输硬币"
+        rank_text = ""
+        if rank_cache == "up":
+            rank_text = "（升段局）"
+        elif rank_cache == "down":
+            rank_text = "（降段局）"
+        turn_text = "先攻" if turn_cache == "first" else "后攻"
+        msg = f"{coin_text}{rank_text} → {turn_text} → {result_text}"
+        if new_record is None:
+            msg += "\n⚠ CSV 文件被占用，记录已暂存"
+        duration = self._config.get("notification", {}).get("duration", 5) * 1000
+        self._tray.showMessage("MD Stats", msg,
+                               QSystemTrayIcon.MessageIcon.Warning if new_record is None
+                               else QSystemTrayIcon.MessageIcon.Information,
+                               duration)
 
     def _on_undo(self) -> None:
         """撤销上一阶段的选择，逐级回退并同步 worker。"""
@@ -1529,14 +1523,7 @@ class MainWindow(QMainWindow):
         cfg = self._config.get("floating_window", {})
         rows = cfg.get("rows")  # 用户自定义行；空列表或 None → FloatingWindow 内部使用默认行
         self._float_window = FloatingWindow(rows=rows if rows else None)
-        # 如果开启了"使用主题背景图"且主题有背景资源，取主题的 float_bg 路径
-        float_bg = None
-        if cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
-            float_bg = self._tm.pixmap_paths.get("__float_bg__")
-        # 先 update_style（设置样式 + resize），再 enable_status
-        # 这样 update_style 的 resize 能正确计算内容高度
-        self._float_window.update_style(cfg, float_bg_path=float_bg)
-        self._float_window.enable_status(cfg.get("show_status", False))
+        self._apply_float_style(cfg)
         self._refresh_float_window()                   # 填入当前统计数据
         self._restore_float_window_pos()               # 恢复上次位置
         self._float_window.show()
@@ -1572,6 +1559,14 @@ class MainWindow(QMainWindow):
                 geo.x() + (geo.width() - sz.width()) // 2,
                 geo.y() + (geo.height() - sz.height()) // 2,
             )
+
+    def _apply_float_style(self, cfg: dict) -> None:
+        """应用悬浮窗样式：获取主题背景图 + update_style + enable_status。"""
+        float_bg = None
+        if cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
+            float_bg = self._tm.pixmap_paths.get("__float_bg__")
+        self._float_window.update_style(cfg, float_bg_path=float_bg)
+        self._float_window.enable_status(cfg.get("show_status", False))
 
     def _refresh_float_window(self) -> None:
         """用当前统计表格数据刷新悬浮窗内容。
@@ -1778,13 +1773,7 @@ class MainWindow(QMainWindow):
             else:
                 if new_rows:
                     self._float_window.set_rows(new_rows)
-                float_bg = None
-                if new_cfg.get("use_theme_bg", False) and self._tm.pixmap_paths:
-                    float_bg = self._tm.pixmap_paths.get("__float_bg__")
-                # 先 update_style（设置样式 + resize），再 enable_status
-                # 这样 update_style 的 resize 能正确计算内容高度
-                self._float_window.update_style(new_cfg, float_bg_path=float_bg)
-                self._float_window.enable_status(new_cfg.get("show_status", False))
+                self._apply_float_style(new_cfg)
                 self._refresh_float_window()
 
         # 对方卡组预设更新
