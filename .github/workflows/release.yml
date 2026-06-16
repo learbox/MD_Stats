@@ -125,6 +125,7 @@ jobs:
           Copy-Item config.toml $release
           Copy-Item .app_state.json $release
           Copy-Item docs/README_release.md "$release/README.md"
+          Copy-Item docs/TROUBLESHOOTING.md $release
           Copy-Item LICENSE $release
           Get-ChildItem -Path $release -Recurse -Include __pycache__ -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           Get-ChildItem -Path $release -Recurse -Filter *.pyc -Force | Remove-Item -Force -ErrorAction SilentlyContinue

@@ -46,6 +46,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.config import get_project_root, load_config
+from src import logger as _log
 
 # ---------------------------------------------------------------------------
 # CSV 文件路径
@@ -55,6 +56,10 @@ _CSV_DIR = get_project_root() / "csv"
 # 活跃 CSV 文件路径 — 由 set_active_csv() / init_active_csv_from_config() 设置。
 # 所有读写操作均使用此变量。
 _active_csv_path: Path = _CSV_DIR / "data.csv"
+
+# 暂存队列 — 当 CSV 被其他程序（如 WPS/Excel）占用导致写入失败时，
+# 将未能写入的记录暂存在内存中，等下次文件可用时自动补写。
+_pending_records: list[dict[str, str]] = []
 
 # ---------------------------------------------------------------------------
 # CSV 表头定义
@@ -108,6 +113,62 @@ def get_active_csv_path() -> Path:
     return _active_csv_path
 
 
+def get_pending_count() -> int:
+    """返回暂存队列中的记录数（因文件占用等原因未能写入）。"""
+    return len(_pending_records)
+
+
+def clear_pending() -> int:
+    """清空暂存队列（用户确认切换文件且放弃暂存时调用）。
+
+    Returns:
+        被清空的记录数。
+    """
+    global _pending_records
+    count = len(_pending_records)
+    _pending_records.clear()
+    if count > 0:
+        _log.write("CSVOK", f"已清空暂存队列: {count} 条")
+    return count
+
+
+def get_pending_records() -> list[dict[str, str]]:
+    """返回暂存队列的浅拷贝，供 GUI 显示提醒。"""
+    return list(_pending_records)
+
+
+def try_flush_pending() -> bool:
+    """尝试将暂存队列中的记录写入 CSV 文件。
+
+    从 CSV 加载现有记录，将 pending 记录追加到末尾并重新编号序号，
+    然后尝试全量写回。写入成功则清空暂存队列。
+
+    此函数在 add_record() 被调用时自动执行，也可由外部（如用户点击
+    "重试写入"按钮）手动调用。
+
+    Returns:
+        True  — 暂存记录全部写入成功（或队列本为空）
+        False — 写入失败，暂存记录保留在内存中
+    """
+    global _pending_records
+    if not _pending_records:
+        return True
+    records = load_records()
+    # 重新编排序号：CSV 已有记录 + pending 记录统一编号
+    next_seq = len(records) + 1
+    for rec in _pending_records:
+        rec["序号"] = str(next_seq)
+        next_seq += 1
+    records.extend(_pending_records)
+    if save_records(records):
+        count = len(_pending_records)
+        _pending_records.clear()
+        _log.write("CSVOK", f"暂存记录已补写: {count} 条")
+        return True
+    _log.write("ERROR", f"暂存记录补写失败，仍保留 {len(_pending_records)} 条")
+    return False
+
+
 def _ensure_csv() -> None:
     """确保活跃 CSV 文件及其所在目录存在，且文件包含正确的表头。
 
@@ -158,7 +219,7 @@ def load_records() -> list[dict[str, str]]:
     return records
 
 
-def save_records(records: list[dict[str, str]]) -> None:
+def save_records(records: list[dict[str, str]]) -> bool:
     """将所有对局记录写入 CSV 文件（全量覆写）。
 
     先写临时文件，成功后再原子替换目标文件。这样即使写入中途
@@ -166,6 +227,10 @@ def save_records(records: list[dict[str, str]]) -> None:
 
     Args:
         records: 完整的对局记录列表，每条为字典。
+
+    Returns:
+        True  — 写入成功
+        False — 写入失败（文件被占用 / 权限不足 / 磁盘满等），原 CSV 不受影响
     """
     import os
     import tempfile
@@ -181,13 +246,15 @@ def save_records(records: list[dict[str, str]]) -> None:
                 writer.writerow(rec)
         # 写入成功 → 原子替换
         os.replace(tmp_path, csv_path)
-    except BaseException:
+        return True
+    except Exception as e:
         # 写入失败 → 清理临时文件，原 CSV 不受影响
         try:
             os.unlink(tmp_path)
         except OSError:
             pass
-        raise
+        _log.write("ERROR", f"CSV 保存失败: {e}")
+        return False
 
 
 def add_record(
@@ -198,40 +265,25 @@ def add_record(
     opponent_deck: str = "",
     notes: str = "",
     rank: str = "",
-) -> dict[str, str]:
+) -> dict[str, str] | None:
     """添加一条新的对局记录到 CSV 文件。
 
-    此函数会:
-        1. 加载现有所有记录
-        2. 自动填充序号（当前记录数 + 1）
-        3. 自动填充日期和时间（调用时的本地时间）
-        4. 将内部代码转换为中文显示
-        5. 追加新记录到列表末尾
-        6. 全量写回 CSV
+    暂存记录和本次记录合并为一次写入，减少磁盘 I/O。
 
-    Args:
-        coin_win:      硬币结果，'win' / 'lose'（来自图像识别），
-                       或直接传中文 "是" / "否"。
-        turn:          先后攻，'first' / 'second'（来自图像识别），
-                       或直接传中文 "先攻" / "后攻"。
-        result:        对局结果，'win' / 'lose'（来自图像识别），
-                       或直接传中文 "胜" / "负"。
-        deck:          玩家使用的卡组名称。
-        opponent_deck: 对手使用的卡组名称（可选）。
-        notes:         备注信息（可选）。
-        rank:          段位升降结果，'up' / 'down' / ''（来自 detect_rank）。
-                       也可直接传中文 "升段" / "降段"。默认空字符串表示普通局。
+    如果写入失败（如文件被 WPS/Excel 占用），本次记录存入暂存队列，
+    之前已在队列中的暂存记录保持不变，下次一起重试。
 
     Returns:
-        新添加的记录字典。
+        成功时返回新记录字典，失败时返回 None。
 
-    内部代码到中文的映射:
+    内部代码 → 中文映射:
         - coin_win: 'win' → "是", 'lose' → "否"
         - turn:     'first' → "先攻", 'second' → "后攻"
         - result:   'win' → "胜", 'lose' → "负"
         - rank:     'up' → "升段", 'down' → "降段"
-        如果传入的值不在映射表中，保持原值不变（以支持手动输入的中文）。
     """
+    global _pending_records
+
     records = load_records()
 
     # 内部代码 → 中文映射
@@ -256,9 +308,10 @@ def add_record(
             )
         return raw
 
+    # 构造本次新记录（序号先占位，写入前统一编号）
     now = datetime.now()
     new_record = {
-        "序号": str(len(records) + 1),
+        "序号": "",  # 统一编号时填充
         "日期": now.strftime("%Y-%m-%d"),
         "时间": now.strftime("%H:%M:%S"),
         "使用卡组": deck,
@@ -269,9 +322,30 @@ def add_record(
         "段位升降": _map_or_warn("段位升降", rank),
         "备注": notes,
     }
-    records.append(new_record)
-    save_records(records)
-    return new_record
+
+    # 合并：CSV 已有记录 + 暂存记录 + 本次新记录，统一编号一次写入
+    to_write = list(records)
+    seq = len(records) + 1
+    for rec in _pending_records:
+        rec["序号"] = str(seq)
+        seq += 1
+        to_write.append(rec)
+    new_record["序号"] = str(seq)
+    to_write.append(new_record)
+
+    if save_records(to_write):
+        count = len(_pending_records)
+        _pending_records.clear()
+        if count > 0:
+            _log.write("CSVOK", f"暂存记录已补写: {count} 条")
+        return new_record
+
+    # 写入失败 → 本次记录加入暂存队列（旧暂存保持不动）
+    _pending_records.append(new_record)
+    _log.write("ERROR",
+        f"CSV 写入失败，记录已暂存 (pending: {len(_pending_records)} 条)"
+    )
+    return None
 
 
 def compute_stats(records: list[dict[str, str]]) -> list[dict[str, str | int]]:

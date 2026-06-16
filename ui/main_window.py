@@ -110,14 +110,17 @@ from src.snapshot_controller import SnapshotController
 from src import logger as _log
 from src.recorder import (
     add_record,
+    clear_pending,
     COLUMNS as RECORD_COLUMNS,
     compute_stats,
     get_active_csv_path,
+    get_pending_count,
     init_active_csv_from_config,
     load_records,
     save_records,
     set_active_csv,
     STATS_COLUMNS,
+    try_flush_pending,
 )
 # capture / stats_worker 延迟导入（启动时才需要 OpenCV，避免程序启动等待 ~260ms）
 from src.theme_loader import Theme, load_theme
@@ -319,7 +322,13 @@ class MainWindow(QMainWindow):
     # =========================================================================
 
     def _show_status(self, msg: str) -> None:
-        """更新状态栏消息（左下角的文字）+ 同步到悬浮窗状态行。"""
+        """更新状态栏消息（左下角的文字）+ 同步到悬浮窗状态行。
+
+        如果有暂存记录（CSV 文件被占用），自动在消息末尾追加警告。
+        """
+        pending = get_pending_count()
+        if pending > 0:
+            msg = f"{msg}  |  ⚠ 文件被占用，{pending} 条暂存"
         self._status_label.setText(msg)
         if self._float_window is not None:
             self._float_window.update_status(msg)
@@ -807,11 +816,47 @@ class MainWindow(QMainWindow):
     # CSV 数据加载
     # =========================================================================
 
+    def _check_pending_before_switch(self, action: str) -> bool:
+        """切换/备份/新建前统一拦截：有暂存记录则先尝试写入。
+
+        三选一弹窗：重试写入 / 取消操作 / 放弃暂存并继续。
+        返回 True 继续操作，False 取消。
+        """
+        pending = get_pending_count()
+        if pending == 0:
+            return True
+        if try_flush_pending():
+            return True
+        while True:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("暂存记录无法写入")
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setText(f"有 {pending} 条暂存记录因 CSV 被占用无法写入。")
+            msg.setInformativeText("请关闭占用该文件的程序（如 WPS、Excel），\n然后点击「重试写入」。")
+            retry_btn = msg.addButton("重试写入", QMessageBox.ButtonRole.AcceptRole)
+            cancel_btn = msg.addButton(f"取消{action}", QMessageBox.ButtonRole.RejectRole)
+            discard_btn = msg.addButton("放弃暂存并继续", QMessageBox.ButtonRole.DestructiveRole)
+            msg.setDefaultButton(retry_btn)
+            msg.exec()
+            clicked = msg.clickedButton()
+            if clicked == retry_btn:
+                if try_flush_pending():
+                    return True
+                pending = get_pending_count()
+                if pending == 0:
+                    return True
+                continue
+            elif clicked == cancel_btn:
+                return False
+            else:
+                clear_pending()
+                return True
+
     def _on_load_data(self) -> None:
         """弹出文件对话框切换活跃 CSV 数据文件。
 
         运行时切换 CSV 需用户确认（避免当前对局记录写入错误文件）。
-        选择后切换活跃文件并刷新所有表格。
+        如有暂存记录，操作前先拦截处理。
         """
         if self._worker is not None:
             if not self._ask_yes_no(
@@ -819,6 +864,9 @@ class MainWindow(QMainWindow):
                 "识别正在运行，切换数据文件可能导致\n当前对局记录写入错误的文件。\n\n确定要切换吗？",
             ):
                 return
+
+        if not self._check_pending_before_switch("切换"):
+            return
 
         csv_dir = str(get_active_csv_path().parent.resolve())
         path, _ = QFileDialog.getOpenFileName(
@@ -835,11 +883,12 @@ class MainWindow(QMainWindow):
     def _on_backup_data(self) -> None:
         """备份当前活跃 CSV 文件到新文件。
 
-        弹出保存对话框，默认文件名为 bak_ 前缀加原文件名（如 bak_data.csv），
-        默认目录为当前 CSV 所在目录。保存后询问用户是否切换到备份文件。
+        操作前先拦截暂存记录（确保备份包含最新数据），再复制并切换。
         """
+        if not self._check_pending_before_switch("备份"):
+            return
+
         current_path = get_active_csv_path()
-        # 默认文件名：bak_ 前缀加原文件名，如 data.csv → bak_data.csv
         stem = current_path.stem
         default_name = f"bak_{stem}.csv"
 
@@ -850,15 +899,12 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        saved_name = Path(path).name
 
-        # 复制当前 CSV 到目标路径
         import shutil
         shutil.copy2(str(current_path), path)
-
-        saved_name = Path(path).name
         self._show_status(f"已备份: {saved_name}")
 
-        # 询问是否切换到备份文件
         if self._ask_yes_no("切换数据文件",
                             f"备份已保存为 {saved_name}。\n\n是否切换到该文件？"):
             set_active_csv(saved_name)
@@ -868,10 +914,11 @@ class MainWindow(QMainWindow):
     def _on_new_data(self) -> None:
         """新建空白 CSV 数据文件并询问是否切换。
 
-        弹出保存对话框，默认文件名为 new_data.csv 或 new_data-YYYY-MM-DD.csv
-        （取决于 daily_files 配置），默认目录为当前 CSV 所在目录。
-        保存后询问用户是否切换到新文件。
+        操作前先拦截暂存记录，再创建新文件并切换。
         """
+        if not self._check_pending_before_switch("新建"):
+            return
+
         cfg = load_config()
         daily = cfg.get("recorder", {}).get("daily_files", False)
         if daily:
@@ -888,7 +935,6 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        # 在用户选定的路径写入表头，创建空 CSV
         import csv as csv_mod
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", newline="", encoding="utf-8") as f:
@@ -897,7 +943,6 @@ class MainWindow(QMainWindow):
         saved_name = Path(path).name
         self._show_status(f"已新建: {saved_name}")
 
-        # 询问是否切换到新文件
         if self._ask_yes_no("切换数据文件",
                             f"空白文件已创建: {saved_name}。\n\n是否切换到该文件？"):
             set_active_csv(saved_name)
@@ -1093,12 +1138,12 @@ class MainWindow(QMainWindow):
 
         仅当手动尚未抢先选择时生效（stage == 2 才处理）。
         写入 CSV 后重置状态机回到阶段0，等待下一局。
+
+        如果 CSV 文件被其他程序占用（如 WPS/Excel），记录会暂存到内存，
+        等下次文件可用时自动补写，状态机正常前进不会卡住。
         """
         if self._match.stage != 2:
             return
-        add_record(coin_win=self._match.coin_cache, turn=self._match.turn_cache,
-                   result=result, deck=self._deck_input.text().strip(),
-                   rank=self._match.rank_cache)
 
         # 先提取通知所需信息，再 reset（reset 会清空缓存）
         cached = self._match.snapshot()
@@ -1107,9 +1152,19 @@ class MainWindow(QMainWindow):
         rank_cache = cached["rank"]
         result_text = "胜" if result == "win" else "负"
 
+        new_record = add_record(coin_win=self._match.coin_cache,
+                                turn=self._match.turn_cache,
+                                result=result,
+                                deck=self._deck_input.text().strip(),
+                                rank=self._match.rank_cache)
+
         self._reset_stage()
         self._reload_tables()
-        self._show_status(f"已记录: {result_text} — 等待下一局…")
+
+        if new_record is not None:
+            self._show_status(f"已记录: {result_text} — 等待下一局…")
+        else:
+            self._show_status(f"{result_text} 暂存失败 — 请关闭占用 CSV 的程序")
 
         # 系统气泡通知（在 reset 之后弹，但内容用之前缓存的值）
         if self._config.get("notification", {}).get("enabled", False):
@@ -1121,8 +1176,13 @@ class MainWindow(QMainWindow):
                 rank_text = "（降段局）"
             turn_text = "先攻" if turn_cache == "first" else "后攻"
             msg = f"{coin_text}{rank_text} → {turn_text} → {result_text}"
+            if new_record is None:
+                msg += "\n⚠ CSV 文件被占用，记录已暂存"
             duration = self._config.get("notification", {}).get("duration", 5) * 1000
-            self._tray.showMessage("MD Stats", msg, QSystemTrayIcon.MessageIcon.Information, duration)
+            self._tray.showMessage("MD Stats", msg,
+                                   QSystemTrayIcon.MessageIcon.Warning if new_record is None
+                                   else QSystemTrayIcon.MessageIcon.Information,
+                                   duration)
 
     # =========================================================================
     # 卡组输入锁定
@@ -1188,13 +1248,42 @@ class MainWindow(QMainWindow):
 
         elif self._match.stage == 2:
             # 阶段2: 选择胜/负 → 完成一局，写入 CSV
-            add_record(coin_win=self._match.coin_cache, turn=self._match.turn_cache,
-                       result=side, deck=self._deck_input.text().strip())
+            new_record = add_record(coin_win=self._match.coin_cache,
+                                    turn=self._match.turn_cache,
+                                    result=side,
+                                    deck=self._deck_input.text().strip(),
+                                    rank=self._match.rank_cache)
+            # 先提取通知信息，再 reset
+            cached = self._match.snapshot()
+            coin_cache = cached["coin"]
+            turn_cache = cached["turn"]
+            rank_cache = cached["rank"]
+            result_text = "胜" if side == "win" else "负"
             self._reset_stage()
             self._sync_worker_stage()
             self._reload_tables()
-            result_text = "胜" if side == "win" else "负"
-            self._show_status(f"手动添加: {result_text} — 已写入 CSV")
+            if new_record is not None:
+                self._show_status(f"手动添加: {result_text} — 已写入 CSV")
+            else:
+                self._show_status(f"手动添加: {result_text} — 暂存失败，请关闭占用 CSV 的程序")
+
+            # 系统气泡通知
+            if self._config.get("notification", {}).get("enabled", False):
+                coin_text = "赢硬币" if coin_cache == "win" else "输硬币"
+                rank_text = ""
+                if rank_cache == "up":
+                    rank_text = "（升段局）"
+                elif rank_cache == "down":
+                    rank_text = "（降段局）"
+                turn_text = "先攻" if turn_cache == "first" else "后攻"
+                msg = f"{coin_text}{rank_text} → {turn_text} → {result_text}"
+                if new_record is None:
+                    msg += "\n⚠ CSV 文件被占用，记录已暂存"
+                duration = self._config.get("notification", {}).get("duration", 5) * 1000
+                self._tray.showMessage("MD Stats", msg,
+                                       QSystemTrayIcon.MessageIcon.Warning if new_record is None
+                                       else QSystemTrayIcon.MessageIcon.Information,
+                                       duration)
 
     def _on_undo(self) -> None:
         """撤销上一阶段的选择，逐级回退并同步 worker。"""
@@ -1352,7 +1441,9 @@ class MainWindow(QMainWindow):
                 break
 
         if updated:
-            save_records(records)            # 全量写回
+            if not save_records(records):        # 全量写回
+                self._show_status("修改失败 — CSV 文件被占用，请关闭 WPS/Excel 后重试")
+                return
             self._refresh_stats_table()      # 刷新统计
 
     # =========================================================================
@@ -1362,8 +1453,7 @@ class MainWindow(QMainWindow):
     def _on_delete_last(self) -> None:
         """删除最后一条对战记录，需用户确认。
 
-        确认后加载 CSV → 删除最后一条 → 写回 → 刷新表格。
-        记录为空时静默忽略。
+        只操作 CSV 文件，不触发暂存记录补写（补写只在对局结束时自动发生）。
         """
         records = load_records()
         if not records:
@@ -1376,30 +1466,43 @@ class MainWindow(QMainWindow):
         coin = "赢硬币" if last.get("赢硬币") == "是" else "输硬币"
         detail = f"{deck} / {coin} / {result}" if deck else f"{coin} / {result}"
 
-        if not self._ask_yes_no("确认删除", f"确定要删除最后一条记录吗？\n\n{detail}"):
+        confirm_text = f"确定要删除最后一条记录吗？\n\n{detail}"
+        pending = get_pending_count()
+        if pending > 0:
+            confirm_text += f"\n\n（注意：内存中有 {pending} 条暂存记录尚未写入 CSV，不受本次删除影响）"
+
+        if not self._ask_yes_no("确认删除", confirm_text):
             return
 
         records.pop()
-        save_records(records)
+        if not save_records(records):
+            self._show_status("删除失败 — CSV 文件被占用，请关闭 WPS/Excel 后重试")
+            return
         self._reload_tables()
         self._show_status(f"已删除最后记录: {detail}")
 
     def _on_delete_all_records(self) -> None:
         """删除全部对战记录 — 二次确认防止误删。
 
-        确认后加载 CSV → 清空 → 写回空文件 → 刷新表格。
-        记录为空时静默忽略。
+        只操作 CSV 文件，不触发暂存记录补写。
         """
+        # 暂存记录不受删除影响，等下次对局结束时自动补写
         records = load_records()
         if not records:
             self._show_status("没有记录可删除")
             return
 
-        if not self._ask_yes_no("确认删除全部",
-                                 f"确定要删除全部 {len(records)} 条记录吗？\n\n此操作不可恢复。"):
+        confirm_text = f"确定要删除全部 {len(records)} 条记录吗？\n\n此操作不可恢复。"
+        pending = get_pending_count()
+        if pending > 0:
+            confirm_text += f"\n\n（注意：内存中有 {pending} 条暂存记录尚未写入 CSV，不受本次删除影响）"
+
+        if not self._ask_yes_no("确认删除全部", confirm_text):
             return
 
-        save_records([])
+        if not save_records([]):
+            self._show_status("删除失败 — CSV 文件被占用，请关闭 WPS/Excel 后重试")
+            return
         self._reload_tables()
         self._show_status(f"已删除全部 {len(records)} 条记录")
 
@@ -1839,7 +1942,7 @@ class MainWindow(QMainWindow):
 
     def _quit_app(self) -> None:
         """托盘右键退出：绕过托盘模式，直接保存状态并退出。"""
-        self._real_close()
+        self._real_close()  # 返回值忽略，托盘退出不阻止
 
     def closeEvent(self, event: Any) -> None:
         """关闭窗口：最小化到托盘模式 → 隐藏，否则正常退出。"""
@@ -1849,11 +1952,16 @@ class MainWindow(QMainWindow):
                                    QSystemTrayIcon.MessageIcon.Information, 1500)
             event.ignore()
         else:
-            self._real_close()
+            if not self._real_close():
+                event.ignore()  # 用户取消退出（如点「不退出」）
 
-    def _real_close(self) -> None:
-        """绕过托盘模式强制退出：保存状态 → 停止线程 → 退出。"""
-        # ---- 1. 持久化所有运行时状态到 .app_state.json ----
+    def _real_close(self) -> bool:
+        """绕过托盘模式强制退出：保存状态 → 停止线程 → 退出。
+
+        Returns:
+            True  — 已执行退出流程
+            False — 用户取消退出（如点「不退出」）
+        """
         data = read_app_state()
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]
@@ -1868,7 +1976,61 @@ class MainWindow(QMainWindow):
         data["splitter"] = self._splitter.sizes()
         write_app_state(data)
 
-        # ---- 2. 停止所有定时器和后台线程 ----
+        # ---- 2. 尝试写入暂存记录，失败则让用户选择 ----
+        pending = get_pending_count()
+        if pending > 0:
+            if try_flush_pending():
+                pass  # 补写成功，静默处理
+            else:
+                # 补写仍失败 → 弹窗让用户选择：重试 / 不退出 / 强制退出
+                while True:
+                    msg = QMessageBox(self)
+                    msg.setWindowTitle("记录丢失警告")
+                    msg.setIcon(QMessageBox.Icon.Warning)
+                    msg.setText(
+                        f"有 {pending} 条对局记录因 CSV 文件被占用而无法写入。\n\n"
+                        f"文件: {get_active_csv_path().name}"
+                    )
+                    msg.setInformativeText(
+                        "请关闭占用该文件的程序（如 WPS、Excel），\n"
+                        "然后点击「重试写入」保存记录。"
+                    )
+                    retry_btn = msg.addButton("重试写入", QMessageBox.ButtonRole.AcceptRole)
+                    cancel_btn = msg.addButton("不退出", QMessageBox.ButtonRole.RejectRole)
+                    force_btn = msg.addButton("强制退出（丢失记录）", QMessageBox.ButtonRole.DestructiveRole)
+                    msg.setDefaultButton(retry_btn)
+                    msg.exec()
+                    clicked = msg.clickedButton()
+                    if clicked == retry_btn:
+                        if try_flush_pending():
+                            break  # 写入成功，退出循环继续退出流程
+                        # 写入仍失败 → 更新 pending 数量，再弹一次
+                        pending = get_pending_count()
+                        if pending == 0:  # 理论上不会，但安全起见
+                            break
+                        continue
+                    elif clicked == cancel_btn:
+                        return False  # 取消退出，留在程序中
+                    else:  # 强制退出 → 二次确认
+                        confirm = QMessageBox(self)
+                        confirm.setWindowTitle("确认丢失")
+                        confirm.setIcon(QMessageBox.Icon.Warning)
+                        confirm.setText(
+                            f"确定要强制退出吗？\n\n"
+                            f"{pending} 条暂存记录将永久丢失，无法恢复。"
+                        )
+                        confirm.setStandardButtons(
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        )
+                        confirm.setDefaultButton(QMessageBox.StandardButton.No)
+                        confirm.button(QMessageBox.StandardButton.Yes).setText("是")
+                        confirm.button(QMessageBox.StandardButton.No).setText("否")
+                        if confirm.exec() == QMessageBox.StandardButton.Yes:
+                            break  # 用户确认，退出循环继续退出流程
+                        # 否则回到选择弹窗
+                        continue
+
+        # ---- 3. 停止所有定时器和后台线程 ----
         if self._info_timer is not None:
             self._info_timer.stop()
         if self._wait_timer is not None:
@@ -1877,9 +2039,10 @@ class MainWindow(QMainWindow):
             self._worker.stop()
             self._worker.wait(1000)
 
-        # ---- 3. 注销全局热键并退出事件循环 ----
+        # ---- 4. 注销全局热键并退出事件循环 ----
         self._snapshot_ctrl.unregister_hotkeys()
         QApplication.quit()
+        return True
 
     @staticmethod
     def _is_pos_on_screen(x: int, y: int, margin: int = 50) -> bool:
