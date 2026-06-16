@@ -30,7 +30,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtWidgets import (
-    QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
+    QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
 from src.config import get_project_root

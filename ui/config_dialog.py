@@ -1534,14 +1534,15 @@ class ConfigDialog(QDialog):
                 return
 
             mods = event.modifiers()
+            mods_int = int(mods)
             parts = []
-            if mods & Qt.KeyboardModifier.ControlModifier:
+            if mods_int & Qt.KeyboardModifier.ControlModifier.value:
                 parts.append("Ctrl")
-            if mods & Qt.KeyboardModifier.ShiftModifier:
+            if mods_int & Qt.KeyboardModifier.ShiftModifier.value:
                 parts.append("Shift")
-            if mods & Qt.KeyboardModifier.AltModifier:
+            if mods_int & Qt.KeyboardModifier.AltModifier.value:
                 parts.append("Alt")
-            if mods & Qt.KeyboardModifier.MetaModifier:
+            if mods_int & Qt.KeyboardModifier.MetaModifier.value:
                 parts.append("Win")
             if Qt.Key.Key_F1 <= key <= Qt.Key.Key_F12:
                 parts.append(f"F{key - Qt.Key.Key_F1 + 1}")

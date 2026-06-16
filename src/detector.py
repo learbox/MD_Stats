@@ -187,11 +187,12 @@ def init_templates() -> str | None:
 
 
 def match_template(
-    screenshot: np.ndarray, template_name: str, threshold: float = 0.8
-) -> tuple[bool, float]:
-    """在截图中搜索模板，判断是否匹配成功。
+    screenshot: np.ndarray, template_name: str
+) -> float:
+    """在截图中搜索模板，返回最高匹配度。
 
     这是本模块的核心函数，所有具体的识别（硬币、结果）都通过它实现。
+    阈值比较由调用方完成（取所有模板中的最高分后与 threshold 比较）。
 
     Args:
         screenshot:
@@ -199,21 +200,10 @@ def match_template(
 
         template_name:
             模板的名称（不含扩展名），对应 resource/templates/ 下的文件。
-            例如 "coin_first" 对应 coin_first.png。
-
-        threshold:
-            匹配置信度阈值，范围 [0.0, 1.0]。
-            匹配度 >= 阈值时返回 True。
-            阈值越高，误识别越少但可能漏识别；
-            阈值越低，越不容易漏识别但可能误识别。
+            例如 "coin_win" 对应 coin_win.png。
 
     Returns:
-        (是否匹配成功: bool, 最高匹配度: float)
-
-    边界情况处理:
-        1. 模板文件不存在 → 返回 (False, 0.0)
-        2. 截图尺寸小于模板尺寸 → 返回 (False, 0.0)，因为无法进行模板匹配
-           （OpenCV 要求被搜索图像 >= 模板图像）
+        最高匹配度 (0.0 ~ 1.0)，模板不存在或尺寸不匹配时返回 0.0
     """
     # 0. 防御：截图可能因窗口消失等原因返回 None
     if screenshot is None:
@@ -266,7 +256,7 @@ def detect_coin_win(screenshot: np.ndarray, threshold: float = 0.8) -> str | Non
     """
     best_key, best_score = "", 0.0
     for key in ("coin_win", "coin_lose"):
-        score = match_template(screenshot, key, threshold)
+        score = match_template(screenshot, key)
         if score > best_score:
             best_score, best_key = score, key
     global _last_match_score
@@ -300,7 +290,7 @@ def detect_turn(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
     """
     best_key, best_score = "", 0.0
     for key in ("go_first", "go_second"):
-        score = match_template(screenshot, key, threshold)
+        score = match_template(screenshot, key)
         if score > best_score:
             best_score, best_key = score, key
     global _last_match_score
@@ -331,7 +321,7 @@ def detect_result(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
     """
     best_key, best_score = "", 0.0
     for key in ("victory", "defeat"):
-        score = match_template(screenshot, key, threshold)
+        score = match_template(screenshot, key)
         if score > best_score:
             best_score, best_key = score, key
     global _last_match_score
@@ -366,7 +356,7 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
     """
     best_key, best_score = "", 0.0
     for key in ("rank_up", "rank_down"):
-        score = match_template(screenshot, key, threshold)
+        score = match_template(screenshot, key)
         if score > best_score:
             best_score, best_key = score, key
     global _last_match_score

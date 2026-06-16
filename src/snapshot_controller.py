@@ -130,7 +130,8 @@ class SnapshotController(QObject):
             self.status_message.emit("周期截图已停止")
             return
         interval = self._config.get("debug", {}).get("periodic_interval", 0.5)
-        self._periodic_timer = QTimer(self)
-        self._periodic_timer.timeout.connect(self._periodic_tick)
-        self._periodic_timer.start(int(interval * 1000))
+        timer = QTimer(self)
+        timer.timeout.connect(self._periodic_tick)
+        timer.start(int(interval * 1000))
+        self._periodic_timer = timer
         self.status_message.emit(f"周期截图已开始（{interval}s 间隔）")

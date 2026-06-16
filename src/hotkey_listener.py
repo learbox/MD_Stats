@@ -42,14 +42,14 @@ def parse_hotkey(combo: str) -> tuple[int, int]:
         vk          — 主键的虚拟键码（A-Z → ord('A')-ord('Z'),
                       F1-F12 → 0x70-0x7B）
     """
-    MOD = {"Ctrl": 0x0002, "Shift": 0x0004, "Alt": 0x0001, "Win": 0x0008}
+    _modifiers = {"Ctrl": 0x0002, "Shift": 0x0004, "Alt": 0x0001, "Win": 0x0008}
     keys = combo.split("+")
     mod = 0
     vk = 0
     for k in keys:
         k = k.strip()
-        if k in MOD:
-            mod |= MOD[k]                    # 累加修饰键位掩码
+        if k in _modifiers:
+            mod |= _modifiers[k]               # 累加修饰键位掩码
         elif len(k) == 1:
             vk = ord(k.upper())              # 单个字母/数字的虚拟键码
         else:
@@ -94,10 +94,11 @@ class HotkeyListener(QObject):
         """
         self.stop()
         self._ready.clear()
-        self._thread = threading.Thread(
+        thread = threading.Thread(
             target=self._run, args=(hotkeys,), daemon=True
         )
-        self._thread.start()
+        self._thread = thread
+        thread.start()
         # 等待线程启动并记录 thread_id（最多 2 秒）
         self._ready.wait(timeout=2)
 

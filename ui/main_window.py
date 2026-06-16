@@ -74,12 +74,11 @@
 
 
 import ctypes
-import json
 import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QPalette
@@ -848,9 +847,12 @@ class MainWindow(QMainWindow):
                 continue
             elif clicked == cancel_btn:
                 return False
-            else:
+            elif clicked == discard_btn:
                 clear_pending()
                 return True
+            else:
+                # 直接关弹窗 → 视为取消
+                return False
 
     def _on_load_data(self) -> None:
         """弹出文件对话框切换活跃 CSV 数据文件。
@@ -1894,8 +1896,8 @@ class MainWindow(QMainWindow):
 
         defaults_map = APP_STATE_DEFAULTS
         for table, key in [(self._stats_table, "stats"), (self._record_table, "record")]:
-            defaults = defaults_map[key]
-            widths = saved.get(key, [])
+            defaults = cast(list[int], defaults_map[key])
+            widths = cast(list[int], saved.get(key, []))
             # record 表跳过多余的列 0（旧格式曾保存隐藏列"序号"的宽度 0）
             if key == "record" and widths and widths[0] == 0:
                 widths = widths[1:]
@@ -2011,7 +2013,7 @@ class MainWindow(QMainWindow):
                         continue
                     elif clicked == cancel_btn:
                         return False  # 取消退出，留在程序中
-                    else:  # 强制退出 → 二次确认
+                    elif clicked == force_btn:  # 强制退出 → 二次确认
                         confirm = QMessageBox(self)
                         confirm.setWindowTitle("确认丢失")
                         confirm.setIcon(QMessageBox.Icon.Warning)
