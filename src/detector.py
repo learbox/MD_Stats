@@ -386,6 +386,9 @@ _rank_icon_cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
 # 无数字等级的段位
 _NO_TIER_RANKS = {"巅峰"}
 
+# 预合成模板缓存：{(图标名, 尺寸, bg_r, bg_g, bg_b): BGR模板}
+_composite_cache: dict[tuple, np.ndarray] = {}
+
 
 def _init_rank_icons() -> None:
     """预加载全部段位图标源素材（RGBA）到内存缓存。"""
@@ -418,7 +421,16 @@ def _sample_bg(screenshot: np.ndarray, x: int, y: int, w: int, h: int) -> np.nda
 
 
 def _composite_rank_icon(name: str, size: int, bg_color: np.ndarray) -> np.ndarray | None:
-    """将源素材 RGBA 缩放到指定尺寸并合成到背景色上，返回 BGR 模板。"""
+    """将源素材 RGBA 缩放到指定尺寸并合成到背景色上，返回 BGR 模板。
+
+    结果自动缓存（同图标+同尺寸+同背景色复用）。
+    """
+    global _composite_cache
+    bg_key = (int(bg_color[0]), int(bg_color[1]), int(bg_color[2]))
+    cache_key = (name, size, bg_key)
+    if cache_key in _composite_cache:
+        return _composite_cache[cache_key]
+
     entry = _rank_icon_cache.get(name)
     if entry is None:
         return None
@@ -427,8 +439,10 @@ def _composite_rank_icon(name: str, size: int, bg_color: np.ndarray) -> np.ndarr
     scaled_alpha = cv2.resize(alpha, (size, size))
     alpha_f = scaled_alpha.astype(np.float32) / 255.0
     bg = np.full((size, size, 3), bg_color, dtype=np.float32)
-    return (scaled_bgr.astype(np.float32) * alpha_f[:, :, None]
-            + bg * (1 - alpha_f[:, :, None])).astype(np.uint8)
+    composite = (scaled_bgr.astype(np.float32) * alpha_f[:, :, None]
+                 + bg * (1 - alpha_f[:, :, None])).astype(np.uint8)
+    _composite_cache[cache_key] = composite
+    return composite
 
 
 def _detect_rank_in_roi(
@@ -440,8 +454,9 @@ def _detect_rank_in_roi(
 
     roi = screenshot[roi_y:roi_y + roi_h, roi_x:roi_x + roi_w]
 
-    min_sz = max(40, roi_h // 3)
-    max_sz = min(roi_h * 2, roi_w // 2)
+    img_w = screenshot.shape[1]
+    min_sz = max(20, img_w // 25)
+    max_sz = min(img_w // 5, roi_h, roi_w // 2)
 
     best_name, best_score = None, 0.0
     best_x, best_y, best_sz = 0, 0, 0
@@ -563,38 +578,55 @@ def detect_rank_icon(
     """
     _init_rank_icons()
     h, w = screenshot.shape[:2]
-    mid_x = w // 2
 
-    # 采样背景色：取中上方空白区域
-    bg_color = _sample_bg(screenshot, mid_x - 80, 10, 160, 30)
+    # 采样背景色
+    bg_color = _sample_bg(screenshot, w // 2 - 80, 10, 160, 30)
 
     result: dict[str, str | int | float | None] = {
         "player_rank": None, "player_tier": None, "player_score": 0.0,
         "opponent_rank": None, "opponent_tier": None, "opponent_score": 0.0,
     }
 
-    # 左侧（玩家）
-    name, score, rx, ry, rsz = _detect_rank_in_roi(
-        screenshot, 0, 0, mid_x, h // 3, bg_color, threshold,
-    )
-    if name is not None:
-        rank_label = _RANK_LABELS.get(name, name)
-        result["player_rank"] = rank_label
-        result["player_score"] = score
-        if rank_label not in _NO_TIER_RANKS:
-            tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
-            result["player_tier"] = tier
+    # 缩略图快速搜索：缩到 600px 宽，坐标映射回去
+    scale = 600.0 / w
+    small = cv2.resize(screenshot, (600, int(h * scale)))
+    small_h = small.shape[0]
+    small_mid = small.shape[1] // 2
+    small_roi_w = small.shape[1] // 3
+    small_roi_h = small_h // 3
 
-    # 右侧（对手）
-    name, score, rx, ry, rsz = _detect_rank_in_roi(
-        screenshot, mid_x, 0, w - mid_x, h // 3, bg_color, threshold,
-    )
-    if name is not None:
+    for side, sx in [("player", 0), ("opponent", small.shape[1] - small_roi_w)]:
+        name, score, fx, fy, fsz = _detect_rank_in_roi(
+            small, sx, 0, small_roi_w, small_roi_h,
+            bg_color, threshold,
+        )
+        if name is None:
+            continue
+
+        # 映射回原图，单模板精确定位
+        rx = int(fx / scale)
+        ry = int(fy / scale)
+        rsz = int(fsz / scale)
+
+        # 在原图小范围搜索修正偏移
+        search_x = max(0, rx - rsz // 4)
+        search_y = max(0, ry - rsz // 4)
+        search_w = min(rsz * 2, w - search_x)
+        search_h = min(rsz * 2, h - search_y)
+        search_roi = screenshot[search_y:search_y + search_h,
+                                search_x:search_x + search_w]
+        tmpl = _composite_rank_icon(name, rsz, bg_color)
+        if tmpl is not None:
+            res = cv2.matchTemplate(search_roi, tmpl, cv2.TM_CCOEFF_NORMED)
+            _, _, _, loc = cv2.minMaxLoc(res)
+            rx = search_x + loc[0]
+            ry = search_y + loc[1]
+
         rank_label = _RANK_LABELS.get(name, name)
-        result["opponent_rank"] = rank_label
-        result["opponent_score"] = score
+        result[f"{side}_rank"] = rank_label
+        result[f"{side}_score"] = score
         if rank_label not in _NO_TIER_RANKS:
             tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
-            result["opponent_tier"] = tier
+            result[f"{side}_tier"] = tier
 
     return result
