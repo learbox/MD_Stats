@@ -63,7 +63,9 @@ class RankDetector(QThread):
         return r
 
     def stop_searching(self) -> None:
-        """阶段2开始，段位图标已消失，暂停截图循环。"""
+        """阶段2开始，段位图标已消失。发射已有结果并暂停。"""
+        if self._result and not self._paused:
+            self.rank_icon_detected.emit(dict(self._result))
         self._paused = True
 
     def resume_for_next_game(self) -> None:
@@ -106,10 +108,18 @@ class RankDetector(QThread):
             except Exception:
                 result = {}
 
-            # 至少检测到一方 → 暂存结果，暂停
-            if result.get("player_rank") or result.get("opponent_rank"):
+            # 合并结果：保留之前检测到的，补齐新检测到的
+            if self._result:
+                for k in ("player_rank", "player_tier", "player_score",
+                          "opponent_rank", "opponent_tier", "opponent_score"):
+                    if not self._result.get(k) and result.get(k):
+                        self._result[k] = result[k]
+            else:
                 self._result = result
-                self.rank_icon_detected.emit(result)
+
+            # 双方都检测到 → 发射结果并暂停
+            if (self._result.get("player_rank") and self._result.get("opponent_rank")):
+                self.rank_icon_detected.emit(dict(self._result))
                 self._paused = True
 
             self.msleep(int(self._interval * 1000))
