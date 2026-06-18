@@ -6,18 +6,28 @@
 
 ```
 templates/
-├── 1920x1080/          ← 1080p 分辨率模板
+├── rankicons/              # 段位图标源素材（不分分辨率，RGBA 格式）
+│   ├── img_rankicon_01_l.png  → 新手
+│   ├── img_rankicon_02_l.png  → 青铜
+│   ├── img_rankicon_03_l.png  → 白银
+│   ├── img_rankicon_04_l.png  → 黄金
+│   ├── img_rankicon_05_l.png  → 铂金
+│   ├── img_rankicon_06_l.png  → 钻石
+│   ├── img_rankicon_07_l.png  → 大师
+│   ├── img_rankicon_crown_l.png
+│   └── img_rateicon_01_l.png  → 巅峰
+├── 1920x1080/              ← 1080p 分辨率模板
 │   ├── coin_win.png
 │   ├── coin_lose.png
-│   ├── rank_up.png     ← 升段标识（可选）
-│   ├── rank_down.png   ← 降段标识（可选）
+│   ├── rank_up.png         ← 升段标识（可选）
+│   ├── rank_down.png       ← 降段标识（可选）
 │   ├── go_first.png
 │   ├── go_second.png
 │   ├── victory.png
 │   └── defeat.png
-├── 2560x1440/          ← 1440p 分辨率模板
+├── 2560x1440/              ← 1440p 分辨率模板
 │   └── ...
-└── 3840x2160/          ← 4K 分辨率模板
+└── 3840x2160/              ← 4K 分辨率模板
     └── ...
 ```
 
@@ -25,6 +35,7 @@ templates/
 - 程序根据 Master Duel 窗口客户区尺寸自动选择对应子目录
 - 子目录必须存在且包含全部 6 张必选模板，否则启动时状态栏会显示警告
 - `rank_up.png` 和 `rank_down.png` 是可选的，缺失时不阻止检测启动
+- `rankicons/` 目录不存在时，段位检测静默跳过，不影响其他功能
 
 ## 识别流程
 
@@ -46,6 +57,14 @@ templates/
 | 6 | `defeat.png` | 失败标识 — 对局结束时显示失败的 UI 元素 | ✅ |
 | 7 | `rank_up.png` | 升段标识 — 硬币画面中显示段位上升的 UI 元素 | ❌ |
 | 8 | `rank_down.png` | 降段标识 — 硬币画面中显示段位下降的 UI 元素 | ❌ |
+
+## 段位图标源素材
+
+`rankicons/` 下的 PNG 文件是从 Master Duel 资源包中通过 AssetRipper 解包得到的 RGBA 源素材，**不需要从游戏截图裁剪**。
+
+- 格式：RGBA 32 位（带透明通道），290×290 像素
+- 用途：段位检测模块通过采样截图实际背景色，将 RGBA 合成到背景上后进行模板匹配
+- 缺失不影响主流程：`rankicons/` 不存在或图片缺失时，段位检测静默跳过，不弹窗、不报错
 
 ## 注意事项
 
