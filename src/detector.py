@@ -480,7 +480,9 @@ def _detect_rank_in_roi(
 def _detect_tier_number(
     screenshot: np.ndarray, rank_x: int, rank_y: int, rank_w: int,
 ) -> tuple[int | None, float]:
-    """从段位图标下方裁出数字区域，用连通组件投票识别 I~V。
+    """从段位图标下方裁出数字区域，用列投影峰值数识别 I~V。
+
+    I=1峰  II=2峰  III=3峰。IV/V 用投影形状区分。
 
     Returns:
         (数字 1-5 | None, 置信度 0-1)。None 表示无法确定。
@@ -491,7 +493,6 @@ def _detect_tier_number(
     tw = int(0.22 * rank_w)
     th = int(0.11 * rank_w)
 
-    # 边界检查
     if tx < 0 or ty < 0 or tx + tw > w or ty + th > h or tw <= 0 or th <= 0:
         return None, 0.0
 
@@ -499,27 +500,47 @@ def _detect_tier_number(
         screenshot[ty:ty + th, tx:tx + tw], cv2.COLOR_BGR2GRAY
     )
 
-    # 多阈值投票连通块数
-    votes: dict[int, int] = {}
-    for thresh in range(60, 150, 5):
-        _, b = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY)
-        n, labels = cv2.connectedComponents(255 - b, connectivity=8)
-        valid = sum(1 for i in range(1, n) if (labels == i).sum() >= 3)
-        votes[valid] = votes.get(valid, 0) + 1
+    # 二值化后算列投影
+    _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    proj = (255 - bin_img).sum(axis=0)  # 每列黑像素和
 
-    count = max(votes, key=votes.get)  # type: ignore[arg-type]
-    confidence = votes[count] / sum(votes.values())
+    # 数峰值：超过最大值 40% 的连续隆起算一个峰
+    peak_th = proj.max() * 0.35
+    in_peak = False
+    n_peaks = 0
+    for v in proj:
+        if v > peak_th and not in_peak:
+            in_peak = True
+            n_peaks += 1
+        elif v <= peak_th * 0.5:
+            in_peak = False
 
-    if count <= 0:
+    if n_peaks <= 0:
         return None, 0.0
-    if count <= 3:
-        return count, confidence
 
-    # count >= 4 → 可能是 IV 或 V，用暗像素占比辅助判断
-    dark_ratio = (gray < 120).mean()
-    if dark_ratio < 0.3:
-        return 4, confidence * 0.7  # IV 笔画稀疏
-    return 5, confidence * 0.7      # V 更密
+    # 2 峰时需区分 II（两窄峰）和 IV（一窄 I + 一宽 V）
+    if n_peaks == 2:
+        # 找最宽峰——V 形峰比 I 宽得多
+        peak_widths = []
+        in_peak = False
+        w_start = 0
+        for i, v in enumerate(proj):
+            if v > peak_th and not in_peak:
+                in_peak = True
+                w_start = i
+            elif v <= peak_th * 0.5 and in_peak:
+                in_peak = False
+                peak_widths.append(i - w_start)
+        if len(peak_widths) >= 2 and max(peak_widths) > min(peak_widths) * 1.8:
+            return 4, 0.6  # 一宽一窄 → IV
+        return 2, 0.8      # 两窄峰 → II
+
+    if n_peaks == 1:
+        return 1, 0.8
+    if n_peaks == 3:
+        return 3, 0.8
+
+    return None, 0.0
 
 
 def detect_rank_icon(
