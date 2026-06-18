@@ -491,7 +491,7 @@ def _detect_tier_number(
     tx = int(rank_x + 0.39 * rank_w)
     ty = int(rank_y + 0.81 * rank_w)
     tw = int(0.22 * rank_w)
-    th = int(0.11 * rank_w)
+    th = int(0.115 * rank_w)
 
     if tx < 0 or ty < 0 or tx + tw > w or ty + th > h or tw <= 0 or th <= 0:
         return None, 0.0
