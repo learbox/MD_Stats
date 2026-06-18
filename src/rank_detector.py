@@ -62,6 +62,10 @@ class RankDetector(QThread):
         self._result = None
         return r
 
+    def stop_searching(self) -> None:
+        """阶段2开始，段位图标已消失，暂停截图循环。"""
+        self._paused = True
+
     def resume_for_next_game(self) -> None:
         """下一局开始，恢复截图循环。"""
         self._paused = False

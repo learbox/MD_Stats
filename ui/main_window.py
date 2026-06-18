@@ -1135,8 +1135,11 @@ class MainWindow(QMainWindow):
         self._match.set_rank(rank)
 
     def _on_rank_icon_detected(self, rank_info: dict) -> None:
-        """自动识别到段位图标（Platinum II 等）→ 缓存结果。"""
+        """自动识别到段位图标（Platinum II 等）→ 缓存结果 + 状态栏通知。"""
         self._rank_icon_result = rank_info
+        player = rank_info.get("player_rank") or "?"
+        opponent = rank_info.get("opponent_rank") or "?"
+        self._show_status(f"段位: {player} vs {opponent}")
 
     def _rank_icon_strs(self) -> tuple[str, str]:
         """从缓存的段位图标结果提取己方/对方段位字符串，如 "铂金 II"。"""
@@ -1164,6 +1167,9 @@ class MainWindow(QMainWindow):
         """
         if not self._match.advance_turn(turn):
             return
+        # 段位图标已消失，通知 RankDetector 停止搜索
+        if self._rank_detector is not None:
+            self._rank_detector.stop_searching()
         self._update_manual_buttons()
         turn_text = "先攻" if turn == "first" else "后攻"
         self._show_status(f"已识别: {turn_text} — 等待胜负…")
