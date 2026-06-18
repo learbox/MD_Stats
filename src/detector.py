@@ -369,3 +369,207 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
 def get_last_score() -> float:
     """最近一次 detect_* 调用的最高匹配分数（0.0 = 无结果）。"""
     return _last_match_score
+
+
+# =============================================================================
+# 段位图标检测（源素材 + 背景色合成 + NCC 匹配）
+# =============================================================================
+
+_RANK_ICONS_DIR = get_project_root() / "resource" / "templates" / "rankicons" / "large"
+
+# 段位图标名 → 显示标签映射
+_RANK_LABELS: dict[str, str] = {}
+
+# 源素材缓存：{文件名: (BGR, Alpha)}，size = 290×290
+_rank_icon_cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def _init_rank_icons() -> None:
+    """预加载全部段位图标源素材（RGBA）到内存缓存。"""
+    global _RANK_LABELS, _rank_icon_cache
+    if _rank_icon_cache:
+        return
+
+    _RANK_LABELS = {
+        "img_rankicon_01": "Rookie", "img_rankicon_02": "Bronze",
+        "img_rankicon_03": "Silver", "img_rankicon_04": "Gold",
+        "img_rankicon_05": "Platinum", "img_rankicon_06": "Diamond",
+        "img_rankicon_07": "Master",
+    }
+
+    for name in list(_RANK_LABELS) + [
+        "img_rankicon_tier1", "img_rankicon_tier2", "img_rankicon_tier3",
+        "img_rankicon_tier4", "img_rankicon_tier5",
+    ]:
+        path = _RANK_ICONS_DIR / f"{name}_l.png"
+        if path.exists():
+            raw = np.fromfile(str(path), dtype=np.uint8)
+            img = cv2.imdecode(raw, cv2.IMREAD_UNCHANGED)
+            if img is not None and img.shape[2] == 4:
+                _rank_icon_cache[name] = (img[:, :, :3], img[:, :, 3])
+
+
+def _sample_bg(screenshot: np.ndarray, x: int, y: int, w: int, h: int) -> np.ndarray:
+    """采样指定区域的平均背景色（BGR 三通道），用于 RGBA 合成。"""
+    region = screenshot[max(0, y):y + h, max(0, x):x + w]
+    if region.size == 0:
+        return np.array([128, 128, 128], dtype=np.float32)
+    return region.reshape(-1, 3).mean(axis=0).astype(np.float32)
+
+
+def _composite_rank_icon(name: str, size: int, bg_color: np.ndarray) -> np.ndarray | None:
+    """将源素材 RGBA 缩放到指定尺寸并合成到背景色上，返回 BGR 模板。"""
+    entry = _rank_icon_cache.get(name)
+    if entry is None:
+        return None
+    bgr, alpha = entry
+    scaled_bgr = cv2.resize(bgr, (size, size))
+    scaled_alpha = cv2.resize(alpha, (size, size))
+    alpha_f = scaled_alpha.astype(np.float32) / 255.0
+    bg = np.full((size, size, 3), bg_color, dtype=np.float32)
+    return (scaled_bgr.astype(np.float32) * alpha_f[:, :, None]
+            + bg * (1 - alpha_f[:, :, None])).astype(np.uint8)
+
+
+def _detect_rank_in_roi(
+    screenshot: np.ndarray, roi_x: int, roi_y: int, roi_w: int, roi_h: int,
+    bg_color: np.ndarray, threshold: float = 0.7,
+) -> tuple[str | None, float, int, int, int]:
+    """在指定 ROI 内搜索最佳段位图标，返回 (图标名, 分数, x, y, 尺寸)。"""
+    _init_rank_icons()
+
+    roi = screenshot[roi_y:roi_y + roi_h, roi_x:roi_x + roi_w]
+
+    min_sz = max(40, roi_h // 3)
+    max_sz = min(roi_h * 2, roi_w // 2)
+
+    best_name, best_score = None, 0.0
+    best_x, best_y, best_sz = 0, 0, 0
+
+    for name in _RANK_LABELS:
+        # 先粗搜（步长 12），再精搜（缩小候选范围 ±8，步长 2）
+        for sz in range(min_sz, max_sz, 12):
+            tmpl = _composite_rank_icon(name, sz, bg_color)
+            if tmpl is None or tmpl.shape[0] > roi.shape[0] or tmpl.shape[1] > roi.shape[1]:
+                continue
+            result = cv2.matchTemplate(roi, tmpl, cv2.TM_CCOEFF_NORMED)
+            _, val, _, loc = cv2.minMaxLoc(result)
+            if val > best_score:
+                best_score, best_name = val, name
+                best_x, best_y = roi_x + loc[0], roi_y + loc[1]
+                best_sz = sz
+
+        # 如果找到高分候选，在临近尺寸精搜
+        if best_name == name and best_score > 0.5:
+            for sz in range(max(min_sz, best_sz - 10), min(max_sz, best_sz + 12), 2):
+                tmpl = _composite_rank_icon(name, sz, bg_color)
+                if tmpl is None or tmpl.shape[0] > roi.shape[0] or tmpl.shape[1] > roi.shape[1]:
+                    continue
+                result = cv2.matchTemplate(roi, tmpl, cv2.TM_CCOEFF_NORMED)
+                _, val, _, loc = cv2.minMaxLoc(result)
+                if val > best_score:
+                    best_score, best_name = val, name
+                    best_x, best_y = roi_x + loc[0], roi_y + loc[1]
+                    best_sz = sz
+
+    if best_score < threshold or best_name is None:
+        return None, best_score, 0, 0, 0
+    return best_name, best_score, best_x, best_y, best_sz
+
+
+def _detect_tier_number(
+    screenshot: np.ndarray, rank_x: int, rank_y: int, rank_w: int,
+) -> tuple[int | None, float]:
+    """从段位图标下方裁出数字区域，用连通组件投票识别 I~V。
+
+    Returns:
+        (数字 1-5 | None, 置信度 0-1)。None 表示无法确定。
+    """
+    h, w = screenshot.shape[:2]
+    tx = int(rank_x + 0.39 * rank_w)
+    ty = int(rank_y + 0.83 * rank_w)
+    tw = int(0.22 * rank_w)
+    th = int(0.11 * rank_w)
+
+    # 边界检查
+    if tx < 0 or ty < 0 or tx + tw > w or ty + th > h or tw <= 0 or th <= 0:
+        return None, 0.0
+
+    gray = cv2.cvtColor(
+        screenshot[ty:ty + th, tx:tx + tw], cv2.COLOR_BGR2GRAY
+    )
+
+    # 多阈值投票连通块数
+    votes: dict[int, int] = {}
+    for thresh in range(60, 150, 5):
+        _, b = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY)
+        n, labels = cv2.connectedComponents(255 - b, connectivity=8)
+        valid = sum(1 for i in range(1, n) if (labels == i).sum() >= 3)
+        votes[valid] = votes.get(valid, 0) + 1
+
+    count = max(votes, key=votes.get)  # type: ignore[arg-type]
+    confidence = votes[count] / sum(votes.values())
+
+    if count <= 0:
+        return None, 0.0
+    if count <= 3:
+        return count, confidence
+
+    # count >= 4 → 可能是 IV 或 V，用暗像素占比辅助判断
+    dark_ratio = (gray < 120).mean()
+    if dark_ratio < 0.3:
+        return 4, confidence * 0.7  # IV 笔画稀疏
+    return 5, confidence * 0.7      # V 更密
+
+
+def detect_rank_icon(
+    screenshot: np.ndarray, threshold: float = 0.7,
+) -> dict[str, str | int | float | None]:
+    """检测双方头像旁的段位图标和等级数字。
+
+    应在 WAITING_TURN 阶段的截图上调用（UI 最稳定）。
+    分左右半屏搜索：左侧 = 玩家，右侧 = 对手。
+
+    Returns:
+        {
+            "player_rank": "Platinum" | None,
+            "player_tier": 2 | None,
+            "player_score": 0.94,
+            "opponent_rank": "Diamond" | None,
+            "opponent_tier": 1 | None,
+            "opponent_score": 0.88,
+        }
+    """
+    _init_rank_icons()
+    h, w = screenshot.shape[:2]
+    mid_x = w // 2
+
+    # 采样背景色：取中上方空白区域
+    bg_color = _sample_bg(screenshot, mid_x - 80, 10, 160, 30)
+
+    result: dict[str, str | int | float | None] = {
+        "player_rank": None, "player_tier": None, "player_score": 0.0,
+        "opponent_rank": None, "opponent_tier": None, "opponent_score": 0.0,
+    }
+
+    # 左侧（玩家）
+    name, score, rx, ry, rsz = _detect_rank_in_roi(
+        screenshot, 0, 0, mid_x, h // 3, bg_color, threshold,
+    )
+    if name is not None:
+        result["player_rank"] = _RANK_LABELS.get(name, name)
+        result["player_score"] = score
+        tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
+        result["player_tier"] = tier
+
+    # 右侧（对手）
+    name, score, rx, ry, rsz = _detect_rank_in_roi(
+        screenshot, mid_x, 0, w - mid_x, h // 3, bg_color, threshold,
+    )
+    if name is not None:
+        result["opponent_rank"] = _RANK_LABELS.get(name, name)
+        result["opponent_score"] = score
+        tier, _ = _detect_tier_number(screenshot, rx, ry, rsz)
+        result["opponent_tier"] = tier
+
+    return result
