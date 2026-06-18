@@ -587,6 +587,7 @@ class MainWindow(QMainWindow):
         self._wait_timer: QTimer | None = None# 等待游戏启动的轮询定时器
         self._info_timer: QTimer | None = None# 右下角信息标签刷新定时器
         self._match = MatchState()               # 三阶段对局状态机
+        self._rank_icon_result: dict | None = None  # 段位图标检测结果
         # rank_detected 在硬币阶段触发，但写入 CSV 需等到胜负阶段 —
         # 中间隔着先后攻和对局本身，所以需要缓存。
         self._suppress_cell_changed: bool = False # 刷新记录表时抑制 cellChanged（避免误写 CSV）
@@ -1053,6 +1054,7 @@ class MainWindow(QMainWindow):
         self._worker.coin_win_detected.connect(self._on_coin_win_detected)
         self._worker.rank_detected.connect(self._on_rank_detected)
         self._worker.turn_detected.connect(self._on_turn_detected)
+        self._worker.rank_icon_detected.connect(self._on_rank_icon_detected)
         self._worker.result_detected.connect(self._on_result_detected)
         self._worker.finished.connect(lambda: setattr(self, "_worker", None))
 
@@ -1123,6 +1125,26 @@ class MainWindow(QMainWindow):
         """
         self._match.set_rank(rank)
 
+    def _on_rank_icon_detected(self, rank_info: dict) -> None:
+        """自动识别到段位图标（Platinum II 等）→ 缓存结果。"""
+        self._rank_icon_result = rank_info
+
+    def _rank_icon_note(self) -> str:
+        """将缓存的段位图标结果格式化为备注字符串。"""
+        info = self._rank_icon_result
+        if not info:
+            return ""
+        parts = []
+        for side, key in [("己", "player"), ("敌", "opponent")]:
+            rank = info.get(f"{key}_rank")
+            if not rank:
+                continue
+            tier = info.get(f"{key}_tier")
+            tier_str = ["", "I", "II", "III", "IV", "V"][tier] if isinstance(tier, int) and 1 <= tier <= 5 else ""
+            parts.append(f"{side}:{rank} {tier_str}".strip())
+        self._rank_icon_result = None  # 用后即清
+        return " | ".join(parts)
+
     def _on_turn_detected(self, turn: str) -> None:
         """自动识别到先后攻 → 缓存并推进到阶段2。
 
@@ -1155,11 +1177,14 @@ class MainWindow(QMainWindow):
         rank_cache = cached["rank"]
         result_text = "胜" if result == "win" else "负"
 
+        # 段位图标信息拼入备注
+        rank_note = self._rank_icon_note()
         new_record = add_record(coin_win=self._match.coin_cache,
                                 turn=self._match.turn_cache,
                                 result=result,
                                 deck=self._deck_input.text().strip(),
-                                rank=self._match.rank_cache)
+                                rank=self._match.rank_cache,
+                                notes=rank_note)
 
         self._reset_stage()
         self._reload_tables()
@@ -1241,7 +1266,8 @@ class MainWindow(QMainWindow):
                                     turn=self._match.turn_cache,
                                     result=side,
                                     deck=self._deck_input.text().strip(),
-                                    rank=self._match.rank_cache)
+                                    rank=self._match.rank_cache,
+                                    notes=self._rank_icon_note())
             # 先提取通知信息，再 reset
             cached = self._match.snapshot()
             coin_cache = cached["coin"]
@@ -1316,6 +1342,7 @@ class MainWindow(QMainWindow):
     def _reset_stage(self) -> None:
         """重置所有阶段到初始状态（一局完成后调用）。"""
         self._match.reset()
+        self._rank_icon_result = None
         self._update_manual_buttons()
 
     def _update_manual_buttons(self) -> None:

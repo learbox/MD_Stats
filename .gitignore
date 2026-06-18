@@ -26,3 +26,4 @@ logs/
 
 # OS
 Thumbs.db
+_test/
