@@ -1138,8 +1138,17 @@ class MainWindow(QMainWindow):
     def _on_rank_icon_detected(self, rank_info: dict) -> None:
         """自动识别到段位图标（Platinum II 等）→ 缓存结果 + 状态栏通知。"""
         self._rank_icon_result = rank_info
-        player = rank_info.get("player_rank") or "?"
-        opponent = rank_info.get("opponent_rank") or "?"
+
+        def _fmt(key: str) -> str:
+            rank = rank_info.get(f"{key}_rank") or "?"
+            tier = rank_info.get(f"{key}_tier")
+            if isinstance(tier, int) and 1 <= tier <= 5:
+                tier_str = ["", "I", "II", "III", "IV", "V"][tier]
+                return f"{rank} {tier_str}"
+            return rank
+
+        player = _fmt("player")
+        opponent = _fmt("opponent")
         self._show_status(f"段位: {player} vs {opponent}")
 
     def _rank_icon_strs(self) -> tuple[str, str]:
