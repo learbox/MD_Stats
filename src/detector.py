@@ -390,35 +390,42 @@ _NO_TIER_RANKS = {"巅峰"}
 _composite_cache: dict[tuple, np.ndarray] = {}
 # 位置缓存：{(分辨率宽, 分辨率高, 侧): (x, y, size)}
 _position_cache: dict[tuple, tuple] = {}
-_POSITION_CACHE_FILE = get_project_root() / "resource" / "templates" / "rank_positions.json"
+_POSITION_CACHE_FILE = get_project_root() / "resource" / "templates" / "rank_positions.toml"
 
 
 def _load_position_cache() -> None:
-    """从文件加载段位图标位置缓存。"""
+    """从 rank_positions.toml 加载段位图标位置缓存。"""
     global _position_cache
     if _position_cache:
         return
     try:
-        import json
-        with open(_POSITION_CACHE_FILE, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-        # JSON key 是字符串，转回 tuple
-        for key, val in raw.items():
-            parts = key.split(",")
-            _position_cache[(int(parts[0]), int(parts[1]), parts[2])] = tuple(val)
-    except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError):
+        import tomllib
+        with open(_POSITION_CACHE_FILE, "rb") as f:
+            data = tomllib.load(f)
+        for side in ("player", "opponent"):
+            section = data.get(side, {})
+            for res, vals in section.items():
+                if isinstance(vals, list) and len(vals) == 3:
+                    w, h = res.split("x")
+                    _position_cache[(int(w), int(h), side)] = (
+                        int(vals[0]), int(vals[1]), int(vals[2]))
+    except (FileNotFoundError, KeyError, ValueError):
         pass
 
 
 def _save_position_cache() -> None:
-    """将位置缓存持久化到文件。"""
-    import json
-    data = {}
-    for (w, h, side), (x, y, sz) in _position_cache.items():
-        data[f"{w},{h},{side}"] = [x, y, sz]
+    """将位置缓存写成 TOML 格式持久化。"""
+    lines = ["# 段位图标位置缓存（自动生成，首次检测后写入）",
+             "# 格式: {分辨率} = [x, y, 尺寸]", ""]
+    for side in ("player", "opponent"):
+        lines.append(f"[{side}]")
+        for (w, h, s), (x, y, sz) in sorted(_position_cache.items()):
+            if s == side:
+                lines.append(f"{w}x{h} = [{x}, {y}, {sz}]")
+        lines.append("")
     try:
         _POSITION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _POSITION_CACHE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        _POSITION_CACHE_FILE.write_text("\n".join(lines), encoding="utf-8")
     except OSError:
         pass
 
