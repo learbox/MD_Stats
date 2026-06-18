@@ -16,7 +16,7 @@ _APP_STATE_PATH = get_project_root() / ".app_state.json"
 # splitter 为 [上, 下] 分割条绝对尺寸，main_pos / float_pos 为 [x, y]
 APP_STATE_DEFAULTS: dict[str, list[int]] = {
     "stats":     [80, 60, 45, 45, 70, 75, 75, 75, 85, 85, 80, 75, 70, 70, 75],
-    "record":    [115, 90, 75, 80, 65, 70, 50, 65],
+    "record":    [115, 90, 75, 80, 75, 80, 65, 70, 50, 65],
     "splitter":  [200, 300],
     "main_pos":  [100, 100],
     "float_pos": [100, 100],
