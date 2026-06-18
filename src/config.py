@@ -192,4 +192,13 @@ text_color = "#000000"
 font_family = "Microsoft YaHei UI"
 # 显示数据行（空 = 默认 8 项）
 rows = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率", "赢硬币胜率", "输硬币胜率", "综合胜率"]
+
+# 段位图标检测
+[rank_detection]
+# 是否启用段位图标检测
+enabled = true
+# 截图间隔（秒），0.3 ~ 1.0
+interval = 0.5
+# 匹配置信度阈值 (0.0~1.0)
+confidence_threshold = 0.7
 """, encoding="utf-8")

@@ -587,6 +587,7 @@ class MainWindow(QMainWindow):
         self._wait_timer: QTimer | None = None# 等待游戏启动的轮询定时器
         self._info_timer: QTimer | None = None# 右下角信息标签刷新定时器
         self._match = MatchState()               # 三阶段对局状态机
+        self._rank_detector = None                # 段位图标检测线程（延迟创建）
         self._rank_icon_result: dict | None = None  # 段位图标检测结果
         # rank_detected 在硬币阶段触发，但写入 CSV 需等到胜负阶段 —
         # 中间隔着先后攻和对局本身，所以需要缓存。
@@ -1048,17 +1049,22 @@ class MainWindow(QMainWindow):
         finished 信号自动清理 worker 引用，避免 QThread 被 GC 时仍在运行。
         """
         from src.stats_worker import StatsWorker
+        from src.rank_detector import RankDetector
 
         self._worker = StatsWorker()
         self._worker.status_update.connect(self._on_status)
         self._worker.coin_win_detected.connect(self._on_coin_win_detected)
         self._worker.rank_detected.connect(self._on_rank_detected)
         self._worker.turn_detected.connect(self._on_turn_detected)
-        self._worker.rank_icon_detected.connect(self._on_rank_icon_detected)
         self._worker.result_detected.connect(self._on_result_detected)
         self._worker.finished.connect(lambda: setattr(self, "_worker", None))
 
-        self._worker.start()                     # QThread.start() → 后台线程执行 run()
+        self._worker.start()
+
+        # 段位检测独立线程
+        self._rank_detector = RankDetector()
+        self._rank_detector.rank_icon_detected.connect(self._on_rank_icon_detected)
+        self._rank_detector.start()
         self._snapshot_ctrl.sync_hotkeys()
 
         # 更新 UI 状态: 禁用启动、启用停止、锁定卡组、禁用危险按钮
@@ -1078,6 +1084,9 @@ class MainWindow(QMainWindow):
         if self._worker is not None:
             self._worker.stop()
             self._worker.wait(1000)
+        if self._rank_detector is not None:
+            self._rank_detector.stop()
+            self._rank_detector.wait(1000)
 
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
@@ -1190,6 +1199,9 @@ class MainWindow(QMainWindow):
 
         self._reset_stage()
         self._reload_tables()
+        # 通知段位检测线程继续监听下一局
+        if self._rank_detector is not None:
+            self._rank_detector.resume_for_next_game()
 
         if new_record is not None:
             self._show_status(f"已记录: {result_text} — 等待下一局…")
@@ -1281,6 +1293,8 @@ class MainWindow(QMainWindow):
             self._reset_stage()
             self._sync_worker_stage()
             self._reload_tables()
+            if self._rank_detector is not None:
+                self._rank_detector.resume_for_next_game()
             if new_record is not None:
                 self._show_status(f"手动添加: {result_text} — 已写入 CSV")
             else:
@@ -1840,6 +1854,9 @@ class MainWindow(QMainWindow):
         if worker_was_running:
             self._worker.stop()
             self._worker.wait(1000)
+        if self._rank_detector is not None:
+            self._rank_detector.stop()
+            self._rank_detector.wait(1000)
             self._start_worker()
 
         self._show_status(
@@ -2084,6 +2101,9 @@ class MainWindow(QMainWindow):
         if self._worker is not None:
             self._worker.stop()
             self._worker.wait(1000)
+        if self._rank_detector is not None:
+            self._rank_detector.stop()
+            self._rank_detector.wait(1000)
 
         # ---- 4. 注销全局热键并退出事件循环 ----
         self._snapshot_ctrl.unregister_hotkeys()
