@@ -653,7 +653,7 @@ def detect_rank_icon(
             best_name, best_score = None, 0.0
             best_x = best_y = best_sz = 0
             for name in _RANK_LABELS:
-                for sz in range(max(30, csz - 15), min(csz + 18, pw // 2, ph), 3):
+                for sz in range(max(30, csz - 15), min(csz + 18, pw, ph), 3):
                     tmpl = _composite_rank_icon(name, sz, bg_color)
                     if tmpl is None or tmpl.shape[0] >= search_roi.shape[0] or tmpl.shape[1] >= search_roi.shape[1]:
                         continue
