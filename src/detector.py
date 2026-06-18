@@ -388,6 +388,8 @@ _NO_TIER_RANKS = {"巅峰"}
 
 # 预合成模板缓存：{(图标名, 尺寸, bg_r, bg_g, bg_b): BGR模板}
 _composite_cache: dict[tuple, np.ndarray] = {}
+# 位置缓存：{(分辨率宽, 分辨率高, 侧): (x, y, size)}
+_position_cache: dict[tuple, tuple] = {}
 
 
 def _init_rank_icons() -> None:
@@ -596,31 +598,63 @@ def detect_rank_icon(
     small_roi_h = small_h // 3
 
     for side, sx in [("player", 0), ("opponent", small.shape[1] - small_roi_w)]:
-        name, score, fx, fy, fsz = _detect_rank_in_roi(
-            small, sx, 0, small_roi_w, small_roi_h,
-            bg_color, threshold,
-        )
-        if name is None:
-            continue
+        # 检查位置缓存
+        pos_key = (w, h, side)
+        cached = _position_cache.get(pos_key)
 
-        # 映射回原图，单模板精确定位
-        rx = int(fx / scale)
-        ry = int(fy / scale)
-        rsz = int(fsz / scale)
+        if cached:
+            # 有缓存：在已知位置附近直接精搜
+            cx, cy, csz = cached
+            px = max(0, cx - csz // 4)
+            py = max(0, cy - csz // 4)
+            pw = min(csz * 2, w - px)
+            ph = min(csz * 2, h - py)
+            search_roi = screenshot[py:py + ph, px:px + pw]
 
-        # 在原图小范围搜索修正偏移
-        search_x = max(0, rx - rsz // 4)
-        search_y = max(0, ry - rsz // 4)
-        search_w = min(rsz * 2, w - search_x)
-        search_h = min(rsz * 2, h - search_y)
-        search_roi = screenshot[search_y:search_y + search_h,
-                                search_x:search_x + search_w]
-        tmpl = _composite_rank_icon(name, rsz, bg_color)
-        if tmpl is not None:
-            res = cv2.matchTemplate(search_roi, tmpl, cv2.TM_CCOEFF_NORMED)
-            _, _, _, loc = cv2.minMaxLoc(res)
-            rx = search_x + loc[0]
-            ry = search_y + loc[1]
+            best_name, best_score = None, 0.0
+            best_x = best_y = best_sz = 0
+            for name in _RANK_LABELS:
+                for sz in range(max(30, csz - 15), min(csz + 18, pw // 2, ph), 3):
+                    tmpl = _composite_rank_icon(name, sz, bg_color)
+                    if tmpl is None or tmpl.shape[0] >= search_roi.shape[0] or tmpl.shape[1] >= search_roi.shape[1]:
+                        continue
+                    res = cv2.matchTemplate(search_roi, tmpl, cv2.TM_CCOEFF_NORMED)
+                    _, val, _, loc = cv2.minMaxLoc(res)
+                    if val > best_score:
+                        best_score, best_name = val, name
+                        best_x, best_y = px + loc[0], py + loc[1]
+                        best_sz = sz
+            if best_score < threshold or best_name is None:
+                continue
+            name, score, rx, ry, rsz = best_name, best_score, best_x, best_y, best_sz
+        else:
+            # 首次：缩略图搜索 + 映射 + 单模板修正
+            name, score, fx, fy, fsz = _detect_rank_in_roi(
+                small, sx, 0, small_roi_w, small_roi_h,
+                bg_color, threshold,
+            )
+            if name is None:
+                continue
+
+            rx = int(fx / scale)
+            ry = int(fy / scale)
+            rsz = int(fsz / scale)
+
+            search_x = max(0, rx - rsz // 4)
+            search_y = max(0, ry - rsz // 4)
+            search_w = min(rsz * 2, w - search_x)
+            search_h = min(rsz * 2, h - search_y)
+            search_roi = screenshot[search_y:search_y + search_h,
+                                    search_x:search_x + search_w]
+            tmpl = _composite_rank_icon(name, rsz, bg_color)
+            if tmpl is not None:
+                res = cv2.matchTemplate(search_roi, tmpl, cv2.TM_CCOEFF_NORMED)
+                _, _, _, loc = cv2.minMaxLoc(res)
+                rx = search_x + loc[0]
+                ry = search_y + loc[1]
+
+            # 记住位置
+            _position_cache[pos_key] = (rx, ry, rsz)
 
         rank_label = _RANK_LABELS.get(name, name)
         result[f"{side}_rank"] = rank_label
