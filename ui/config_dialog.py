@@ -372,6 +372,7 @@ class ConfigDialog(QDialog):
                 f"QTabBar::tab:selected {{ background: {widget_bg}; }}"
             )
         self._tabs.addTab(self._make_detection_tab(), "识别")
+        self._tabs.addTab(self._make_rank_tab(), "段位")
         self._tabs.addTab(self._make_appearance_tab(), "外观")
         self._tabs.addTab(self._make_clipboard_tab(), "剪贴板")
         self._tabs.addTab(self._make_float_tab(), "悬浮窗")
@@ -582,6 +583,47 @@ class ConfigDialog(QDialog):
             "右键托盘图标可还原窗口或退出程序。"
         )
         lo.addWidget(self._tray_minimize_cb)
+
+        lo.addStretch()
+        return w
+
+    # =========================================================================
+    # Tab 2: 段位
+    # =========================================================================
+
+    def _make_rank_tab(self) -> QWidget:
+        """创建"段位"标签页：段位图标检测的独立线程配置。"""
+        w = QWidget()
+        lo = QVBoxLayout(w)
+        lo.setSpacing(12)
+
+        self._rank_enabled_cb = QCheckBox("启用段位图标检测")
+        self._rank_enabled_cb.setToolTip(
+            "独立线程持续截图检测双方段位图标（新手~大师 + I~V），\n"
+            "检测到后写入 CSV 己方段位/对方段位列。"
+        )
+        lo.addWidget(self._rank_enabled_cb)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel("截图间隔:"))
+        self._rank_interval = QDoubleSpinBox()
+        self._rank_interval.setRange(0.2, 2.0)
+        self._rank_interval.setSingleStep(0.1)
+        self._rank_interval.setSuffix(" 秒")
+        self._rank_interval.setToolTip("间隔越短越容易捕捉到段位图标，但 CPU 占用越高。")
+        row.addWidget(self._rank_interval)
+        row.addStretch()
+        lo.addLayout(row)
+
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("置信度阈值:"))
+        self._rank_threshold = QDoubleSpinBox()
+        self._rank_threshold.setRange(0.5, 0.95)
+        self._rank_threshold.setSingleStep(0.05)
+        self._rank_threshold.setToolTip("匹配置信度阈值，越高越严格（减少误识别但可能漏检）。")
+        row2.addWidget(self._rank_threshold)
+        row2.addStretch()
+        lo.addLayout(row2)
 
         lo.addStretch()
         return w
@@ -1103,6 +1145,12 @@ class ConfigDialog(QDialog):
         self._tray_minimize_cb.setChecked(n.get("minimize_to_tray", False))
         self._obs_mode_cb.setChecked(n.get("obs_mode", False))
 
+        # ---- 段位检测 ----
+        rk = c.get("rank_detection", {})
+        self._rank_enabled_cb.setChecked(rk.get("enabled", True))
+        self._rank_interval.setValue(rk.get("interval", 0.5))
+        self._rank_threshold.setValue(rk.get("confidence_threshold", 0.7))
+
         # ---- 外观 ----
         theme = c.get("appearance", {}).get("theme", "")
         idx = self._theme_combo.findText(theme)
@@ -1309,6 +1357,11 @@ class ConfigDialog(QDialog):
                 "minimize_to_tray": self._tray_minimize_cb.isChecked(),
                 "obs_mode": self._obs_mode_cb.isChecked(),
             },
+            "rank_detection": {
+                "enabled": self._rank_enabled_cb.isChecked(),
+                "interval": self._rank_interval.value(),
+                "confidence_threshold": self._rank_threshold.value(),
+            },
         }
 
         self._write_toml(data)
@@ -1348,6 +1401,7 @@ class ConfigDialog(QDialog):
         fw = data.get("floating_window", {})
         dbg = data.get("debug", {})
         ntfy = data.get("notification", {})
+        rk = data.get("rank_detection", {})
 
         lines: list[str] = [
             "# MD Stats 配置文件（由设置 GUI 生成，也可手动编辑）",
@@ -1419,6 +1473,14 @@ class ConfigDialog(QDialog):
             "最小化时隐藏到系统托盘（而非任务栏）")
         _kv("obs_mode", ntfy.get("obs_mode", False),
             "OBS 捕获模式（悬浮窗显示任务栏图标以允许 OBS 捕获）")
+
+        lines.extend(["", "# 段位图标检测", "[rank_detection]"])
+        _kv("enabled", rk.get("enabled", True),
+            "是否启用段位图标检测")
+        _kv("interval", rk.get("interval", 0.5),
+            "截图间隔（秒），0.3 ~ 1.0")
+        _kv("confidence_threshold", rk.get("confidence_threshold", 0.7),
+            "匹配置信度阈值 (0.0~1.0)")
 
         lines.extend(["", "# 悬浮统计窗", "[floating_window]"])
         _kv("use_theme_bg", fw.get("use_theme_bg", False),

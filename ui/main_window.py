@@ -1061,10 +1061,11 @@ class MainWindow(QMainWindow):
 
         self._worker.start()
 
-        # 段位检测独立线程
-        self._rank_detector = RankDetector()
-        self._rank_detector.rank_icon_detected.connect(self._on_rank_icon_detected)
-        self._rank_detector.start()
+        # 段位检测独立线程（按配置启用）
+        if self._config.get("rank_detection", {}).get("enabled", True):
+            self._rank_detector = RankDetector()
+            self._rank_detector.rank_icon_detected.connect(self._on_rank_icon_detected)
+            self._rank_detector.start()
         self._snapshot_ctrl.sync_hotkeys()
 
         # 更新 UI 状态: 禁用启动、启用停止、锁定卡组、禁用危险按钮
