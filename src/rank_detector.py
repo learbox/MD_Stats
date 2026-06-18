@@ -103,12 +103,21 @@ class RankDetector(QThread):
                 self.msleep(int(self._interval * 1000))
                 continue
 
+            # 跳过已检测到的侧，只搜缺失的
+            skip: set[str] = set()
+            if self._result:
+                if self._result.get("player_rank"):
+                    skip.add("player")
+                if self._result.get("opponent_rank"):
+                    skip.add("opponent")
+
             try:
-                result = _det.detect_rank_icon(screenshot, self._threshold)
+                result = _det.detect_rank_icon(screenshot, self._threshold,
+                                               skip_sides=skip or None)
             except Exception:
                 result = {}
 
-            # 合并结果：保留之前检测到的，补齐新检测到的
+            # 合并结果
             if self._result:
                 for k in ("player_rank", "player_tier", "player_score",
                           "opponent_rank", "opponent_tier", "opponent_score"):

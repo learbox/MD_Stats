@@ -600,8 +600,12 @@ def _detect_tier_number(
 
 def detect_rank_icon(
     screenshot: np.ndarray, threshold: float = 0.7,
+    skip_sides: set | None = None,
 ) -> dict[str, str | int | float | None]:
     """检测双方头像旁的段位图标和等级数字。
+
+    Args:
+        skip_sides: 跳过的侧，如 {"player"} 只搜对手。默认双方都搜。
 
     应在 WAITING_TURN 阶段的截图上调用（UI 最稳定）。
     分左右半屏搜索：左侧 = 玩家，右侧 = 对手。
@@ -636,7 +640,12 @@ def detect_rank_icon(
     small_roi_w = small.shape[1] // 3
     small_roi_h = small_h // 3
 
+    if skip_sides is None:
+        skip_sides = set()
+
     for side, sx in [("player", 0), ("opponent", small.shape[1] - small_roi_w)]:
+        if side in skip_sides:
+            continue
         # 检查位置缓存
         pos_key = (w, h, side)
         cached = _position_cache.get(pos_key)
