@@ -92,6 +92,10 @@ class RankDetector(QThread):
             if not _cap.is_window_open("masterduel"):
                 self.msleep(500)
                 continue
+            # 窗口最小化时跳过截图
+            if _cap.is_window_minimized("masterduel"):
+                self.msleep(int(self._interval * 1000))
+                continue
 
             try:
                 screenshot = _cap.capture_window("masterduel")
