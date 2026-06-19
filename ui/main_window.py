@@ -643,10 +643,14 @@ class MainWindow(QMainWindow):
 
         # 展开/收起按钮
         self._btn_toggle_rank = QPushButton("▸")
-        self._btn_toggle_rank.setFixedWidth(24)
-        self._btn_toggle_rank.setFlat(True)
+        self._btn_toggle_rank.setFixedWidth(22)
+        self._btn_toggle_rank.setFixedHeight(60)
         self._btn_toggle_rank.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_toggle_rank.setToolTip("展开对手段位胜率统计")
+        self._btn_toggle_rank.setStyleSheet(
+            "QPushButton { background: #555; color: white; border: none; "
+            "border-radius: 4px; font-size: 12px; padding: 0px; }"
+            "QPushButton:hover { background: #888; }")
         self._btn_toggle_rank.clicked.connect(self._toggle_rank_panel)
 
         # 右侧面板
