@@ -88,10 +88,10 @@ class RankDetector(QThread):
                 self.msleep(200)
                 continue
 
-            # 等待 Master Duel 窗口可用
+            # Master Duel 窗口关闭 → 停止线程
             if not _cap.is_window_open("masterduel"):
-                self.msleep(500)
-                continue
+                self._running = False
+                break
             # 窗口最小化时跳过截图
             if _cap.is_window_minimized("masterduel"):
                 self.msleep(int(self._interval * 1000))
