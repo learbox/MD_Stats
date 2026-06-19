@@ -61,25 +61,17 @@ class RankStatsDialog(QDialog):
             dialog_bg = f"#{dr:02x}{dg:02x}{db:02x}"
         self.setStyleSheet(f"#rankStatsDialog {{ background: {dialog_bg}; }}")
 
-        # 主布局
+        # 主布局：标题栏 + 内容区
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         outer.addWidget(self._make_titlebar())
 
-        content = QWidget()
-        r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
-        bg_semi = f"rgba({r},{g},{b},180)"
-        content.setStyleSheet(
-            f"#rankStatsContent {{ background: {bg_semi}; border: none; "
-            "border-radius: 8px; }}"
-        )
-        content.setObjectName("rankStatsContent")
-        outer.addWidget(content)
-
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(10)
+        # 内容区直接放在 dialog 内，背景透出
+        inner = QVBoxLayout()
+        inner.setContentsMargins(16, 12, 16, 12)
+        inner.setSpacing(10)
+        outer.addLayout(inner)
 
         # ---- 筛选栏 ----
         filter_row = QHBoxLayout()
@@ -94,7 +86,7 @@ class RankStatsDialog(QDialog):
         self._rank_combo.setMinimumWidth(80)
         filter_row.addWidget(self._rank_combo)
         filter_row.addStretch()
-        layout.addLayout(filter_row)
+        inner.addLayout(filter_row)
 
         # ---- 17 项统计指标 (2 列网格) ----
         self._stat_labels: dict[str, QLabel] = {}
@@ -122,8 +114,8 @@ class RankStatsDialog(QDialog):
                 pair.addWidget(lbl_val)
                 pair.addStretch()
                 grid.addLayout(pair, row, col)
-        layout.addLayout(grid)
-        layout.addStretch()
+        inner.addLayout(grid)
+        inner.addStretch()
 
         # ---- 联动 ----
         self._deck_combo.currentTextChanged.connect(self._refresh)
