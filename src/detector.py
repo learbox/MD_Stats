@@ -217,49 +217,39 @@ def init_templates() -> str | None:
 
 
 def match_template(
-    screenshot: np.ndarray, template_name: str
-) -> float:
-    """在截图中搜索模板，返回最高匹配度。
+    screenshot: np.ndarray, template_name: str,
+    get_pos: bool = False,
+) -> float | tuple[float, int, int]:
+    """在截图中搜索模板，返回最高匹配度（及可选位置）。
 
     这是本模块的核心函数，所有具体的识别（硬币、结果）都通过它实现。
     阈值比较由调用方完成（取所有模板中的最高分后与 threshold 比较）。
 
     Args:
-        screenshot:
-            待搜索的截图，BGR 格式 numpy 数组，shape=(H, W, 3)。
-
-        template_name:
-            模板的名称（不含扩展名），对应 resource/templates/ 下的文件。
-            例如 "coin_win" 对应 coin_win.png。
+        screenshot:     待搜索的截图，BGR 格式 numpy 数组，shape=(H, W, 3)。
+        template_name:  模板名称（不含扩展名），如 "coin_win"。
+        get_pos:        是否同时返回最佳匹配位置 (x, y)，用于 ROI 自动学习。
 
     Returns:
-        最高匹配度 (0.0 ~ 1.0)，模板不存在或尺寸不匹配时返回 0.0
+        get_pos=False → float (最高匹配度)
+        get_pos=True  → (float, x, y)
+        模板不存在或尺寸不匹配时返回 0.0 / (0.0, 0, 0)
     """
-    # 0. 防御：截图可能因窗口消失等原因返回 None
     if screenshot is None:
-        return 0.0
+        return (0.0, 0, 0) if get_pos else 0.0
 
-    # 1. 加载模板
     template = _get_cached_template(template_name)
     if template is None:
-        return 0.0
+        return (0.0, 0, 0) if get_pos else 0.0
 
-    # 2. 尺寸检查：截图必须不小于模板
-    #    OpenCV matchTemplate 要求: W_screenshot >= W_template 且 H_screenshot >= H_template
     if screenshot.shape[0] < template.shape[0] or screenshot.shape[1] < template.shape[1]:
-        return 0.0
+        return (0.0, 0, 0) if get_pos else 0.0
 
-    # 3. 执行模板匹配
-    #    TM_CCOEFF_NORMED: 归一化相关系数匹配法
-    #    返回值是一个矩阵，每个元素 (i,j) 表示模板左上角放在截图 (i,j) 时的匹配度
     result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, max_loc = cv2.minMaxLoc(result)
 
-    # 4. 获取整个结果矩阵中的最大值（即最佳匹配位置的匹配度）
-    #    minMaxLoc 返回 (minVal, maxVal, minLoc, maxLoc)
-    #    我们只关心 maxVal（最高匹配度），位置信息不需要
-    _, max_val, _, _ = cv2.minMaxLoc(result)
-
-    # 5. 返回原始分数（由调用方比较所有模板后决定结果）
+    if get_pos:
+        return float(max_val), max_loc[0], max_loc[1]
     return float(max_val)
 
 
@@ -310,37 +300,75 @@ def detect_result(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
     )
 
 
+def _save_roi(section: str, x: int, y: int, w: int, h: int) -> None:
+    """将检测到的位置写入 roi.toml 的指定 section，下次启动自动加载。
+
+    ROI 以匹配点为中心、模板尺寸 x3 为范围，留足余量防止下次偏移。
+    """
+    if _resolution_subdir is None:
+        return
+    try:
+        path = _TEMPLATES_BASE / _resolution_subdir / "roi.toml"
+        if path.exists():
+            text = path.read_text(encoding="utf-8")
+        else:
+            text = "# 模板匹配搜索区域（社区测量+自动学习）\n"
+        # 追加 [rank] 段（如已存在则不动）
+        if f"[{section}]" not in text:
+            text += (
+                f"\n[{section}]\n"
+                f"x = {x}\ny = {y}\nwidth = {w}\nheight = {h}\n"
+            )
+            path.write_text(text, encoding="utf-8")
+        # 同步更新内存缓存
+        _roi_cache[section] = (x, y, w, h)
+    except OSError:
+        pass
+
+
 def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
     """阶段 1 附 — 检测是否为升段局或降段局。
 
-    在硬币结果画面的同一张截图上执行。Master Duel 在段位升降时
-    会在硬币画面中额外显示升段/降段标识——与硬币结果同时出现、
-    同时消失，是同一帧画面的一部分，因此复用 detect_coin_win
-    的截图，无需额外截图或新增状态机阶段。
-
-    模板（rank_up.png / rank_down.png）缺失时，match_template
-    返回 (False, 0.0)，最终返回 None，视为普通局。
-
-    注意：本函数是"附带"检测——返回值仅用于记录段位升降信息，
-    不影响硬币/先后攻/胜负的主流程。误判或漏判都不会阻塞状态机。
+    升降段标识与硬币结果同时出现。首次检测走 coin 的 ROI（或全图），
+    匹配成功后自动把坐标记入 roi.toml 的 [rank] 段，后续直接精搜。
 
     Args:
         screenshot: 游戏截图（BGR 格式），与 detect_coin_win 使用同一张。
         threshold: 匹配置信度阈值。
 
     Returns:
-        'up'    — 升段局
-        'down'  — 降段局
-        None    — 未识别到（普通局，或模板缺失）
+        'up' / 'down' / None
     """
+    # 优先 rank ROI，其次 coin ROI，最后全图
+    roi = _get_roi("rank") or _get_roi("coin")
+    search = screenshot[roi[1]:roi[1] + roi[3], roi[0]:roi[0] + roi[2]] if roi else screenshot
+    ox, oy = (roi[0], roi[1]) if roi else (0, 0)
+
     best_key, best_score = "", 0.0
+    best_x = best_y = 0
     for key in ("rank_up", "rank_down"):
-        score = match_template(screenshot, key)
+        result = match_template(search, key, get_pos=True)
+        if isinstance(result, tuple):
+            score, mx, my = result
+        else:
+            score, mx, my = result, 0, 0
         if score > best_score:
             best_score, best_key = score, key
+            best_x, best_y = ox + mx, oy + my
+
     global _last_match_score
     _last_match_score = best_score
-    if best_score >= threshold:
+
+    if best_score >= threshold and best_key:
+        # 首次检测到时自动持久化 rank ROI（以匹配点为中心 ±50px）
+        if "rank" not in _roi_cache:
+            tpl = _get_cached_template(best_key)
+            if tpl is not None:
+                th, tw = tpl.shape[:2]
+                _save_roi("rank",
+                          max(0, best_x - tw), max(0, best_y - th),
+                          min(tw * 3, screenshot.shape[1] - max(0, best_x - tw)),
+                          min(th * 3, screenshot.shape[0] - max(0, best_y - th)))
         return "up" if best_key == "rank_up" else "down"
     return None
 
