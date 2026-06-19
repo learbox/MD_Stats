@@ -389,7 +389,8 @@ def get_last_score() -> float:
 #
 # 等级数字识别:
 #   段位图标下方有 I~V 的罗马数字（巅峰没有）。通过列投影峰值计数
-#   识别数字等级，II 和 IV 形状相似用峰宽区分。
+#   + 峰宽分析识别：I=1窄峰, V=1宽峰(平顶山), II=2等宽窄峰,
+#   IV=2峰(宽窄比>1.8), III=3窄峰。
 # =============================================================================
 
 _RANK_ICONS_DIR = get_project_root() / "resource" / "templates" / "rankicons"
@@ -655,12 +656,14 @@ def _detect_tier_number(
            （位于图标右下角，约占图标 22%×11.5% 面积）
         2. 转灰度 + OTSU 二值化（数字白、背景黑）
         3. 反相后每列求和 → 得到"列投影"一维数组
-        4. 数列投影中的峰值个数 = 罗马数字的"竖线"数量
-           I = 1 个峰, III = 3 个峰
+        4. 数峰值个数 + 量每个峰的宽度 → 按峰数+峰宽判定
 
-        特殊情况 II / IV / V（三者列投影都是 2 峰）：
-           先用连通域分析区分 V（1个域=两臂相连）vs II/IV（2+个域=笔画分离），
-           再用峰宽比区分 II（两窄峰）vs IV（一窄一宽 > 1.8倍）。
+        实测结论（游戏实际字体，1600×900）：
+          I   = 1 个窄峰（竖线占字符区 10~20%）
+          V   = 1 个宽峰（两斜线在列投影中融合为平顶山，占 25~50%）
+          II  = 2 个等宽窄峰（两根分离竖线）
+          IV  = 2 个峰：窄峰(I) + 宽峰(V形)，宽窄比 > 1.8
+          III = 3 个窄峰
 
     Args:
         screenshot: 原始分辨率截图
@@ -708,13 +711,10 @@ def _detect_tier_number(
     if n_peaks <= 0:
         return None, 0.0
 
-    # ---- 2 峰：II / IV / V 三分支 ----
-    # 先用列投影峰宽比区分 IV（一窄I + 一宽V形，比例悬殊），
-    # 再用连通域区分 V（两臂相连=1域）vs II（两竖分离=2域）。
-    # 连通域单独用不可靠：IV 的 I 如果太靠近 V，二值化后会连成 1 域。
-    if n_peaks == 2:
-        # 计算列投影各峰的宽度
-        peak_widths = []
+    # ---- 峰宽计算（所有分支共用） ----
+    def _measure_peaks(proj: np.ndarray, peak_th: float) -> list[int]:
+        """量出投影中每个峰的宽度（列数），返回宽度列表。"""
+        widths = []
         in_peak = False
         w_start = 0
         for i, v in enumerate(proj):
@@ -723,32 +723,38 @@ def _detect_tier_number(
                 w_start = i
             elif v <= peak_th * 0.5 and in_peak:
                 in_peak = False
-                peak_widths.append(i - w_start)
+                widths.append(i - w_start)
+        if in_peak:  # 峰在数组末尾没闭合
+            widths.append(len(proj) - w_start)
+        return widths
 
-        if len(peak_widths) >= 2:
-            wide_ratio = max(peak_widths) / max(min(peak_widths), 1)
-            # IV: 一窄一宽，宽峰（V形笔画） > 窄峰（I竖线） × 1.8
-            # 峰宽比优先 — 不依赖连通域是否被二值化粘连
+    total_w = len(proj)  # 字符区总宽度（列数）
+
+    # ---- 分类判定 ----
+    # 实测结论（基于游戏实际字体，1600×900 截图）：
+    #   I   = 1 个窄峰（一根竖线占字符区 10~20%）
+    #   V   = 1 个宽峰（两斜线在列投影中融合为平顶山，占 25~50%）
+    #   II  = 2 个等宽窄峰（两根分离竖线）
+    #   IV  = 2 个峰，一窄(I) + 一宽(V形)，宽窄比 > 1.8
+    #   III = 3 个窄峰
+    if n_peaks == 1:
+        widths = _measure_peaks(proj, peak_th)
+        if widths and widths[0] > total_w * 0.25:
+            return 5, 0.6   # V: 单宽峰（平顶山），占字符区 > 25%
+        return 1, 0.8       # I: 单窄峰
+
+    if n_peaks == 2:
+        widths = _measure_peaks(proj, peak_th)
+        if len(widths) >= 2:
+            wide_ratio = max(widths) / max(min(widths), 1)
             if wide_ratio > 1.8:
-                return 4, 0.6
-
-            # 排除 IV 后，用连通域区分 V（1域）vs II（2域）
-            num_labels, labels = cv2.connectedComponents(bin_img)
-            comp_areas = [np.sum(labels == i) for i in range(1, num_labels)
-                          if np.sum(labels == i) >= 5]
-            if len(comp_areas) == 1:
-                # 1 连通域 + 2 等宽峰 → V 的两斜线底部相连
-                return 5, 0.7
-
-            # 2+ 连通域 + 2 等宽峰 → II 的两根竖线完全分离
-            return 2, 0.8
+                return 4, 0.6   # IV: I(窄峰) + V形(宽峰)
+            return 2, 0.8       # II: 两个等宽窄峰
         return 2, 0.8  # fallback
 
-    if n_peaks == 1:
-        return 1, 0.8   # I（也可能 V 的两个斜线在低分辨率下合并为 1 峰）
     if n_peaks == 3:
         return 3, 0.8   # III
-    # n_peaks 不在 1~3 范围 → 保守返回 None（等有真实数据后精确调参）
+
     return None, 0.0
 
 
