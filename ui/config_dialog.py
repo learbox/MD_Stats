@@ -622,6 +622,14 @@ class ConfigDialog(QDialog):
         )
         lo.addWidget(self._tray_minimize_cb)
 
+        # ---- 置信度显示 ----
+        self._show_confidence_cb = QCheckBox("状态栏显示检测置信度")
+        self._show_confidence_cb.setToolTip(
+            "开启后状态栏显示每次检测的置信度分数，便于调参。\n"
+            "包括段位图标 NCC 分数、等级判读分数、硬币/先后攻/胜负匹配分数。"
+        )
+        lo.addWidget(self._show_confidence_cb)
+
         lo.addStretch()
         return w
 
@@ -1134,6 +1142,7 @@ class ConfigDialog(QDialog):
         self._log_scope_errors.setChecked("errors" in scopes)
         # 根据日志模式的初始状态设置子复选框的启用/禁用
         self._on_log_mode_toggled(dbg.get("log_mode", False))
+        self._show_confidence_cb.setChecked(dbg.get("show_confidence", False))
 
         # ---- 通知与托盘 ----
         n = c.get("notification", {})
@@ -1313,6 +1322,7 @@ class ConfigDialog(QDialog):
                 "periodic_interval": round(self._hk_interval.value(), 1),
                 "log_mode": self._log_mode_cb.isChecked(),
                 "log_scope": self._get_log_scope(),
+                "show_confidence": self._show_confidence_cb.isChecked(),
             },
             "appearance": {
                 "theme": self._theme_combo.currentText(),
@@ -1430,6 +1440,8 @@ class ConfigDialog(QDialog):
             "开启日志模式：将运行信息写入 logs/ 目录")
         _kv("log_scope", dbg.get("log_scope", ["status", "screenshots", "errors"]),
             '日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息')
+        _kv("show_confidence", dbg.get("show_confidence", False),
+            "状态栏显示检测置信度（段位图标 NCC、等级判读、三阶段检测分数）")
 
         lines.extend(["", "[window]"])
         _kv("width", w.get("width", 1300), "主窗口宽度（像素）")

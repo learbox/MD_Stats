@@ -158,6 +158,8 @@ periodic_interval = 0.5
 log_mode = false
 # 日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息
 log_scope = ["status", "screenshots", "errors"]
+# 状态栏显示置信度（段位图标 NCC、等级判读、三阶段检测分数）
+show_confidence = false
 
 # 系统通知
 [notification]

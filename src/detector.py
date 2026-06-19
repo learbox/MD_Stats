@@ -831,13 +831,15 @@ def detect_rank_icon(
         skip_sides: 要跳过的侧，如 {"player"} 只检测对手
 
     Returns:
-        包含 6 个字段的字典:
-            player_rank     — 己方段位，如 "铂金" / None
-            player_tier     — 己方等级数字 1-5 / None（巅峰无等级）
-            player_score    — 己方 NCC 匹配分数
-            opponent_rank   — 对方段位
-            opponent_tier   — 对方等级数字
-            opponent_score  — 对方 NCC 匹配分数
+        包含 8 个字段的字典:
+            player_rank       — 己方段位，如 "铂金" / None
+            player_tier       — 己方等级数字 1-5 / None（巅峰无等级）
+            player_score      — 己方图标 NCC 匹配分数
+            player_tier_score — 己方等级置信度
+            opponent_rank     — 对方段位
+            opponent_tier     — 对方等级数字
+            opponent_score    — 对方图标 NCC 匹配分数
+            opponent_tier_score — 对方等级置信度
     """
     _init_rank_icons()
     _load_position_cache()
@@ -848,8 +850,8 @@ def detect_rank_icon(
 
     # 初始化结果字典（双方都从 None 开始）
     result: dict[str, str | int | float | None] = {
-        "player_rank": None, "player_tier": None, "player_score": 0.0,
-        "opponent_rank": None, "opponent_tier": None, "opponent_score": 0.0,
+        "player_rank": None, "player_tier": None, "player_score": 0.0, "player_tier_score": 0.0,
+        "opponent_rank": None, "opponent_tier": None, "opponent_score": 0.0, "opponent_tier_score": 0.0,
     }
 
     # 缩略图粗搜：缩到 600px 宽，大幅减少匹配运算量
@@ -937,7 +939,10 @@ def detect_rank_icon(
         result[f"{side}_score"] = score
         # 巅峰不检测等级数字（_NO_TIER_RANKS）
         if rank_label not in _NO_TIER_RANKS:
-            tier, _ = _detect_tier_number(screenshot, rx, ry, rsz, threshold)
+            tier, tier_conf = _detect_tier_number(screenshot, rx, ry, rsz, threshold)
             result[f"{side}_tier"] = tier
+            result[f"{side}_tier_score"] = tier_conf
+        else:
+            result[f"{side}_tier_score"] = 0.0
 
     return result

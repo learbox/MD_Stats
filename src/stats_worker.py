@@ -188,6 +188,7 @@ class StatsWorker(QThread):
         dbg = cfg.get("debug", {})
         self._save_screenshots: bool = dbg.get("save_screenshots", False)
         self._auto_clear: bool = dbg.get("auto_clear_screenshots", True)
+        self._show_confidence: bool = dbg.get("show_confidence", False)
         if dbg.get("log_mode", False):
             _log.init_log(get_project_root() / "logs")       # 初始化日志文件
             _log.set_scopes(set(dbg.get("log_scope",         # 设置记录范围
@@ -542,8 +543,12 @@ class StatsWorker(QThread):
                         rank_text = "（升段局）"
                     elif rank_result == "down":
                         rank_text = "（降段局）"
-                    self.status_update.emit(
-                        f"已识别: {coin_text}{rank_text} ({coin_score:.2f}) — 等待识别先后攻…"
+                    if self._show_confidence:
+                        self.status_update.emit(
+                            f"已识别: {coin_text}{rank_text} ({coin_score:.2f}) — 等待识别先后攻…")
+                    else:
+                        self.status_update.emit(
+                            f"已识别: {coin_text}{rank_text} — 等待识别先后攻…")
                     )
                     self._state = "WAITING_TURN"              # 状态前进一步
 
@@ -556,9 +561,13 @@ class StatsWorker(QThread):
                         self._save_detection_screenshot(screenshot, f"turn_{turn}")
                     self.turn_detected.emit(turn)
                     turn_text = "先攻" if turn == "first" else "后攻"
-                    self.status_update.emit(
-                        f"已识别: {turn_text} ({_det.get_last_score():.2f}) — 等待识别对局胜负…"
-                    )
+                    turn_score = _det.get_last_score()
+                    if self._show_confidence:
+                        self.status_update.emit(
+                            f"已识别: {turn_text} ({turn_score:.2f}) — 等待识别对局胜负…")
+                    else:
+                        self.status_update.emit(
+                            f"已识别: {turn_text} — 等待识别对局胜负…")
                     self._state = "WAITING_RESULT"
 
             elif self._state == "WAITING_RESULT":
@@ -570,9 +579,13 @@ class StatsWorker(QThread):
                         self._save_detection_screenshot(screenshot, f"result_{result}")
                     self.result_detected.emit(result)          # 通知主线程写入 CSV
                     result_text = "胜" if result == "win" else "负"
-                    self.status_update.emit(
-                        f"已识别结果: {result_text} ({_det.get_last_score():.2f}) — 等待下一局…"
-                    )
+                    result_score = _det.get_last_score()
+                    if self._show_confidence:
+                        self.status_update.emit(
+                            f"已识别结果: {result_text} ({result_score:.2f}) — 等待下一局…")
+                    else:
+                        self.status_update.emit(
+                            f"已识别结果: {result_text} — 等待下一局…")
                     self._state = "WAITING_COIN"               # 回到起点，等下一局
                     self._new_game = True                      # 标记新一局开始，下次检测硬币时清除旧截图
 

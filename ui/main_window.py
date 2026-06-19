@@ -1157,13 +1157,22 @@ class MainWindow(QMainWindow):
         self._rank_icon_result = rank_info
 
         # 格式化段位字符串用于状态栏显示
+        show_conf = self._config.get("debug", {}).get("show_confidence", False)
         def _fmt(key: str) -> str:
             rank = rank_info.get(f"{key}_rank") or "?"
+            icon_score = rank_info.get(f"{key}_score", 0)
             tier = rank_info.get(f"{key}_tier")
+            tier_score = rank_info.get(f"{key}_tier_score", 0)
+            if show_conf:
+                rank_part = f"{rank} ({icon_score:.2f})"
+            else:
+                rank_part = rank
             if isinstance(tier, int) and 1 <= tier <= 5:
-                tier_str = ["", "I", "II", "III", "IV", "V"][tier]  # 1→I, 2→II...
+                tier_str = ["", "I", "II", "III", "IV", "V"][tier]
+                if show_conf:
+                    return f"{rank_part} {tier_str} ({tier_score:.2f})"
                 return f"{rank} {tier_str}"
-            return rank  # 巅峰没有等级数字
+            return rank_part
 
         player = _fmt("player")
         opponent = _fmt("opponent")
@@ -2172,8 +2181,8 @@ class MainWindow(QMainWindow):
             self._worker.stop()
             self._worker.wait(1000)
         if self._rank_detector is not None:
-            self._rank_detector.stop()
-            self._rank_detector.wait(1000)
+            self._rank_detector.terminate()  # 关闭时强制终止，不等模板匹配
+            self._rank_detector.wait()
 
         # ---- 4. 注销全局热键并退出事件循环 ----
         self._snapshot_ctrl.unregister_hotkeys()
