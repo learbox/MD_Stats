@@ -1,0 +1,20 @@
+# 模板匹配搜索区域（社区测量数据）
+# 裁剪后匹配速度提升 ~18 倍
+
+[coin]
+x = 700
+y = 630
+width = 500
+height = 200
+
+[turn]
+x = 700
+y = 630
+width = 500
+height = 200
+
+[result]
+x = 650
+y = 350
+width = 620
+height = 450

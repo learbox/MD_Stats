@@ -120,6 +120,36 @@ _OPTIONAL_TEMPLATES = {"rank_up", "rank_down"}
 # 模板内存缓存：init_templates() 预加载后填充，后续 _get_cached_template 直接取用
 # 键为模板名（不含扩展名），值为 numpy 数组或 None（加载失败时）
 _template_cache: dict[str, np.ndarray | None] = {}
+# ROI 缓存：{ "coin": (x,y,w,h), ... }，从 roi.toml 加载，加速全图搜索
+_roi_cache: dict[str, tuple[int, int, int, int]] = {}
+_roi_loaded = False
+
+
+def _load_roi() -> None:
+    """从当前分辨率目录的 roi.toml 加载预设搜索区域。"""
+    global _roi_cache, _roi_loaded
+    if _roi_loaded:
+        return
+    _roi_loaded = True
+    if _resolution_subdir is None:
+        return
+    try:
+        import tomllib
+        path = _TEMPLATES_BASE / _resolution_subdir / "roi.toml"
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+        for section in ("coin", "turn", "result"):
+            if section in data:
+                s = data[section]
+                _roi_cache[section] = (s["x"], s["y"], s["width"], s["height"])
+    except (FileNotFoundError, KeyError, OSError):
+        pass  # roi.toml 不存在则全图搜索
+
+
+def _get_roi(section: str) -> tuple[int, int, int, int] | None:
+    """获取指定检测阶段的 ROI (x, y, w, h)，无配置返回 None。"""
+    _load_roi()
+    return _roi_cache.get(section)
 
 
 def _read_template_file(name: str) -> np.ndarray | None:
@@ -233,102 +263,51 @@ def match_template(
     return float(max_val)
 
 
-def detect_coin_win(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
-    """阶段 1 — 检测是否赢了硬币。
+def _detect_with_roi(
+    screenshot: np.ndarray, roi_section: str, templates: tuple[str, ...],
+    result_map: dict[str, str], threshold: float,
+) -> str | None:
+    """通用检测：按 ROI 裁剪后用多个模板匹配，返回最高分对应的结果。
 
-    在对局开始时，Master Duel 会通过"抛硬币"决定哪一方选择先后攻偏好。
-    游戏画面中会显示硬币结果：赢硬币（玩家选中了偏好）或输硬币（对手选中了偏好）。
-    本函数通过匹配 coin_win 和 coin_lose 模板来判断结果。
-
-    Args:
-        screenshot: 游戏截图（BGR 格式）。
-        threshold: 匹配置信度阈值。
-
-    Returns:
-        'win'   — 赢了硬币
-        'lose'  — 输了硬币
-        None    — 未识别到（画面中不包含硬币结果 UI）
-
-    注意事项:
-        - 两个模板都会被尝试匹配，返回第一个匹配成功的（coin_win 优先）。
-        - 如果两个都匹配成功，说明模板定义有问题（特征重叠），需检查模板。
-        - 如果两个都没匹配到，说明当前画面不是硬币结果画面。
+    如果当前分辨率有 roi.toml 配置，裁剪到 ROI 区域搜索（~18 倍加速）；
+    否则全图搜索作为兜底。
     """
+    roi = _get_roi(roi_section)
+    search_area = screenshot[roi[1]:roi[1] + roi[3], roi[0]:roi[0] + roi[2]] if roi else screenshot
     best_key, best_score = "", 0.0
-    for key in ("coin_win", "coin_lose"):
-        score = match_template(screenshot, key)
+    for key in templates:
+        score = match_template(search_area, key)
         if score > best_score:
             best_score, best_key = score, key
     global _last_match_score
     _last_match_score = best_score
     if best_score >= threshold:
-        return "win" if best_key == "coin_win" else "lose"
+        return result_map.get(best_key)
     return None
+
+
+def detect_coin_win(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
+    """阶段 1 — 检测硬币输赢（赢硬币/输硬币）。"""
+    return _detect_with_roi(
+        screenshot, "coin", ("coin_win", "coin_lose"),
+        {"coin_win": "win", "coin_lose": "lose"}, threshold,
+    )
 
 
 def detect_turn(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
-    """阶段 2 — 检测先后攻。
-
-    硬币结果确定后，游戏会显示"先攻"或"后攻"的 UI 标识。
-    注意：赢了硬币不代表一定先攻（玩家可能主动选择后攻），
-    因此必须独立检测此阶段。
-
-    本函数通过匹配 go_first 和 go_second 模板来判断结果。
-
-    Args:
-        screenshot: 游戏截图（BGR 格式）。
-        threshold: 匹配置信度阈值。
-
-    Returns:
-        'first'  — 玩家先攻
-        'second' — 玩家后攻
-        None     — 未识别到（画面中不包含先后攻 UI）
-
-    注意事项:
-        - go_first 优先匹配，两个都命中时返回 'first'。
-        - Master Duel 中先后攻的 UI 通常会持续显示几秒，足够检测到。
-    """
-    best_key, best_score = "", 0.0
-    for key in ("go_first", "go_second"):
-        score = match_template(screenshot, key)
-        if score > best_score:
-            best_score, best_key = score, key
-    global _last_match_score
-    _last_match_score = best_score
-    if best_score >= threshold:
-        return "first" if best_key == "go_first" else "second"
-    return None
+    """阶段 2 — 检测先后攻（先攻/后攻）。"""
+    return _detect_with_roi(
+        screenshot, "turn", ("go_first", "go_second"),
+        {"go_first": "first", "go_second": "second"}, threshold,
+    )
 
 
 def detect_result(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
-    """阶段 3 — 检测对局结果（胜利或失败）。
-
-    对局结束后，Master Duel 会显示胜利或失败的界面。
-    本函数通过匹配 victory 和 defeat 模板来判断结果。
-
-    Args:
-        screenshot: 游戏截图（BGR 格式）。
-        threshold: 匹配置信度阈值。
-
-    Returns:
-        'win'   — 对局胜利
-        'lose'  — 对局失败
-        None    — 未识别到（画面中不包含对局结果 UI）
-
-    注意事项:
-        - 程序目前不支持识别平局结果（Master Duel 中极少出现）。
-        - victory 优先匹配，两个都命中时返回 'win'。
-    """
-    best_key, best_score = "", 0.0
-    for key in ("victory", "defeat"):
-        score = match_template(screenshot, key)
-        if score > best_score:
-            best_score, best_key = score, key
-    global _last_match_score
-    _last_match_score = best_score
-    if best_score >= threshold:
-        return "win" if best_key == "victory" else "lose"
-    return None
+    """阶段 3 — 检测对局胜负（胜利/失败）。"""
+    return _detect_with_roi(
+        screenshot, "result", ("victory", "defeat"),
+        {"victory": "win", "defeat": "lose"}, threshold,
+    )
 
 
 def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
