@@ -708,39 +708,41 @@ def _detect_tier_number(
     if n_peaks <= 0:
         return None, 0.0
 
-    # ---- 连通域分析：区分 V vs II/IV ----
-    # V = 两斜线底部相交 → 1 个连通域, 列投影 2 峰
-    # II = 两竖线完全分离 → 2 个连通域
-    # IV = I竖线 + V形分离 → 2 个连通域
-    # 连通域数量是拓扑属性，不依赖阈值猜测，比峰宽判断更可靠。
-    num_labels, labels = cv2.connectedComponents(bin_img)
-    # 过滤背景（label 0）+ 面积 < 5px 的噪点
-    comp_areas = [np.sum(labels == i) for i in range(1, num_labels)
-                  if np.sum(labels == i) >= 5]
-    n_components = len(comp_areas)
-
+    # ---- 2 峰：II / IV / V 三分支 ----
+    # 先用列投影峰宽比区分 IV（一窄I + 一宽V形，比例悬殊），
+    # 再用连通域区分 V（两臂相连=1域）vs II（两竖分离=2域）。
+    # 连通域单独用不可靠：IV 的 I 如果太靠近 V，二值化后会连成 1 域。
     if n_peaks == 2:
-        if n_components == 1:
-            # 1 个连通域但有 2 个投影峰 → V 的两臂在底部相连
-            return 5, 0.7
-        # 2+ 连通域 → II 或 IV，用峰宽比区分
-        if n_components >= 2:
-            peak_widths = []
-            in_peak = False
-            w_start = 0
-            for i, v in enumerate(proj):
-                if v > peak_th and not in_peak:
-                    in_peak = True
-                    w_start = i
-                elif v <= peak_th * 0.5 and in_peak:
-                    in_peak = False
-                    peak_widths.append(i - w_start)
-            if len(peak_widths) >= 2:
-                wide_ratio = max(peak_widths) / max(min(peak_widths), 1)
-                if wide_ratio > 1.8:
-                    return 4, 0.6  # IV: 一窄（I）+ 一宽（V形笔画）
-                return 2, 0.8      # II: 两竖线
-            return 2, 0.8  # fallback
+        # 计算列投影各峰的宽度
+        peak_widths = []
+        in_peak = False
+        w_start = 0
+        for i, v in enumerate(proj):
+            if v > peak_th and not in_peak:
+                in_peak = True
+                w_start = i
+            elif v <= peak_th * 0.5 and in_peak:
+                in_peak = False
+                peak_widths.append(i - w_start)
+
+        if len(peak_widths) >= 2:
+            wide_ratio = max(peak_widths) / max(min(peak_widths), 1)
+            # IV: 一窄一宽，宽峰（V形笔画） > 窄峰（I竖线） × 1.8
+            # 峰宽比优先 — 不依赖连通域是否被二值化粘连
+            if wide_ratio > 1.8:
+                return 4, 0.6
+
+            # 排除 IV 后，用连通域区分 V（1域）vs II（2域）
+            num_labels, labels = cv2.connectedComponents(bin_img)
+            comp_areas = [np.sum(labels == i) for i in range(1, num_labels)
+                          if np.sum(labels == i) >= 5]
+            if len(comp_areas) == 1:
+                # 1 连通域 + 2 等宽峰 → V 的两斜线底部相连
+                return 5, 0.7
+
+            # 2+ 连通域 + 2 等宽峰 → II 的两根竖线完全分离
+            return 2, 0.8
+        return 2, 0.8  # fallback
 
     if n_peaks == 1:
         return 1, 0.8   # I（也可能 V 的两个斜线在低分辨率下合并为 1 峰）
