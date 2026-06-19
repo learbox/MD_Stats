@@ -61,17 +61,31 @@ class RankStatsDialog(QDialog):
             dialog_bg = f"#{dr:02x}{dg:02x}{db:02x}"
         self.setStyleSheet(f"#rankStatsDialog {{ background: {dialog_bg}; }}")
 
-        # 主布局：标题栏 + 内容区
+        # 主布局：标题栏 + 半透明内容区
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         outer.addWidget(self._make_titlebar())
 
-        # 内容区直接放在 dialog 内，背景透出
-        inner = QVBoxLayout()
-        inner.setContentsMargins(16, 12, 16, 12)
+        # 统计内容区，半透明底仅此区域透出背景图
+        content = QWidget()
+        content.setObjectName("rankStatsContent")
+        # 用 theme_colors 的 widget_bg 计算半透明色，兼容 non-hex 值
+        wbg = widget_bg
+        if wbg and wbg.startswith("#") and len(wbg) == 7:
+            r, g, b = int(wbg[1:3], 16), int(wbg[3:5], 16), int(wbg[5:7], 16)
+            semi = f"rgba({r},{g},{b},180)"
+        else:
+            semi = "rgba(255,255,255,180)"
+        content.setStyleSheet(
+            f"#rankStatsContent {{ background: {semi}; border: none; "
+            "border-radius: 8px; margin: 8px; padding: 12px; }}"
+        )
+        outer.addWidget(content)
+
+        inner = QVBoxLayout(content)
+        inner.setContentsMargins(0, 0, 0, 0)
         inner.setSpacing(10)
-        outer.addLayout(inner)
 
         # ---- 筛选栏 ----
         filter_row = QHBoxLayout()
