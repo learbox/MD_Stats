@@ -97,6 +97,8 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStyledItemDelegate,
     QAbstractItemView,
+    QHBoxLayout,
+    QVBoxLayout,
     QTableWidget,
     QToolButton,
     QWidget,
@@ -653,7 +655,7 @@ class MainWindow(QMainWindow):
         panel_layout = QVBoxLayout(self._rank_panel)
         panel_layout.setContentsMargins(8, 4, 8, 4)
         panel_layout.setSpacing(4)
-        panel_title = QLabel("对手段位胜率（当前卡组）")
+        panel_title = QLabel("vs 对手段位 — 我的胜率")
         panel_layout.addWidget(panel_title)
         self._rank_stats_table = QTableWidget(0, 5)
         self._rank_stats_table.setHorizontalHeaderLabels(
