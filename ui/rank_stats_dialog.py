@@ -1,14 +1,17 @@
-"""详细统计信息弹窗 — 按卡组 + 对方段位筛选，展示 17 项统计指标。"""
+"""详细统计信息弹窗 — 按卡组 + 段位筛选，展示 17 项统计指标。
 
-from PySide6.QtCore import Qt
+样式参考 ConfigDialog：自定义标题栏 + 半透明背景 + 无边框窗口。"""
+
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QGridLayout, QHBoxLayout, QLabel,
-    QPushButton, QVBoxLayout, QWidget,
+    QVBoxLayout, QWidget,
 )
 
-from src.recorder import compute_filtered_stats, load_records, STATS_COLUMNS
+from src.config import get_project_root
+from src.recorder import compute_filtered_stats, load_records
 
-# 段位大段列表（含"全部"）
 RANK_TIERS = ["全部", "新手", "青铜", "白银", "黄金", "铂金", "钻石", "大师", "巅峰"]
 
 
@@ -21,38 +24,62 @@ class RankStatsDialog(QDialog):
         super().__init__(parent)
         self._config = config
         self._colors = theme_colors
-        self._bg_path = bg_path
         self._widget_bg = widget_bg
         self._main_bg = main_bg
 
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint
-                            | Qt.WindowType.Dialog)
-        self.setMinimumSize(460, 520)
-        self.resize(500, 560)
+        # 背景图
+        self._bg_pixmap: QPixmap | None = None
+        if bg_path:
+            pm = QPixmap(bg_path)
+            if not pm.isNull():
+                self._bg_pixmap = pm
 
-        # ---- 背景 ----
-        content = QWidget()
-        content.setObjectName("contentWidget")
-        self.setStyleSheet(f"#contentWidget {{ background-color: {main_bg}; }}")
+        # 拖拽
+        self._dragging = False
+        self._drag_start = QPoint()
 
+        # 窗口属性
+        self.setWindowTitle("详细统计")
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Window
+            | Qt.WindowType.Dialog
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setMinimumSize(460, 440)
+        self.resize(500, 480)
+        self.setObjectName("rankStatsDialog")
+
+        # 背景色
+        dialog_bg = widget_bg
+        if self._bg_pixmap is None:
+            mr, mg, mb = int(main_bg[1:3], 16), int(main_bg[3:5], 16), int(main_bg[5:7], 16)
+            shift = 5
+            dr = mr + shift if mr <= 128 else mr - shift
+            dg = mg + shift if mg <= 128 else mg - shift
+            db = mb + shift if mb <= 128 else mb - shift
+            dialog_bg = f"#{dr:02x}{dg:02x}{db:02x}"
+        self.setStyleSheet(f"#rankStatsDialog {{ background: {dialog_bg}; }}")
+
+        # 主布局
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(self._make_titlebar())
+
+        content = QWidget()
+        r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
+        bg_semi = f"rgba({r},{g},{b},180)"
+        content.setStyleSheet(
+            f"#rankStatsContent {{ background: {bg_semi}; border: none; "
+            "border-radius: 8px; }}"
+        )
+        content.setObjectName("rankStatsContent")
         outer.addWidget(content)
 
         layout = QVBoxLayout(content)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
-
-        # ---- 标题栏 ----
-        title_row = QHBoxLayout()
-        title_row.addWidget(QLabel("详细统计信息"))
-        title_row.addStretch()
-        close_btn = QPushButton("×")
-        close_btn.setFixedSize(28, 28)
-        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        close_btn.clicked.connect(self.close)
-        title_row.addWidget(close_btn)
-        layout.addLayout(title_row)
 
         # ---- 筛选栏 ----
         filter_row = QHBoxLayout()
@@ -61,7 +88,6 @@ class RankStatsDialog(QDialog):
         self._deck_combo = QComboBox()
         self._deck_combo.setMinimumWidth(120)
         filter_row.addWidget(self._deck_combo)
-
         filter_row.addWidget(QLabel("对方段位:"))
         self._rank_combo = QComboBox()
         self._rank_combo.addItems(RANK_TIERS)
@@ -70,30 +96,25 @@ class RankStatsDialog(QDialog):
         filter_row.addStretch()
         layout.addLayout(filter_row)
 
-        # ---- 统计标签网格 (2 列) ----
+        # ---- 17 项统计指标 (2 列网格) ----
         self._stat_labels: dict[str, QLabel] = {}
         grid = QGridLayout()
         grid.setSpacing(4)
         items = [
-            ("对局数", "胜",),
-            ("负", "胜率"),
-            ("赢硬币次数", "输硬币次数"),
-            ("赢硬币概率", "赢硬币胜率"),
-            ("输硬币胜率", "先攻次数"),
-            ("后攻次数", "先攻胜"),
-            ("后攻胜", "先攻胜率"),
-            ("后攻胜率", "升段次数"),
-            ("降段次数", "升段胜率"),
-            ("降段胜率", ""),
+            ("对局数", "胜"), ("负", "胜率"),
+            ("赢硬币次数", "输硬币次数"), ("赢硬币概率", "赢硬币胜率"),
+            ("输硬币胜率", "先攻次数"), ("后攻次数", "先攻胜"),
+            ("后攻胜", "先攻胜率"), ("后攻胜率", "升段次数"),
+            ("降段次数", "升段胜率"), ("降段胜率", ""),
         ]
         for row, (k1, k2) in enumerate(items):
             for col, key in enumerate([k1, k2]):
                 if not key:
                     continue
                 lbl_key = QLabel(f"{key}:")
-                lbl_key.setStyleSheet("color: #888; font-size: 12px;")
+                lbl_key.setStyleSheet("color: #888; font-size: 12px; background: transparent;")
                 lbl_val = QLabel("—")
-                lbl_val.setStyleSheet("font-weight: bold; font-size: 14px;")
+                lbl_val.setStyleSheet("font-weight: bold; font-size: 14px; background: transparent;")
                 self._stat_labels[key] = lbl_val
                 pair = QHBoxLayout()
                 pair.setSpacing(4)
@@ -102,16 +123,69 @@ class RankStatsDialog(QDialog):
                 pair.addStretch()
                 grid.addLayout(pair, row, col)
         layout.addLayout(grid)
-
         layout.addStretch()
 
-        # ---- 联动刷新 ----
+        # ---- 联动 ----
         self._deck_combo.currentTextChanged.connect(self._refresh)
         self._rank_combo.currentTextChanged.connect(self._refresh)
 
-        # ---- 初始填充 ----
         self._populate_decks()
         self._refresh()
+
+    # =========================================================================
+    # 标题栏
+    # =========================================================================
+
+    def _make_titlebar(self) -> QWidget:
+        """创建顶部自定义标题栏（可拖拽 + 关闭按钮）。"""
+        bar = QWidget()
+        bar.setObjectName("rankStatsTitle")
+        bar.setFixedHeight(36)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(10, 0, 4, 0)
+
+        title = QLabel("  详细统计信息")
+        title.setStyleSheet("font-size: 13px; font-weight: bold; "
+                            "background: transparent; border: none;")
+        layout.addWidget(title)
+        layout.addStretch()
+
+        from ui.titlebar import _TitleBarButton
+        assets = get_project_root() / "resource"
+        btn_close = _TitleBarButton("title_close", assets, bar)
+        close_hover = self._colors.get("btn_close_hover", "#e74c3c")
+        btn_close.setStyleSheet(
+            "QPushButton { background: transparent; border: 1px solid transparent; "
+            "border-radius: 4px; }"
+            f"QPushButton:hover {{ background-color: {close_hover}; "
+            f"border-color: {close_hover}; }}"
+        )
+        btn_close.clicked.connect(self.reject)
+        layout.addWidget(btn_close)
+        return bar
+
+    # =========================================================================
+    # 拖拽
+    # =========================================================================
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self._drag_start = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._dragging:
+            self.move(event.globalPosition().toPoint() - self._drag_start)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._dragging = False
+        super().mouseReleaseEvent(event)
+
+    # =========================================================================
+    # 数据
+    # =========================================================================
 
     def _populate_decks(self) -> None:
         """从 CSV 加载卡组列表到下拉框。"""
@@ -121,7 +195,6 @@ class RankStatsDialog(QDialog):
         self._deck_combo.addItem("全部")
         for d in decks:
             self._deck_combo.addItem(d)
-        # 默认选最近对局的卡组
         if records:
             last_deck = records[-1].get("使用卡组", "") or "全部"
             idx = self._deck_combo.findText(last_deck)
@@ -140,6 +213,6 @@ class RankStatsDialog(QDialog):
         records = load_records()
         stats = compute_filtered_stats(records, deck, rank)
 
-        for key in self._stat_labels:
+        for key, lbl in self._stat_labels.items():
             val = stats.get(key, "—")
-            self._stat_labels[key].setText(str(val))
+            lbl.setText(str(val))
