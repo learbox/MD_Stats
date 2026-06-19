@@ -66,7 +66,7 @@ class RankStatsDialog(QDialog):
 
         # 主布局：标题栏 + 半透明内容区
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(8, 0, 8, 8)
         outer.setSpacing(0)
         outer.addWidget(self._make_titlebar())
 
@@ -82,12 +82,12 @@ class RankStatsDialog(QDialog):
             semi = "rgba(255,255,255,180)"
         content.setStyleSheet(
             f"#rankStatsContent {{ background: {semi}; border: none; "
-            "border-radius: 8px; margin: 8px; padding: 12px; }}"
+            "border-radius: 8px; }}"
         )
         outer.addWidget(content)
 
         inner = QVBoxLayout(content)
-        inner.setContentsMargins(0, 0, 0, 0)
+        inner.setContentsMargins(12, 10, 12, 10)
         inner.setSpacing(10)
 
         # ---- 筛选栏 ----
@@ -150,6 +150,7 @@ class RankStatsDialog(QDialog):
         bar = QWidget()
         bar.setObjectName("rankStatsTitle")
         bar.setFixedHeight(36)
+        bar.setStyleSheet("#rankStatsTitle { background: transparent; }")
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(10, 0, 4, 0)
 
