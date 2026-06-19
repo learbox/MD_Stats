@@ -43,11 +43,13 @@
 
 ## 模板图片
 
-`resource/templates/` 下按分辨率存放模板截图（必选 6 张 + 可选 2 张）。如果游戏分辨率不在已有目录中，需要新建对应文件夹并放入模板图片：
+`resource/templates/` 下按分辨率存放模板截图（必选 6 张 + 可选 2 张）。如果游戏分辨率不在已有目录中，需要新建对应文件夹并放入模板图片。
+
+> **段位图标需自行准备**：`rankicons/` 下的 9 张图片因版权未打包，需用 AssetRipper 从游戏资源中提取后放入对应目录（文件夹已创建），缺失时段位检测自动跳过。
 
 ```
 resource/templates/
-├── rankicons/               # 段位图标源素材（不分分辨率，RGBA 合成用）
+├── rankicons/               # 段位图标源素材（需自行提取 ⚠️）
 │   ├── img_rankicon_01_l.png  → 新手
 │   ├── img_rankicon_02_l.png  → 青铜
 │   ├── img_rankicon_03_l.png  → 白银

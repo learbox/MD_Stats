@@ -60,14 +60,36 @@ templates/
 | 7 | `rank_up.png` | 升段标识 — 硬币画面中显示段位上升的 UI 元素 | ❌ |
 | 8 | `rank_down.png` | 降段标识 — 硬币画面中显示段位下降的 UI 元素 | ❌ |
 
-## 段位图标源素材
+## 段位图标源素材（需自行准备）
 
-`rankicons/` 下的 PNG 文件是从 Master Duel 资源包中通过 AssetRipper 解包得到的 RGBA 源素材，**不需要从游戏截图裁剪**。
+> **⚠️ 因版权原因，仓库不包含 `rankicons/` 下的图片文件。** 使用段位检测功能前，需自行从游戏资源包中提取。
+
+### 如何获取
+
+1. 下载 [AssetRipper](https://github.com/AssetRipper/AssetRipper)（开源 Unity 资源提取工具）
+2. 用 AssetRipper 打开 Master Duel 安装目录下的资源文件
+3. 搜索并导出以下 9 张段位图标（290×290 RGBA PNG，文件名通常带 `_l` 后缀）：
+
+| 文件名 | 对应段位 |
+|--------|---------|
+| `img_rankicon_01_l.png` | 新手 |
+| `img_rankicon_02_l.png` | 青铜 |
+| `img_rankicon_03_l.png` | 白银 |
+| `img_rankicon_04_l.png` | 黄金 |
+| `img_rankicon_05_l.png` | 铂金 |
+| `img_rankicon_06_l.png` | 钻石 |
+| `img_rankicon_07_l.png` | 大师 |
+| `img_rateicon_01_l.png` | 巅峰 |
+| `img_rankicon_crown_l.png` | （可选） |
+
+4. 将提取的图片放入 `resource/templates/rankicons/`（文件夹已创建）
+
+### 其他说明
 
 - 格式：RGBA 32 位（带透明通道），290×290 像素
 - 用途：段位检测模块通过采样截图实际背景色，将 RGBA 合成到背景上后进行模板匹配
-- 缺失不影响主流程：`rankicons/` 不存在或图片缺失时，段位检测静默跳过，不弹窗、不报错
-- `rank_positions.toml`：首次检测到段位图标后自动生成的位置缓存，下次启动加载可加速检测。如被误删，下次检测时自动重新生成
+- **缺失不影响主流程**：图片不全或文件夹为空时，段位检测静默跳过，不弹窗、不报错
+- `rank_positions.toml`：首次检测到段位图标后自动生成的位置缓存，下次启动加载可加速检测
 
 ## 注意事项
 

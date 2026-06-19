@@ -138,6 +138,21 @@
 1. 右下角系统托盘可能折叠了图标 → 点击^展开
 2. 托盘图标已显示但功能异常 → 重启程序
 
+## 段位检测
+
+### 段位检测不工作 / 状态栏无段位信息
+
+段位图标源素材因版权原因未包含在仓库中，需自行准备：
+
+1. 确认 `resource/templates/rankicons/` 下存在 9 张 RGBA PNG 图片
+2. 图片需从 Master Duel 游戏资源包中用 AssetRipper 提取，详见 `resource/templates/README.md`
+3. 缺失时段位检测自动静默跳过，不影响硬币/先后攻/胜负识别
+
+### 段位识别结果不对（等级 I~V 错误）
+
+1. I/II/III 通常准确率较高；IV 和 V 在低分辨率下可能互相误判
+2. 可尝试调整 `config.toml` 中 `rank_detection.confidence_threshold`（默认 0.7，降低可提高识别率但可能误检）
+
 ## 性能
 
 ### 打包的 ZIP 有 130+ MB，为什么这么大

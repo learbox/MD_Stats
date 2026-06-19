@@ -63,13 +63,21 @@ pip install mss numpy opencv-python pyside6 pywin32
 
 ## 准备模板图片
 
-在 `resource/templates/` 下按游戏分辨率创建子目录，放入模板截图（必选 6 张 + 可选 2 张段位检测）。段位图标源素材在 `rankicons/` 子目录（不分分辨率，RGBA 合成用）：
+在 `resource/templates/` 下按游戏分辨率创建子目录，放入模板截图（必选 6 张 + 可选 2 张段位检测）。
+
+> **段位图标需自行准备**：`rankicons/` 下的素材因版权原因未包含在仓库中。需用 AssetRipper 等工具从游戏资源包中提取以下 9 张 RGBA PNG，放入 `resource/templates/rankicons/`（文件夹已创建，把图放进去即可）：
 
 ```
 resource/templates/
-├── rankicons/              # 段位图标源素材（9 枚）
+├── rankicons/              # 段位图标源素材（9 枚，需自行提取 ⚠️）
 │   ├── img_rankicon_01_l.png  → 新手
-│   ├── ...
+│   ├── img_rankicon_02_l.png  → 青铜
+│   ├── img_rankicon_03_l.png  → 白银
+│   ├── img_rankicon_04_l.png  → 黄金
+│   ├── img_rankicon_05_l.png  → 铂金
+│   ├── img_rankicon_06_l.png  → 钻石
+│   ├── img_rankicon_07_l.png  → 大师
+│   ├── img_rankicon_crown_l.png
 │   └── img_rateicon_01_l.png  → 巅峰
 ├── 1920x1080/          ← 分辨率子目录（宽×高）
 │   ├── coin_win.png    ← 赢硬币标识
