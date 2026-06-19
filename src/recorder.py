@@ -622,20 +622,121 @@ def compute_rank_stats(
     return stats
 
 
+# =============================================================================
+# 段位名称工具 — 用于详细统计弹窗的段位筛选
+# =============================================================================
+
+# 游戏中的 8 个大段位，按从低到高排列。
+# CSV 中"己方段位"列存储的是完整段位字符串，如 "黄金 II"、"钻石 I"。
+# 我们需要从这些字符串中提取出大段名（"黄金"、"钻石"）用于分组筛选。
+KNOWN_RANK_TIERS = ["新手", "青铜", "白银", "黄金", "铂金", "钻石", "大师", "巅峰"]
+
+
+def extract_rank_tier(rank_str: str) -> str:
+    """从完整段位字符串中提取大段名（去掉 I~V 等级数字）。
+
+    游戏里段位存储格式是 "大段名 + 空格 + 罗马数字等级"，例如：
+        "黄金 II"  → 大段是 "黄金"
+        "钻石 I"   → 大段是 "钻石"
+
+    这个函数只返回大段名，忽略后面的等级数字。
+    如果段位不在 8 大段中（比如未来新出的段位、或者空字符串），
+    返回空字符串 ""，调用方会把它们归到 "无段位/其他" 分类。
+
+    示例:
+        >>> extract_rank_tier("黄金 II")
+        '黄金'
+        >>> extract_rank_tier("黑铁 IV")   # 黑铁不在 8 大段里
+        ''
+        >>> extract_rank_tier("")           # 空字符串
+        ''
+    """
+    # 从高到低遍历已知大段，检查 rank_str 是否以它开头
+    # 因为段位存储为 "黄金 II"，startswith("黄金") 成立
+    for tier in KNOWN_RANK_TIERS:
+        if rank_str.startswith(tier):
+            return tier
+    # 没找到匹配 → 未知段位或无段位
+    return ""
+
+
+def get_available_rank_tiers(records: list[dict[str, str]]) -> list[str]:
+    """扫描所有对局记录，找出数据中实际出现过的已知段位大段。
+
+    这个函数用于动态生成段位筛选下拉框：只列出数据中真正存在的段位，
+    而不是把 8 个大段全部列出来（没数据的段位列出来没意义）。
+
+    返回的列表按 KNOWN_RANK_TIERS 的顺序排列（低段位在前），
+    方便用户按段位从低到高查看。
+
+    Args:
+        records: 从 CSV 加载的对局记录列表，每条记录是一个字典
+
+    Returns:
+        数据中出现过的已知段位大段列表，如 ["青铜", "黄金", "钻石"]
+    """
+    tiers_in_data: set[str] = set()  # 用集合自动去重
+    for r in records:
+        own = r.get("己方段位", "").strip()  # 取出己方段位，去掉首尾空格
+        if own:
+            tier = extract_rank_tier(own)     # 提取大段名
+            if tier:
+                tiers_in_data.add(tier)        # 加入集合（重复自动忽略）
+    # 按 KNOWN_RANK_TIERS 的顺序输出，保证下拉框排列合理
+    return [t for t in KNOWN_RANK_TIERS if t in tiers_in_data]
+
+
 def compute_filtered_stats(
     records: list[dict[str, str]],
     deck: str = "",
-    opponent_rank: str = "",
+    player_rank: str = "",
 ) -> dict[str, str | int]:
-    """按卡组和对方段位筛选后，返回单行 17 项统计指标。"""
+    """按卡组和己方段位筛选后，返回单行 17 项统计指标。
+
+    详细统计弹窗的核心计算函数。做两件事：
+        1. 筛选 — 根据用户选择的卡组和己方段位，过滤出符合条件的记录
+        2. 统计 — 对筛选后的记录调用 compute_stats 计算 17 项指标
+
+    筛选逻辑:
+        - deck 为空 → 不按卡组过滤（对应"全部"）
+        - player_rank 为空 → 不按段位过滤（对应"全部"）
+        - player_rank 为具体段位（如"黄金"）→ 只保留己方段位以"黄金"开头的记录
+          例如 "黄金 I"、"黄金 II" 都会被保留
+        - player_rank 为 "无段位/其他" → 保留两种记录：
+            1. 己方段位为空白的（还没有检测到段位）
+            2. 己方段位不在 8 大段中的（如未来的"黑铁"）
+
+    Args:
+        records: 全部对局记录
+        deck: 卡组名称，空字符串表示不过滤
+        player_rank: 己方段位大段名，空字符串表示不过滤
+
+    Returns:
+        单行统计结果字典，包含 "对局数"、"胜率" 等 17 项指标
+    """
     filtered = []
     for r in records:
+        # ---- 卡组筛选 ----
         if deck and r.get("使用卡组", "") != deck:
-            continue
-        if opponent_rank:
-            opp = r.get("对方段位", "")
-            if not opp.startswith(opponent_rank):
+            continue  # 卡组不匹配，跳过这条记录
+
+        # ---- 己方段位筛选 ----
+        if player_rank:
+            own = r.get("己方段位", "").strip()  # 取出己方段位，如 "黄金 II"
+
+            if player_rank == "无段位/其他":
+                # 特殊处理：匹配空白段位 + 未知段位（如黑铁）
+                # extract_rank_tier 对已知段位返回大段名，对未知段位返回 ""
+                # own 非空且 extract_rank_tier 返回非空 → 是已知段位 → 跳过
+                if own and extract_rank_tier(own):
+                    continue
+            elif not own.startswith(player_rank):
+                # 正常筛选：己方段位不以选中的大段名开头 → 跳过
+                # 例如 player_rank="黄金"，own="白银 I" → startswith 失败 → 跳过
                 continue
-        filtered.append(r)
+
+        filtered.append(r)  # 通过所有筛选条件，保留
+
     result = compute_stats(filtered)
+    # 如果筛选后没有记录，返回全零统计（避免空列表报错）
     return result[0] if result else compute_stats([])[0]
