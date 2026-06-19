@@ -658,9 +658,10 @@ def _detect_tier_number(
         4. 数列投影中的峰值个数 = 罗马数字的"竖线"数量
            I = 1 个峰, III = 3 个峰
 
-        特殊情况 II vs IV：
-           两者都是 2 个峰（II=两竖、IV=一竖一V形），通过峰的宽度区分：
-           V 形笔画宽度明显大于 I 形 → 宽峰 > 窄峰 × 1.8 → IV
+        特殊情况 II / IV / V（三者都是 2 峰）：
+           II = 两竖，峰都窄     → avg 峰宽 < 28% 字符宽
+           IV = 一竖 + V形       → 宽峰 > 窄峰 × 1.8
+           V  = 两斜线，峰都较宽 → avg 峰宽 ≥ 28% 字符宽（置信度较低）
 
     Args:
         screenshot: 原始分辨率截图
@@ -708,7 +709,12 @@ def _detect_tier_number(
     if n_peaks <= 0:
         return None, 0.0
 
-    # ---- 2 峰特殊处理：区分 II（两窄峰）和 IV（一窄 I + 一宽 V） ----
+    # ---- 2 峰特殊处理：II / IV / V ----
+    # II = 两竖，IV = 一竖 + V形，V = 两斜线。
+    # 列投影里三者都是 2 峰，区别在峰的宽度：
+    #   - II: 两个都很窄（竖线投影宽度小）
+    #   - IV: 一窄（I）+ 一宽（V 的斜线投影比竖线宽）
+    #   - V:  两个都比较宽（两条斜线都占多列）
     if n_peaks == 2:
         # 计算每个峰的宽度
         peak_widths = []
@@ -721,16 +727,22 @@ def _detect_tier_number(
             elif v <= peak_th * 0.5 and in_peak:
                 in_peak = False
                 peak_widths.append(i - w_start)
-        # V 形笔画比 I 宽 1.8 倍以上
-        if len(peak_widths) >= 2 and max(peak_widths) > min(peak_widths) * 1.8:
-            return 4, 0.6  # IV
-        return 2, 0.8      # II
+        if len(peak_widths) >= 2:
+            wide_ratio = max(peak_widths) / max(min(peak_widths), 1)
+            total_w = len(proj)
+            avg_w = sum(peak_widths) / len(peak_widths)
+            if wide_ratio > 1.8:
+                return 4, 0.6  # IV: 一宽一窄，宽的是 V 形笔画
+            # V 的斜线投影约占字符宽的 28% 以上（竖线一般 < 25%）
+            if avg_w > total_w * 0.28:
+                return 5, 0.5  # V: 两斜线，置信度较低（与 II 有重叠区间）
+            return 2, 0.8      # II: 两竖线
 
     if n_peaks == 1:
-        return 1, 0.8   # I
+        return 1, 0.8   # I（也可能 V 的两个斜线在低分辨率下合并为 1 峰）
     if n_peaks == 3:
         return 3, 0.8   # III
-    # n_peaks >= 4 可能在特别模糊时出现，保守返回 None
+    # n_peaks 不在 1~3 范围 → 保守返回 None（等有真实数据后精确调参）
     return None, 0.0
 
 
