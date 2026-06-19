@@ -57,7 +57,8 @@ resource/templates/
 │   ├── img_rankicon_05_l.png  → 铂金
 │   ├── img_rankicon_06_l.png  → 钻石
 │   ├── img_rankicon_07_l.png  → 大师
-│   └── img_rateicon_01_l.png  → 巅峰
+│   ├── img_rateicon_01_l.png  → 巅峰
+│   └── rank_positions.toml    # 位置缓存（自动生成）
 ├── 1920x1080/
 │   ├── coin_win.png        ← 赢硬币标识（必选）
 │   ├── coin_lose.png       ← 输硬币标识（必选）
@@ -66,7 +67,8 @@ resource/templates/
 │   ├── go_first.png        ← 先攻标识（必选）
 │   ├── go_second.png       ← 后攻标识（必选）
 │   ├── victory.png         ← 胜利界面标识（必选）
-│   └── defeat.png          ← 失败界面标识（必选）
+│   ├── defeat.png          ← 失败界面标识（必选）
+│   └── roi.toml            ← 搜索区域裁剪（可选）
 ├── 2560x1440/
 └── 3840x2160/
 ```
@@ -90,7 +92,9 @@ MDStats/
 ├── csv/                     # 对战数据
 ├── screenshots/             # 调试截图（开启后自动生成）
 ├── logs/                    # 日志文件（开启后自动生成）
-├── resource/                # 资源文件（模板图片、段位图标需自行准备、位置缓存）
+├── resource/templates/      # 模板图片 + roi.toml 搜索区域配置
+│   ├── rankicons/           # 段位图标源素材（需自行准备 ⚠️）
+│   └── 1920x1080/ ...       # 按分辨率分目录
 ├── themes/                  # 主题目录（自定义主题文件放这）
 └── .runtime/                # 运行时依赖（请勿修改）
 ```
