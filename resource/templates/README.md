@@ -8,8 +8,6 @@
 templates/
 ├── rankicons/              # 段位图标源素材（不分分辨率，RGBA 格式）
 │   ├── img_rankicon_01_l.png  → 新手
-│   └── ...
-├── rank_positions.toml     # 段位图标位置缓存（自动生成，可安全删除）
 │   ├── img_rankicon_02_l.png  → 青铜
 │   ├── img_rankicon_03_l.png  → 白银
 │   ├── img_rankicon_04_l.png  → 黄金
@@ -17,7 +15,8 @@ templates/
 │   ├── img_rankicon_06_l.png  → 钻石
 │   ├── img_rankicon_07_l.png  → 大师
 │   ├── img_rankicon_crown_l.png
-│   └── img_rateicon_01_l.png  → 巅峰
+│   ├── img_rateicon_01_l.png  → 巅峰
+│   └── rank_positions.toml  # 段位图标位置缓存（自动生成）
 ├── 1920x1080/              ← 1080p 分辨率模板
 │   ├── coin_win.png
 │   ├── coin_lose.png
@@ -89,7 +88,7 @@ templates/
 - 格式：RGBA 32 位（带透明通道），290×290 像素
 - 用途：段位检测模块通过采样截图实际背景色，将 RGBA 合成到背景上后进行模板匹配
 - **缺失不影响主流程**：图片不全或文件夹为空时，段位检测静默跳过，不弹窗、不报错
-- `rank_positions.toml`：首次检测到段位图标后自动生成的位置缓存，下次启动加载可加速检测
+- `rankicons/rank_positions.toml`：首次检测到段位图标后自动生成的位置缓存，下次启动加载可加速检测
 
 ## 注意事项
 

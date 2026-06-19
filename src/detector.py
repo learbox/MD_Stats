@@ -393,7 +393,7 @@ def get_last_score() -> float:
 #
 # 位置缓存:
 #   首次检测需要缩略图粗搜 → 原图精搜的完整流程（较慢）。
-#   一旦确定位置，就把 (分辨率, 侧, x, y, 尺寸) 存入 rank_positions.toml。
+#   一旦确定位置，就把 (分辨率, 侧, x, y, 尺寸) 存入 rankicons/rank_positions.toml。
 #   后续检测直接在该位置附近精搜（极快）。
 #
 # 等级数字识别:
@@ -420,11 +420,11 @@ _composite_cache: dict[tuple, np.ndarray] = {}
 
 # 段位图标位置缓存：{(分辨率宽, 分辨率高, "player"/"opponent"): (x, y, 尺寸)}
 _position_cache: dict[tuple, tuple] = {}
-_POSITION_CACHE_FILE = get_project_root() / "resource" / "templates" / "rank_positions.toml"
+_POSITION_CACHE_FILE = get_project_root() / "resource" / "templates" / "rankicons" / "rankicons/rank_positions.toml"
 
 
 def _load_position_cache() -> None:
-    """从 rank_positions.toml 加载段位图标在屏幕上的位置缓存。
+    """从 rankicons/rank_positions.toml 加载段位图标在屏幕上的位置缓存。
 
     文件格式:
         [player]
@@ -455,7 +455,7 @@ def _load_position_cache() -> None:
 
 
 def _save_position_cache() -> None:
-    """将内存中的段位图标位置缓存持久化到 rank_positions.toml。
+    """将内存中的段位图标位置缓存持久化到 rankicons/rank_positions.toml。
 
     只在首次检测成功后调用一次，后续检测直接读取缓存文件。
     按 side 分组，每组按分辨率排序，方便人工查看和调试。

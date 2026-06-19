@@ -81,7 +81,7 @@
 1. 确认设置 → 识别 →「启用段位图标检测」已勾选
 2. 确认 `resource/templates/rankicons/` 目录存在且包含 9 枚 PNG（8 枚段位图标 + crown）
 3. 首次运行或切换分辨率后首次检测可能需 2~3 局才能命中（位置缓存尚未建立）
-4. `resource/templates/rank_positions.toml` 被误删：下次检测到段位图标时自动重新生成
+4. `resource/templates/rankicons/rank_positions.toml` 被误删：下次检测到段位图标时自动重新生成
 5. 置信度阈值过高：在设置中降低段位置信度阈值（默认 0.7）可提高命中率，但可能引入误识别
 
 **兜底**：段位检测失败不影响对局的硬币/先后攻/胜负记录，只缺少段位信息。
