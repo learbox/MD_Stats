@@ -52,7 +52,9 @@ class RankStatsDialog(QDialog):
         self.resize(500, 480)
         self.setObjectName("rankStatsDialog")
 
-        # 背景色
+        # ---- 背景色（双模式：背景图主题 / 纯色主题） ----
+        r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
+        bg_semi = f"rgba({r},{g},{b},180)"
         dialog_bg = widget_bg
         if self._bg_pixmap is None:
             mr, mg, mb = int(main_bg[1:3], 16), int(main_bg[3:5], 16), int(main_bg[5:7], 16)
@@ -64,26 +66,25 @@ class RankStatsDialog(QDialog):
         self.setStyleSheet(f"#rankStatsDialog {{ background: {dialog_bg}; }}")
         self._apply_dwm_round_corners()
 
-        # 主布局：标题栏 + 半透明内容区
+        # ---- 主布局：标题栏 + 内容区 ----
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(8, 0, 8, 8)
+        outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         outer.addWidget(self._make_titlebar())
 
-        # 统计内容区，半透明底仅此区域透出背景图
+        # 内容区：背景图主题用半透明（透出图片），纯色主题用实色
         content = QWidget()
         content.setObjectName("rankStatsContent")
-        # 用 theme_colors 的 widget_bg 计算半透明色，兼容 non-hex 值
-        wbg = widget_bg
-        if wbg and wbg.startswith("#") and len(wbg) == 7:
-            r, g, b = int(wbg[1:3], 16), int(wbg[3:5], 16), int(wbg[5:7], 16)
-            semi = f"rgba({r},{g},{b},180)"
+        if self._bg_pixmap is not None:
+            content.setStyleSheet(
+                f"#rankStatsContent {{ background-color: {bg_semi}; "
+                "border: none; }}"
+            )
         else:
-            semi = "rgba(255,255,255,180)"
-        content.setStyleSheet(
-            f"#rankStatsContent {{ background: {semi}; border: none; "
-            "border-radius: 8px; }}"
-        )
+            content.setStyleSheet(
+                f"#rankStatsContent {{ background-color: {widget_bg}; "
+                "border: none; }}"
+            )
         outer.addWidget(content)
 
         inner = QVBoxLayout(content)
