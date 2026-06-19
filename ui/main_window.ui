@@ -151,6 +151,13 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="btn_rank_stats">
+        <property name="text">
+         <string>详细统计</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="spacerCtrlStretch">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>

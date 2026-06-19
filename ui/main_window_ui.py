@@ -87,6 +87,11 @@ class Ui_MainWindow(object):
 
         self.ctrlLayout.addWidget(self.btn_undo)
 
+        self.btn_rank_stats = QPushButton(self.topPanel)
+        self.btn_rank_stats.setObjectName(u"btn_rank_stats")
+
+        self.ctrlLayout.addWidget(self.btn_rank_stats)
+
         self.spacerCtrlStretch = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.ctrlLayout.addItem(self.spacerCtrlStretch)
@@ -207,6 +212,7 @@ class Ui_MainWindow(object):
         self.btn_manual_win.setText(QCoreApplication.translate("MainWindow", u"\u8d62\u786c\u5e01", None))
         self.btn_manual_lose.setText(QCoreApplication.translate("MainWindow", u"\u8f93\u786c\u5e01", None))
         self.btn_undo.setText(QCoreApplication.translate("MainWindow", u"\u64a4\u9500", None))
+        self.btn_rank_stats.setText(QCoreApplication.translate("MainWindow", u"\u8be6\u7ec6\u7edf\u8ba1", None))
         self.btn_reload.setText(QCoreApplication.translate("MainWindow", u"\u52a0\u8f7d\u6570\u636e", None))
         self.btn_copy.setText(QCoreApplication.translate("MainWindow", u"\u590d\u5236\u7edf\u8ba1", None))
         self.btn_open_csv.setText(QCoreApplication.translate("MainWindow", u"\u6253\u5f00 data.csv \u76ee\u5f55", None))
