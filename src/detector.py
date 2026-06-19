@@ -339,8 +339,8 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
     Returns:
         'up' / 'down' / None
     """
-    # 优先 rank ROI，其次 coin ROI，最后全图
-    roi = _get_roi("rank") or _get_roi("coin")
+    # 优先 rank ROI，其次全图（coin ROI 可能不覆盖升段标识位置）
+    roi = _get_roi("rank")
     search = screenshot[roi[1]:roi[1] + roi[3], roi[0]:roi[0] + roi[2]] if roi else screenshot
     ox, oy = (roi[0], roi[1]) if roi else (0, 0)
 

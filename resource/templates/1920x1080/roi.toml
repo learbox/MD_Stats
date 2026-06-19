@@ -18,3 +18,9 @@ x = 650
 y = 350
 width = 620
 height = 450
+
+[rank]
+x = 0
+y = 35
+width = 1708
+height = 264
