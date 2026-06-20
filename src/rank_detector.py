@@ -196,7 +196,9 @@ class RankDetector(QThread):
 
             if self._result:
                 for k in ("player_rank", "player_tier", "player_score",
-                          "opponent_rank", "opponent_tier", "opponent_score"):
+                          "player_tier_score",
+                          "opponent_rank", "opponent_tier", "opponent_score",
+                          "opponent_tier_score"):
                     if not self._result.get(k) and result.get(k):
                         self._result[k] = result[k]
             else:
