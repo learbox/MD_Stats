@@ -1941,6 +1941,7 @@ class MainWindow(QMainWindow):
         if self._rank_detector is not None:
             self._rank_detector.stop()
             self._rank_detector.wait(1000)
+        if worker_was_running:
             self._start_worker()
 
         self._show_status(
