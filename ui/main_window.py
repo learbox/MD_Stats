@@ -595,6 +595,7 @@ class MainWindow(QMainWindow):
         self._match = MatchState()               # 三阶段对局状态机
         self._rank_detector: Any | None = None  # type: ignore[annotation-unchecked] — 段位图标检测线程（延迟导入）
         self._rank_icon_result: dict | None = None        # 段位图标检测结果暂存
+        self._notifying = False                         # 防_result_detected重入
         # 段位图标在硬币阶段（阶段1）显示，但数据要到对局结束才写入 CSV。
         # 检测结果先存在 _rank_icon_result，对局结束时取出写入记录。
         # _rank_icon_strs() 负责提取并清除缓存（每次对局最多调用一次）。
@@ -1270,8 +1271,6 @@ class MainWindow(QMainWindow):
         """
         if self._match.stage != 2:
             return
-
-        # 先提取通知所需信息，再 reset（reset 会清空缓存）
         cached = self._match.snapshot()
         coin_cache = cached["coin"]
         turn_cache = cached["turn"]
@@ -1418,6 +1417,9 @@ class MainWindow(QMainWindow):
         """
         if not self._config.get("notification", {}).get("enabled", False):
             return
+        if self._notifying:                         # 防重入：避免同一结果弹两次气泡
+            return
+        self._notifying = True
         coin_text = "赢硬币" if coin_cache == "win" else "输硬币"
         rank_text = ""
         if rank_cache == "up":
@@ -1433,6 +1435,7 @@ class MainWindow(QMainWindow):
                                QSystemTrayIcon.MessageIcon.Warning if new_record is None
                                else QSystemTrayIcon.MessageIcon.Information,
                                duration)
+        self._notifying = False
 
     def _on_undo(self) -> None:
         """撤销上一阶段的选择，逐级回退并同步 worker。"""
@@ -1455,6 +1458,7 @@ class MainWindow(QMainWindow):
         """重置所有阶段到初始状态（一局完成后调用）。"""
         self._match.reset()
         self._rank_icon_result = None
+        self._notifying = False              # 防重入标志复位
         self._update_manual_buttons()
 
     def _update_manual_buttons(self) -> None:
