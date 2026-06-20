@@ -95,11 +95,13 @@ class RankDetector(QThread):
     def stop_searching(self) -> None:
         """通知线程：当前对局已进入阶段2（先后攻出现），段位图标已消失。
 
-        此时如果已经检测到结果（_result 不为空），立即把结果发射给
-        主线程供 CSV 写入使用，然后将线程置为暂停状态，不再截图。
-        如果还没检测到（_result 为空），直接暂停（这局可能错过了段位显示窗口）。
+        此时如果已经检测到双方完整结果，立即发射给主线程供 CSV 写入。
+        如果只检测到单方或完全没有，直接暂停（宁可缺数据也不写不完整数据）。
         """
-        if self._result and not self._paused:
+        if (self._result
+                and not self._paused
+                and self._result.get("player_rank")
+                and self._result.get("opponent_rank")):
             self.rank_icon_detected.emit(dict(self._result))
         self._paused = True
 
