@@ -21,6 +21,10 @@ csv/*.csv
 screenshots/
 logs/
 
+# Dev docs (internal, not for distribution)
+docs/_dev/
+docs/screenshots/
+
 # Temp
 *.bak
 
@@ -30,3 +34,6 @@ resource/templates/rankicons/*.png
 # OS
 Thumbs.db
 _test/
+
+# Local tools (not for distribution)
+tools/
