@@ -105,9 +105,9 @@ jobs:
               name='MD Stats',
           )
 
-          '@ | Set-Content MD Stats.spec -Encoding UTF8
+          '@ | Set-Content "MD Stats.spec" -Encoding UTF8
 
-          uv run --with 'pyinstaller>=6.10,<7' pyinstaller MD Stats.spec --noconfirm
+          uv run --with 'pyinstaller>=6.10,<7' pyinstaller "MD Stats.spec" --noconfirm
 
       - name: 组装发布目录
         shell: pwsh
