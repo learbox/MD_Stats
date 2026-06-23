@@ -498,6 +498,21 @@ def get_rank_icon_all_scores(side: str) -> dict[str, float]:
     return dict(_last_rank_icon_all_scores.get(side, {}))
 
 
+def has_template(name: str) -> bool:
+    """检查指定模板是否已加载到缓存（即用户是否放置了对应的模板文件）。
+
+    init_templates() 会将所有找到的模板预加载到 _template_cache，
+    没找到的键值为 None。本函数用于跳过可选模板的失败样本记录。
+
+    Args:
+        name: 模板名（不含扩展名），如 "rank_up"、"rank_down"。
+
+    Returns:
+        True 表示模板存在，False 表示未找到。
+    """
+    return _get_cached_template(name) is not None
+
+
 # =============================================================================
 # 段位图标检测（源素材 + 背景色合成 + NCC 匹配）
 #

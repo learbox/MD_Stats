@@ -395,45 +395,80 @@ class FailureSampleManager:
 
     @staticmethod
     def _format_toml(meta: dict[str, Any]) -> list[str]:
-        """将元数据字典格式化为 TOML 文本行列表。
+        """将元数据字典格式化为带注释的 TOML 文本。
 
-        手动格式化以保证字段顺序和可读性，不依赖第三方 TOML 写入库。
+        每个字段附带中文注释，方便开发者直接打开文件查看诊断信息。
         """
+        # 每个字段对应的中文注释
+        _COMMENTS: dict[str, str] = {
+            "target":           "识别项名称",
+            "confidence":       "本次匹配置信度 (0~1)",
+            "threshold":        "识别成功阈值 (>= 此值视为成功)",
+            "record_threshold": "失败样本记录下限 (threshold − offset)",
+            "matched_template": "匹配到的模板文件名",
+            "roi_name":         "ROI 配置段名",
+            "roi":              "本次使用的 ROI 坐标 [x, y, w, h]",
+            "roi_source":       'ROI 来源: "preset"=预设 / "fullscreen"=全图兜底',
+            "client_size":      "游戏窗口客户区尺寸 (宽x高)",
+            "window_rect":      "窗口屏幕坐标 (多显示器 DPI 排查)",
+            "version":          "软件版本号",
+            "time":             "保存时间",
+            "tier_detected":    "列投影识别到的等级 (I~V，仅段位图标)",
+            "tier_score":       "等级识别置信度 (仅段位图标)",
+        }
+
         lines: list[str] = [
-            "# 最佳失败样本元数据（由 MD Stats 自动生成）",
+            "# ============================================================",
+            "# 最佳失败样本元数据 — 由 MD Stats 自动生成",
+            "#",
+            '# 这个文件记录了识别「接近成功」但未达阈值的一次检测。',
+            "# 可用于排查以下问题：",
+            "#   • 游戏更新导致字体/UI 变化",
+            "#   • 模板素材失效",
+            "#   • ROI 偏移",
+            "#   • 分辨率兼容问题",
+            "# ============================================================",
             "",
         ]
 
-        # 顶层标量字段（按顺序）
-        scalar_keys = [
-            "target", "confidence", "threshold", "record_threshold",
-            "matched_template", "roi_name", "roi_source",
-            "client_size", "window_rect", "version", "time",
-            "tier_detected", "tier_score",
+        # 分组输出，组间空行分隔
+        _GROUPS: list[tuple[str, list[str]]] = [
+            ("识别结果", ["target", "confidence", "threshold", "record_threshold",
+                          "matched_template"]),
+            ("搜索区域", ["roi_name", "roi", "roi_source"]),
+            ("运行环境", ["client_size", "window_rect", "version", "time"]),
+            ("段位等级（仅段位图标）", ["tier_detected", "tier_score"]),
         ]
-        for key in scalar_keys:
-            if key in meta:
-                val = meta[key]
-                if isinstance(val, bool):
-                    lines.append(f"{key} = {str(val).lower()}")
-                elif isinstance(val, str):
-                    lines.append(f'{key} = "{val}"')
-                elif isinstance(val, (int, float)):
-                    lines.append(f"{key} = {val}")
-                elif isinstance(val, list):
-                    lines.append(f"{key} = {val}")
+
+        for group_name, keys in _GROUPS:
+            written = False
+            for key in keys:
+                if key in meta:
+                    if not written:
+                        lines.append(f"# ---- {group_name} ----")
+                        written = True
+                    val = meta[key]
+                    comment = _COMMENTS.get(key, "")
+                    if isinstance(val, bool):
+                        lines.append(f"{key} = {str(val).lower()}  # {comment}")
+                    elif isinstance(val, str):
+                        lines.append(f'{key} = "{val}"  # {comment}')
+                    elif isinstance(val, (int, float)):
+                        lines.append(f"{key} = {val}  # {comment}")
+                    elif isinstance(val, list):
+                        lines.append(f"{key} = {val}  # {comment}")
+            if written:
+                lines.append("")
 
         # [all_scores] 子表
         if "all_scores" in meta:
-            lines.append("")
+            lines.append("# ---- 所有候选模板匹配分数 ----")
+            lines.append("# 可用于诊断：如果全部模板分数都很低，说明整体识别环境有问题；")
+            lines.append("# 如果只是个别模板低分，说明该模板本身可能需要更新。")
             lines.append("[all_scores]")
             for k, v in meta["all_scores"].items():
                 lines.append(f"{k} = {v}")
-
-        # ROI 坐标（独立行，方便阅读）
-        if "roi" in meta:
-            # roi 已在上面作为列表写出，这里不重复
-            pass
+            lines.append("")
 
         return lines
 

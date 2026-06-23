@@ -752,7 +752,7 @@ class MainWindow(QMainWindow):
         # ---- 16. 记录表格编辑 → CSV 同步 ----
         self._record_table.cellChanged.connect(self._on_record_cell_changed)
 
-        # QSplitter 分割比例：首次运行用默认值，后续从 .app_state.json 恢复
+        # QSplitter 分割比例：首次运行用默认值，后续从 .app_state.toml 恢复
         self._splitter.setStretchFactor(0, 2)
         self._splitter.setStretchFactor(1, 3)
         self._splitter.setSizes(read_app_state()["splitter"])
@@ -1668,7 +1668,7 @@ class MainWindow(QMainWindow):
     # 悬浮窗管理
     #
     # 悬浮窗是一个独立的半透明顶层窗口，显示当前卡组的关键统计数据。
-    # 用户可拖拽移动，位置会持久化到 .app_state.json。
+    # 用户可拖拽移动，位置会持久化到 .app_state.toml。
     # =========================================================================
 
     def _on_toggle_float(self) -> None:
@@ -1693,7 +1693,7 @@ class MainWindow(QMainWindow):
 
 
     def _save_float_window_pos(self) -> None:
-        """将悬浮窗当前位置保存到 .app_state.json。"""
+        """将悬浮窗当前位置保存到 .app_state.toml。"""
         if self._float_window is None:
             return
         saved = read_app_state()
@@ -1702,7 +1702,7 @@ class MainWindow(QMainWindow):
         write_app_state(saved)
 
     def _restore_float_window_pos(self) -> None:
-        """从 .app_state.json 恢复悬浮窗位置。
+        """从 .app_state.toml 恢复悬浮窗位置。
 
         恢复逻辑:
             1. 读取保存的位置 → 坐标格式有效且在屏幕范围内 → 恢复
@@ -2032,14 +2032,14 @@ class MainWindow(QMainWindow):
     # =========================================================================
     # 列宽持久化 + 窗口位置持久化 + 关闭事件
     #
-    # 所有持久化数据存储在 .app_state.json 中，格式:
+    # 所有持久化数据存储在 .app_state.toml 中，格式:
     #   {"stats": [列宽...], "record": [列宽...], "main_pos": [x, y], "float_pos": [x, y]}
     #
     # 保存时机: 窗口关闭（closeEvent）
     # 恢复时机: 窗口首次显示（showEvent）
     # =========================================================================
 
-    # 列宽默认值（像素），首次运行在 .app_state.json 不存在时使用
+    # 列宽默认值（像素），首次运行在 .app_state.toml 不存在时使用
     # stats  列序: 0=卡组 1=对局数 2=胜 3=负 4=胜率
     #              5=赢硬币次数 6=输硬币次数 7=赢硬币概率
     #              8=赢硬币胜率 9=输硬币胜率 10=先攻次数 11=后攻次数
@@ -2071,7 +2071,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(100, self._do_apply_pixmaps)
 
     def _restore_column_widths(self) -> None:
-        """从 .app_state.json 恢复列宽。
+        """从 .app_state.toml 恢复列宽。
 
         恢复策略:
             1. 读取保存的列宽数组
@@ -2098,7 +2098,7 @@ class MainWindow(QMainWindow):
                     table.setColumnWidth(col, defaults[i])
 
     def _save_column_widths(self) -> None:
-        """保存绝对列宽到 .app_state.json。
+        """保存绝对列宽到 .app_state.toml。
 
         跳过最后一列（由 stretchLastSection 自动管理宽度）。
         record 表额外跳过列 0（序号，始终隐藏，不持久化）。
@@ -2263,7 +2263,7 @@ class MainWindow(QMainWindow):
         return False
 
     def _restore_main_window_pos(self) -> None:
-        """从 .app_state.json 恢复主窗口位置。
+        """从 .app_state.toml 恢复主窗口位置。
 
         恢复逻辑:
             1. 读取保存的位置 → 坐标格式有效（x ≥ -100）且在屏幕范围内 → 恢复
@@ -2274,7 +2274,7 @@ class MainWindow(QMainWindow):
             self.move(pos[0], pos[1])
 
     def _save_main_window_pos(self) -> None:
-        """保存主窗口位置到 .app_state.json。"""
+        """保存主窗口位置到 .app_state.toml。"""
         data = read_app_state()
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]

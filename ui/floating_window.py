@@ -28,7 +28,7 @@
    透明度由 config.toml [floating_window].opacity 控制（0-100）。
 
 3. **可拖拽移动**
-   鼠标左键按住窗口任意位置即可拖拽，位置自动保存到 .app_state.json。
+   鼠标左键按住窗口任意位置即可拖拽，位置自动保存到 .app_state.toml。
 
 4. **动态行配置**
    显示哪些统计行由 config.toml [floating_window].rows 控制。

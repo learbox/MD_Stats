@@ -1,15 +1,15 @@
-"""应用状态持久化 — 读写 .app_state.json。
+"""应用状态持久化 — 读写 .app_state.toml。
 
 存储窗口位置、列宽、分割条比例等运行时状态，
 每次关闭窗口时写入，下次启动时恢复。
 """
 
-import json
+import tomllib
 from typing import Any
 
 from src.config import get_project_root
 
-_APP_STATE_PATH = get_project_root() / ".app_state.json"
+_APP_STATE_PATH = get_project_root() / ".app_state.toml"
 
 # 各字段默认值（集中管理兜底，新增字段在此添加）
 # stats / record 为全部列宽（像素），record 不含隐藏列 0
@@ -24,17 +24,16 @@ APP_STATE_DEFAULTS: dict[str, list[int]] = {
 
 
 def read_app_state() -> dict[str, Any]:
-    """读取 .app_state.json，文件不存在/缺字段时用默认值补齐。
+    """读取 .app_state.toml，文件不存在/缺字段时用默认值补齐。
 
     用户手动删除文件或升级到新版本时，缺失的字段自动回填默认值，
     下次关闭窗口时写回完整文件。
     """
     try:
-        with open(_APP_STATE_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+        with open(_APP_STATE_PATH, "rb") as f:
+            data = tomllib.load(f)
+    except (FileNotFoundError, tomllib.TOMLDecodeError):
         data: dict[str, Any] = {}
-    # 用默认值补齐缺失字段（不覆盖已有值）
     for key, default in APP_STATE_DEFAULTS.items():
         if key not in data:
             data[key] = default
@@ -42,9 +41,24 @@ def read_app_state() -> dict[str, Any]:
 
 
 def write_app_state(data: dict[str, Any]) -> None:
-    """写入 .app_state.json。"""
+    """写入 .app_state.toml。
+
+    手动格式化为 TOML 文本（tomllib 只读，没有写入能力）。
+    """
+    lines: list[str] = [
+        "# 应用窗口状态（由程序自动生成）",
+        "",
+    ]
+    for key, default in APP_STATE_DEFAULTS.items():
+        val = data.get(key, default)
+        if isinstance(val, list):
+            items = ", ".join(str(v) for v in val)
+            lines.append(f"{key} = [{items}]")
+        else:
+            lines.append(f"{key} = {val}")
+
     with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        f.write("\n".join(lines) + "\n")
 
 
 def parse_pos(raw: object, min_val: int = -100) -> list[int] | None:

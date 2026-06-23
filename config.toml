@@ -7,7 +7,7 @@
 # 截图间隔（秒），推荐 0.3 ~ 1.0
 interval = 0.3
 # 匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90
-confidence_threshold = 0.8
+confidence_threshold = 0.9
 
 # 调试与实验功能
 [debug]
@@ -30,9 +30,9 @@ log_scope = ["status", "screenshots", "errors"]
 # 状态栏显示检测置信度（段位图标 NCC、等级判读、三阶段检测分数）
 show_confidence = false
 # 保存最佳失败样本（置信度处于 [设置值−偏移量, 设置值) 时记录）
-save_failure_samples = false
+save_failure_samples = true
 # 置信度偏移量（设置值 − offset = 记录下限）
-failure_sample_offset = 0.1
+failure_sample_offset = 0.2
 
 [window]
 # 主窗口宽度（像素）
@@ -89,7 +89,7 @@ enabled = true
 # 截图间隔（秒），0.3 ~ 1.0
 interval = 0.3
 # 匹配置信度阈值 (0.0~1.0)
-confidence_threshold = 0.7
+confidence_threshold = 0.9
 
 # 悬浮统计窗
 [floating_window]

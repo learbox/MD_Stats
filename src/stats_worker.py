@@ -588,16 +588,18 @@ class StatsWorker(QThread):
                     rank_result = _det.detect_rank(screenshot, self._threshold)
                     self.rank_detected.emit(rank_result or "")
 
-                    # ---- 失败样本记录：段位升降两项 ----
+                    # ---- 失败样本记录：段位升降两项（可选模板，不存在时跳过）----
                     if self._failure_mgr is not None:
-                        rank_all = _det.get_last_all_scores()
                         rank_meta = self._build_extra_meta()
-                        self._failure_mgr.consider(
-                            "rank_up", rank_all.get("rank_up", 0.0),
-                            screenshot, self._threshold, rank_meta)
-                        self._failure_mgr.consider(
-                            "rank_down", rank_all.get("rank_down", 0.0),
-                            screenshot, self._threshold, rank_meta)
+                        rank_all = _det.get_last_all_scores()
+                        if _det.has_template("rank_up"):
+                            self._failure_mgr.consider(
+                                "rank_up", rank_all.get("rank_up", 0.0),
+                                screenshot, self._threshold, rank_meta)
+                        if _det.has_template("rank_down"):
+                            self._failure_mgr.consider(
+                                "rank_down", rank_all.get("rank_down", 0.0),
+                                screenshot, self._threshold, rank_meta)
 
                     # 调试截图：如果开启了截图保存，在新一局开始前先清除旧截图
                     if self._save_screenshots:
