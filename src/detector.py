@@ -998,11 +998,12 @@ def detect_rank_icon(
         skip_sides = set()
 
     # 分别检测玩家（左侧）和对手（右侧）
-    def _search_bbox(center_x: int, center_y: int, icon_sz: int) -> tuple[int, int, int, int]:
-        """以 (center_x,center_y) 为中心，计算搜索范围并裁剪到画面内。"""
-        x = max(0, center_x - icon_sz // 4)
-        y = max(0, center_y - icon_sz // 4)
-        return x, y, min(icon_sz * 2, w - x), min(icon_sz * 2, h - y)
+    def _search_bbox(cx: int, cy: int, cw: int, ch: int) -> tuple[int, int, int, int]:
+        """以 (cx,cy) 为中心、±50px 为余量，计算搜索范围并裁剪到画面内。"""
+        MARGIN = 50
+        x = max(0, cx - MARGIN)
+        y = max(0, cy - MARGIN)
+        return x, y, min(cw + MARGIN * 2, w - x), min(ch + MARGIN * 2, h - y)
 
     # 收集每侧所有图标的最佳分数（供 TOML 元数据 all_scores 字段）
     global _last_rank_icon_all_scores
@@ -1018,16 +1019,16 @@ def detect_rank_icon(
 
         if cached:
             # ===== 有位置缓存：在已知位置附近精搜 =====
-            # 新格式 (x, y, w_icon, h_icon)，图标为正方形 w_icon = h_icon
-            cx, cy, csz, _h = cached
-            px, py, pw, ph = _search_bbox(cx, cy, csz)
+            # 新格式 (x, y, w_icon, h_icon)
+            cx, cy, cw, ch = cached
+            px, py, pw, ph = _search_bbox(cx, cy, cw, ch)
             search_roi = screenshot[py:py + ph, px:px + pw]
 
             best_name, best_score = "", 0.0
             best_x = best_y = best_sz = 0
             for name in _RANK_LABELS:
-                sz_start = max(30, csz - 15)
-                sz_end = min(csz + 18, pw, ph)
+                sz_start = max(30, cw - 15)
+                sz_end = min(cw + 18, pw, ph)
                 nm, sc, bx, by, bz = _match_icon_at_sizes(
                     search_roi, name, range(sz_start, sz_end, 3),
                     bg_color, px, py, strict_roi=True)
@@ -1053,7 +1054,7 @@ def detect_rank_icon(
             ry = int(fy / scale)
             rsz = int(fsz / scale)
 
-            sx2, sy2, sw, sh = _search_bbox(rx, ry, rsz)
+            sx2, sy2, sw, sh = _search_bbox(rx, ry, rsz, rsz)
             search_roi = screenshot[sy2:sy2 + sh, sx2:sx2 + sw]
             tmpl = _composite_rank_icon(name, rsz, bg_color)
             if tmpl is not None:
