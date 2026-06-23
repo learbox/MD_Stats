@@ -232,6 +232,33 @@ class StatsWorker(QThread):
         """
         self.msleep(int(self._interval * 1000))
 
+    def _consider_best(
+        self, pairs: list[tuple[str, str]], all_scores: dict[str, float],
+        screenshot, meta: dict,
+    ) -> None:
+        """对一组互斥的模板，只对分数最高的那个 target 调用 consider()。
+
+        同一帧中 coin_win 和 coin_lose 不可能同时出现，只保留最佳匹配的
+        失败样本才有诊断价值。另一个模板的分数在 TOML 的 [all_scores] 中可见。
+
+        Args:
+            pairs: [(target名, 模板名), ...] 如 [("coin_win","coin_win"), ("coin_lose","coin_lose")]
+            all_scores: {模板名: 分数} 从 get_last_all_scores() 获取
+            screenshot: 截图
+            meta: extra_meta 字典
+        """
+        if self._failure_mgr is None:
+            return
+        # 找分数最高的
+        best_target, best_score = "", 0.0
+        for target, key in pairs:
+            sc = all_scores.get(key, 0.0)
+            if sc > best_score:
+                best_score, best_target = sc, target
+        if best_target:
+            self._failure_mgr.consider(
+                best_target, best_score, screenshot, self._threshold, meta)
+
     def _build_extra_meta(self) -> dict:
         """构建 consider() 所需的 extra_meta 字典。
 
@@ -573,19 +600,11 @@ class StatsWorker(QThread):
                 # 检测硬币输赢（模板：coin_win.png / coin_lose.png）
                 coin_win = _det.detect_coin_win(screenshot, self._threshold)
 
-                # ---- 失败样本记录：硬币两项 ----
-                # 无论最终匹配到 win 还是 lose，两个 target 都提交。
-                # 匹配到的那一项会因分数 >= threshold 而被 consider() 删除其缓存；
-                # 没匹配到的那一项会因分数处于 [record_threshold, threshold) 而被记录。
-                if self._failure_mgr is not None:
-                    coin_all = _det.get_last_all_scores()
-                    coin_meta = self._build_extra_meta()
-                    self._failure_mgr.consider(
-                        "coin_win", coin_all.get("coin_win", 0.0),
-                        screenshot, self._threshold, coin_meta)
-                    self._failure_mgr.consider(
-                        "coin_lose", coin_all.get("coin_lose", 0.0),
-                        screenshot, self._threshold, coin_meta)
+                # ---- 失败样本记录：硬币（互斥，只保留最佳匹配） ----
+                self._consider_best(
+                    [("coin_win", "coin_win"), ("coin_lose", "coin_lose")],
+                    _det.get_last_all_scores(), screenshot,
+                    self._build_extra_meta())
 
                 if coin_win:
                     # 同一张截图检测段位升降（升段/降段/普通局）
@@ -594,18 +613,12 @@ class StatsWorker(QThread):
                     rank_result = _det.detect_rank(screenshot, self._threshold)
                     self.rank_detected.emit(rank_result or "")
 
-                    # ---- 失败样本记录：段位升降两项（可选模板，不存在时跳过）----
-                    if self._failure_mgr is not None:
-                        rank_meta = self._build_extra_meta()
-                        rank_all = _det.get_last_all_scores()
-                        if _det.has_template("rank_up"):
-                            self._failure_mgr.consider(
-                                "rank_up", rank_all.get("rank_up", 0.0),
-                                screenshot, self._threshold, rank_meta)
-                        if _det.has_template("rank_down"):
-                            self._failure_mgr.consider(
-                                "rank_down", rank_all.get("rank_down", 0.0),
-                                screenshot, self._threshold, rank_meta)
+                    # ---- 失败样本记录：段位升降（互斥，只保留最佳匹配） ----
+                    if _det.has_template("rank_up") and _det.has_template("rank_down"):
+                        self._consider_best(
+                            [("rank_up", "rank_up"), ("rank_down", "rank_down")],
+                            _det.get_last_all_scores(), screenshot,
+                            self._build_extra_meta())
 
                     # 调试截图：如果开启了截图保存，在新一局开始前先清除旧截图
                     if self._save_screenshots:
@@ -636,16 +649,11 @@ class StatsWorker(QThread):
                 # 检测先后攻（模板：go_first.png / go_second.png）
                 turn = _det.detect_turn(screenshot, self._threshold)
 
-                # ---- 失败样本记录：先后攻两项 ----
-                if self._failure_mgr is not None:
-                    turn_all = _det.get_last_all_scores()
-                    turn_meta = self._build_extra_meta()
-                    self._failure_mgr.consider(
-                        "turn_first", turn_all.get("go_first", 0.0),
-                        screenshot, self._threshold, turn_meta)
-                    self._failure_mgr.consider(
-                        "turn_second", turn_all.get("go_second", 0.0),
-                        screenshot, self._threshold, turn_meta)
+                # ---- 失败样本记录：先后攻（互斥，只保留最佳匹配） ----
+                self._consider_best(
+                    [("turn_first", "go_first"), ("turn_second", "go_second")],
+                    _det.get_last_all_scores(), screenshot,
+                    self._build_extra_meta())
 
                 if turn:
                     # 调试截图
@@ -666,16 +674,11 @@ class StatsWorker(QThread):
                 # 检测胜负（模板：victory.png / defeat.png）
                 result = _det.detect_result(screenshot, self._threshold)
 
-                # ---- 失败样本记录：胜负两项 ----
-                if self._failure_mgr is not None:
-                    result_all = _det.get_last_all_scores()
-                    result_meta = self._build_extra_meta()
-                    self._failure_mgr.consider(
-                        "result_win", result_all.get("victory", 0.0),
-                        screenshot, self._threshold, result_meta)
-                    self._failure_mgr.consider(
-                        "result_lose", result_all.get("defeat", 0.0),
-                        screenshot, self._threshold, result_meta)
+                # ---- 失败样本记录：胜负（互斥，只保留最佳匹配） ----
+                self._consider_best(
+                    [("result_win", "victory"), ("result_lose", "defeat")],
+                    _det.get_last_all_scores(), screenshot,
+                    self._build_extra_meta())
 
                 if result:
                     # 调试截图
