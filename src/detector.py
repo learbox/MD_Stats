@@ -629,10 +629,14 @@ def _sample_bg(screenshot: np.ndarray, x: int, y: int, w: int, h: int) -> np.nda
 
 
 def _composite_rank_icon(name: str, w: int, h: int, bg_color: np.ndarray) -> np.ndarray | None:
-    """将 RGBA 源素材按目标宽高合成到背景色上，返回 BGR 模板。
+    """将 RGBA 源素材缩放到目标宽高，然后 Alpha 混合到背景色上，返回 BGR 模板。
 
-    源素材可以是任意尺寸的长方形，合成后的模板保持原始宽高比。
-    分三步：缩放 → Alpha 混合 → 缓存。
+    这是段位检测的核心合成步骤。分三步：
+        1. 缩放 — 把源素材缩放为 w×h。源素材可以是任意尺寸（290×290 或
+           未来科乐美更换的长方形），不假定正方形
+        2. Alpha 混合 — 把 RGBA 叠加到背景色上
+           结果像素 = 前景RGB × alpha + 背景RGB × (1 - alpha)
+        3. 缓存 — 同一尺寸+同一背景色的模板下次直接用（跳过合成）
 
     Args:
         name: 图标名，如 "img_rankicon_04"（黄金）
@@ -673,12 +677,18 @@ def _match_icon_at_sizes(
     roi: np.ndarray, icon: str, sz_range: range, bg_color: np.ndarray,
     offset_x: int, offset_y: int, *, strict_roi: bool = False,
 ) -> tuple[str, float, int, int, int, int]:
-    """在 ROI 上对指定图标按宽度范围逐一匹配，返回最高分结果。
+    """在 ROI 上对指定图标按宽度范围逐一模板匹配，返回最高分结果。
 
-    高度由源素材宽高比自动计算（当前源素材为正方形，ratio=1.0）。
+    两个场景共用此函数：
+        _detect_rank_in_roi — 粗搜+精搜，步长12/2，strict_roi=False
+        detect_rank_icon  — 缓存位置精搜，步长3，strict_roi=True
+
+    高度由源素材宽高比自动计算（ratio = 源高 / 源宽）。
+    当前 290×290 → ratio=1.0；将来换长方形素材无需改代码。
     返回 (图标名, 分数, x, y, w, h)。
 
-    strict_roi=True 时模板必须严格小于ROI（用 >= 判断而非 >）。
+    strict_roi=True 时模板必须严格小于ROI（用 >= 判断而非 >），
+    因为缓存搜索结果区域可能很紧凑。
     """
     # 从源素材获取宽高比
     entry = _rank_icon_cache.get(icon)
