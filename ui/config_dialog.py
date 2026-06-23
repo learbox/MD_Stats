@@ -431,7 +431,7 @@ class ConfigDialog(_BaseFramelessDialog):
         lo.addWidget(func_label)
 
         # ---- 三阶段检测 ----
-        stage_title = QLabel("三阶段检测（硬币/先后攻/胜负）")
+        stage_title = QLabel("三阶段检测（硬币 · 先后攻 · 胜负 · 升降段可选）")
         stage_title.setStyleSheet("color: #666; font-size: 12px;")
         lo.addWidget(stage_title)
 
