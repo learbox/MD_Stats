@@ -556,7 +556,7 @@ _composite_cache: dict[tuple, np.ndarray] = {}
 
 # 段位图标位置缓存：{(分辨率宽, 分辨率高, "player"/"opponent"): (x, y, 尺寸)}
 _position_cache: dict[tuple, tuple] = {}
-_POSITION_CACHE_FILE = get_project_root() / "resource" / "templates" / "rankicons" / "rankicons/rank_positions.toml"
+_POSITION_CACHE_FILE = get_project_root() / "resource" / "templates" / "rankicons" / "rank_positions.toml"
 
 
 def _load_position_cache() -> None:
