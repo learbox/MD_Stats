@@ -1,5 +1,36 @@
 # 更新日志
 
+## v1.9.0 (2026-06-24)
+
+### 新功能
+- **最佳失败样本诊断**：识别接近成功但未达标时自动保存截图 + TOML 诊断数据到 `screenshots/debug/`（设置 → 识别 → 调试设置 → 识别失败时诊断截图）
+- **ROI 自动生成**：全图搜索首次成功时自动将匹配位置写入 `roi.toml`，coin/turn/result/rank 四个 section 全覆盖
+- **`FailureSampleManager`**：线程安全的失败样本管理模块，StatsWorker / RankWorker 共用
+- **`RoiManager`**：统一 `roi.toml` 和 `rank_positions.toml` 的读写接口，格式统一为 `[x, y, w, h]`
+
+### 改进
+- 互斥检测组（coin/turn/result/rank）只保留最佳匹配，减少冗余
+- `_composite_rank_icon` 支持非正方形源素材，将来换素材无需改代码
+- 段位图标搜索范围从百分比改为固定 ±50px，与三段检测 ROI 统一
+- 设置 → 识别标签页重组为「功能设置」+「调试设置」双分组，内容溢出时支持滚动
+- 所有自动生成的 TOML 文件（`roi.toml` / `rank_positions.toml` / `.app_state.toml` / 失败样本）均含逐字段中文注释
+- `.app_state.json` → `.app_state.toml`（项目配置文件格式统一）
+- UI 术语统一：「阈值」→「置信度」，「保存最佳失败样本」→「识别失败时诊断截图」
+
+### 修复
+- `matched_template` 从空字符串改为完整路径（`resource/templates/{分辨率}/{模板名}.png`）
+- `rank_positions.toml` 路径去重（`rankicons/rankicons/` → `rankicons/`）
+- 1600×900 段位图标位置缓存修正
+
+### 代码质量
+- `RankDetector` → `RankWorker`，`rank_detector.py` → `rank_worker.py`（与 `StatsWorker` 命名对齐）
+- `_match_icon_at_sizes` / `_detect_rank_in_roi` 返回 `(x, y, w, h)` 格式，全线消除 `rsz` 变量名
+- `detector.py` 头部注释重写，三类检测（三段/升降段/段位图标）对称描述
+
+### 文档
+- README / README_release / TROUBLESHOOTING 同步更新配置表、文件结构、排查流程
+- 新增失败样本诊断的排查指南（先出问题 → 开启功能 → 采集 → 分析 → 修复）
+
 ## v1.8.3 (2026-06-20)
 
 ### 修复
