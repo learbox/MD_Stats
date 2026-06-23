@@ -37,4 +37,3 @@ _test/
 
 # Local tools (not for distribution)
 tools/
-.app_state.json
