@@ -82,6 +82,7 @@ TM_CCOEFF_NORMED 的优势:
 import cv2
 import numpy as np
 from src.config import get_project_root
+from src.roi_manager import load_regions, save_region, load_icon_positions, save_icon_position
 
 # ---------------------------------------------------------------------------
 # 模板图片存放目录
@@ -145,34 +146,21 @@ _OPTIONAL_TEMPLATES = {"rank_up", "rank_down"}
 # 键为模板名（不含扩展名），值为 numpy 数组或 None（加载失败时）
 _template_cache: dict[str, np.ndarray | None] = {}
 # ROI 缓存：{ "coin": (x,y,w,h), ... }，从 roi.toml 加载，加速全图搜索
+# 由 roi_manager.load_regions() 按需获取
 _roi_cache: dict[str, tuple[int, int, int, int]] = {}
 _roi_loaded = False
 
 
-def _load_roi() -> None:
-    """从当前分辨率目录的 roi.toml 加载预设搜索区域。"""
-    global _roi_cache, _roi_loaded
-    if _roi_loaded:
-        return
-    _roi_loaded = True
-    if _resolution_subdir is None:
-        return
-    try:
-        import tomllib
-        path = _TEMPLATES_BASE / _resolution_subdir / "roi.toml"
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
-        for section in ("coin", "turn", "result"):
-            if section in data:
-                s = data[section]
-                _roi_cache[section] = (s["x"], s["y"], s["width"], s["height"])
-    except (FileNotFoundError, KeyError, OSError):
-        pass  # roi.toml 不存在则全图搜索
-
-
 def _get_roi(section: str) -> tuple[int, int, int, int] | None:
-    """获取指定检测阶段的 ROI (x, y, w, h)，无配置返回 None。"""
-    _load_roi()
+    """获取指定检测阶段的 ROI (x, y, w, h)，无配置返回 None。
+
+    首次调用时从 roi_manager 加载当前分辨率的 roi.toml。
+    """
+    global _roi_cache, _roi_loaded
+    if not _roi_loaded:
+        _roi_loaded = True
+        if _resolution_subdir is not None:
+            _roi_cache = load_regions(_resolution_subdir)
     return _roi_cache.get(section)
 
 
@@ -370,44 +358,15 @@ def detect_result(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
 
 
 def _save_roi(section: str, x: int, y: int, w: int, h: int) -> None:
-    """将检测到的位置写入 roi.toml 的指定 section，下次启动自动加载。
+    """将检测到的位置写入 roi.toml，下次启动自动加载。
 
-    ROI 以匹配点为中心、模板尺寸 ×3 为范围，留足余量防止下次偏移。
+    委托 roi_manager.save_region() 处理文件 I/O。
     """
     if _resolution_subdir is None:
         return
-    try:
-        path = _TEMPLATES_BASE / _resolution_subdir / "roi.toml"
-        if path.exists():
-            text = path.read_text(encoding="utf-8")
-        else:
-            text = (
-                "# ============================================================\n"
-                "# 模板匹配搜索区域 — 由 MD Stats 自动生成\n"
-                "#\n"
-                "# 首次检测成功后自动写入，后续启动加载以加速模板匹配。\n"
-                "# 坐标格式：[section] 下的 x, y, width, height（像素）。\n"
-                "# 手动删除此文件可重置为全图搜索。\n"
-                "# ============================================================\n"
-            )
-        # 追加 [section] 段（如已存在则不动）
-        if f"[{section}]" not in text:
-            text += (
-                f"\n[{section}]\n"
-                f"# ROI 左上角 X 坐标（像素）\n"
-                f"x = {x}\n"
-                f"# ROI 左上角 Y 坐标（像素）\n"
-                f"y = {y}\n"
-                f"# ROI 宽度（像素）\n"
-                f"width = {w}\n"
-                f"# ROI 高度（像素）\n"
-                f"height = {h}\n"
-            )
-            path.write_text(text, encoding="utf-8")
-        # 同步更新内存缓存
-        _roi_cache[section] = (x, y, w, h)
-    except OSError:
-        pass
+    save_region(_resolution_subdir, section, x, y, w, h)
+    # 同步更新内存缓存
+    _roi_cache[section] = (x, y, w, h)
 
 
 def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
@@ -596,74 +555,19 @@ _NO_TIER_RANKS = {"巅峰"}
 # 避免每次检测都重新合成模板（合成涉及 resize + alpha 混合，较慢）
 _composite_cache: dict[tuple, np.ndarray] = {}
 
-# 段位图标位置缓存：{(分辨率宽, 分辨率高, "player"/"opponent"): (x, y, 尺寸)}
-_position_cache: dict[tuple, tuple] = {}
-_POSITION_CACHE_FILE = get_project_root() / "resource" / "templates" / "rankicons" / "rank_positions.toml"
+# 段位图标位置缓存：{(分辨率宽, 分辨率高, "player"/"opponent"): (x, y, w, h)}
+# 由 roi_manager 管理文件 I/O
+_position_cache: dict[tuple, tuple[int, int, int, int]] = {}
+_position_loaded = False
 
 
-def _load_position_cache() -> None:
-    """从 rankicons/rank_positions.toml 加载段位图标在屏幕上的位置缓存。
-
-    文件格式:
-        [player]
-        1920x1080 = [560, 420, 55]   # x, y, 图标尺寸(px)
-        2560x1440 = [750, 560, 73]
-        [opponent]
-        ...
-
-    缓存 key 为 (宽, 高, "player"/"opponent")，value 为 (x, y, size)。
-    如果有缓存，后续检测直接在 (x,y) 附近小范围精搜，跳过缩略图粗搜。
-    """
-    global _position_cache
-    if _position_cache:
-        return  # 已经加载过，避免重复读文件
-    try:
-        import tomllib
-        with open(_POSITION_CACHE_FILE, "rb") as f:
-            data = tomllib.load(f)
-        for side in ("player", "opponent"):
-            section = data.get(side, {})
-            for res, vals in section.items():
-                if isinstance(vals, list) and len(vals) == 3:
-                    w, h = res.split("x")  # "1920x1080" → 1920, 1080
-                    _position_cache[(int(w), int(h), side)] = (
-                        int(vals[0]), int(vals[1]), int(vals[2]))
-    except (FileNotFoundError, KeyError, ValueError):
-        pass  # 文件不存在或格式损坏 → 首次检测，走粗搜流程
-
-
-def _save_position_cache() -> None:
-    """将内存中的段位图标位置缓存持久化到 rankicons/rank_positions.toml。
-
-    只在首次检测成功后调用一次，后续检测直接读取缓存文件。
-    按 side 分组，每组按分辨率排序，方便人工查看和调试。
-    """
-    lines = [
-        "# ============================================================",
-        "# 段位图标位置缓存 — 由 MD Stats 自动生成",
-        "#",
-        "# 首次检测到段位图标后自动写入，后续启动直接读取以加速检测。",
-        "# 格式: {分辨率} = [x, y, 尺寸]",
-        "#   x  — 图标左上角 X 坐标（像素）",
-        "#   y  — 图标左上角 Y 坐标（像素）",
-        "#   尺寸 — 图标尺寸（像素，宽=高）",
-        "# 手动删除此文件可强制重新全图搜索。",
-        "# ============================================================",
-        "",
-    ]
-    for side in ("player", "opponent"):
-        label = "己方" if side == "player" else "对方"
-        lines.append(f"# ---- {label}段位图标 ----")
-        lines.append(f"[{side}]")
-        for (w, h, s), (x, y, sz) in sorted(_position_cache.items()):
-            if s == side:
-                lines.append(f"{w}x{h} = [{x}, {y}, {sz}]")
-        lines.append("")
-    try:
-        _POSITION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _POSITION_CACHE_FILE.write_text("\n".join(lines), encoding="utf-8")
-    except OSError:
-        pass  # 写文件失败不影响程序运行（下次启动重新检测即可）
+def _ensure_icon_positions() -> None:
+    """加载段位图标位置缓存（首次调用时从文件读取，后续直接使用内存缓存）。"""
+    global _position_cache, _position_loaded
+    if _position_loaded:
+        return
+    _position_loaded = True
+    _position_cache = load_icon_positions()
 
 
 def _init_rank_icons() -> None:
@@ -1068,7 +972,7 @@ def detect_rank_icon(
             opponent_tier_score — 对方等级置信度
     """
     _init_rank_icons()
-    _load_position_cache()
+    _ensure_icon_positions()
     h, w = screenshot.shape[:2]
 
     # 从顶栏采样背景色（避免 UI 元素干扰）
@@ -1114,7 +1018,8 @@ def detect_rank_icon(
 
         if cached:
             # ===== 有位置缓存：在已知位置附近精搜 =====
-            cx, cy, csz = cached
+            # 新格式 (x, y, w_icon, h_icon)，图标为正方形 w_icon = h_icon
+            cx, cy, csz, _h = cached
             px, py, pw, ph = _search_bbox(cx, cy, csz)
             search_roi = screenshot[py:py + ph, px:px + pw]
 
@@ -1157,8 +1062,8 @@ def detect_rank_icon(
                 rx = sx2 + loc[0]
                 ry = sy2 + loc[1]
 
-            _position_cache[pos_key] = (rx, ry, rsz)
-            _save_position_cache()
+            _position_cache[pos_key] = (rx, ry, rsz, rsz)
+            save_icon_position(w, h, side, rx, ry, rsz, rsz)
 
         # 存储该侧所有图标分数（供 TOML 元数据）
         _last_rank_icon_all_scores[side] = side_scores
