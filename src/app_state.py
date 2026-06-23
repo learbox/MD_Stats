@@ -45,17 +45,34 @@ def write_app_state(data: dict[str, Any]) -> None:
 
     手动格式化为 TOML 文本（tomllib 只读，没有写入能力）。
     """
+    # 每个字段对应的中文注释
+    _COMMENTS: dict[str, str] = {
+        "stats":     "统计表格各列宽度（像素），顺序与表格列一致",
+        "record":    "记录表格各列宽度（像素），不包含隐藏的序号列和拉伸列",
+        "splitter":  "主窗口上下分割比例 [统计区高度, 记录区高度]",
+        "main_pos":  "主窗口上次关闭时的屏幕位置 [x, y]",
+        "float_pos": "悬浮窗上次关闭时的屏幕位置 [x, y]",
+    }
+
     lines: list[str] = [
-        "# 应用窗口状态（由程序自动生成）",
+        "# ============================================================",
+        "# 应用窗口状态 — 由 MD Stats 自动生成",
+        "#",
+        "# 保存主窗口和悬浮窗的位置、列宽、分割比例，",
+        "# 下次启动时自动恢复到上次关闭时的状态。",
+        "# 手动删除此文件可恢复默认布局。",
+        "# ============================================================",
         "",
     ]
+
     for key, default in APP_STATE_DEFAULTS.items():
         val = data.get(key, default)
+        comment = _COMMENTS.get(key, "")
         if isinstance(val, list):
             items = ", ".join(str(v) for v in val)
-            lines.append(f"{key} = [{items}]")
+            lines.append(f"{key} = [{items}]  # {comment}")
         else:
-            lines.append(f"{key} = {val}")
+            lines.append(f"{key} = {val}  # {comment}")
 
     with open(_APP_STATE_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
