@@ -209,7 +209,7 @@ MD_Stats/
 │   ├── logger.py            # 日志模块（线程安全 + 作用域过滤）
 │   ├── match_state.py       # 对局三阶段状态机
 │   ├── recorder.py          # CSV 读写与统计计算
-│   ├── rank_detector.py     # 段位图标检测（独立线程）
+│   ├── rank_worker.py     # 段位图标检测（独立线程）
 │   ├── snapshot_controller.py # 截图热键与周期截图
 │   └── stats_worker.py      # 后台识别线程（QThread）
 └── ui/

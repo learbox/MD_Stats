@@ -955,7 +955,7 @@ def detect_rank_icon(
 ) -> dict[str, str | int | float | None]:
     """检测双方头像旁边的段位图标和等级数字。
 
-    这是段位检测的主入口，由 RankDetector 线程每轮调用。
+    这是段位检测的主入口，由 RankWorker 线程每轮调用。
 
     搜索策略（两阶段）:
         ═══ 首次检测（无位置缓存）═══

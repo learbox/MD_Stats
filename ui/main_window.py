@@ -33,7 +33,7 @@
     turn_detected     ────────→ _on_turn_detected()     → 缓存先后攻
     result_detected   ────────→ _on_result_detected()   → 写 CSV，通知段位线程
 
-    RankDetector (独立线程)       MainWindow (主线程)
+    RankWorker (独立线程)       MainWindow (主线程)
     ─────────────────────        ─────────────────────
     rank_icon_detected ────────→ _on_rank_icon_detected()→ 缓存段位图标结果
 
@@ -593,7 +593,7 @@ class MainWindow(QMainWindow):
         self._wait_timer: QTimer | None = None# 等待游戏启动的轮询定时器
         self._info_timer: QTimer | None = None# 右下角信息标签刷新定时器
         self._match = MatchState()               # 三阶段对局状态机
-        self._rank_detector: Any | None = None  # type: ignore[annotation-unchecked] — 段位图标检测线程（延迟导入）
+        self._rank_worker: Any | None = None  # type: ignore[annotation-unchecked] — 段位图标检测线程（延迟导入）
         self._rank_icon_result: dict | None = None        # 段位图标检测结果暂存
         self._notifying = False                         # 防_result_detected重入
         # 段位图标在硬币阶段（阶段1）显示，但数据要到对局结束才写入 CSV。
@@ -1059,7 +1059,7 @@ class MainWindow(QMainWindow):
         finished 信号自动清理 worker 引用，避免 QThread 被 GC 时仍在运行。
         """
         from src.stats_worker import StatsWorker
-        from src.rank_worker import RankDetector
+        from src.rank_worker import RankWorker
         from src.failure_sample_manager import FailureSampleManager
 
         # 创建失败样本管理器（两个线程共用同一实例）
@@ -1080,10 +1080,10 @@ class MainWindow(QMainWindow):
         # rank_icon_detected 信号在双方都检测到后发射，
         # 主窗口收到信号后更新状态栏 + 暂存结果等对局结束写入 CSV。
         if self._config.get("rank_detection", {}).get("enabled", True):
-            self._rank_detector = RankDetector(failure_mgr=failure_mgr)
-            self._rank_detector.rank_icon_detected.connect(self._on_rank_icon_detected)
-            self._rank_detector.partial_update.connect(self._on_rank_partial)
-            self._rank_detector.start()  # QThread.start() → 后台独立线程执行 run()
+            self._rank_worker = RankWorker(failure_mgr=failure_mgr)
+            self._rank_worker.rank_icon_detected.connect(self._on_rank_icon_detected)
+            self._rank_worker.partial_update.connect(self._on_rank_partial)
+            self._rank_worker.start()  # QThread.start() → 后台独立线程执行 run()
         self._snapshot_ctrl.sync_hotkeys()
 
         # 更新 UI 状态: 禁用启动、启用停止、锁定卡组、禁用危险按钮
@@ -1103,9 +1103,9 @@ class MainWindow(QMainWindow):
         if self._worker is not None:
             self._worker.stop()
             self._worker.wait(1000)
-        if self._rank_detector is not None:
-            self._rank_detector.stop()
-            self._rank_detector.wait(1000)
+        if self._rank_worker is not None:
+            self._rank_worker.stop()
+            self._rank_worker.wait(1000)
 
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
@@ -1156,7 +1156,7 @@ class MainWindow(QMainWindow):
     def _on_rank_icon_detected(self, rank_info: dict) -> None:
         """段位图标检测线程回调：收到双方段位 → 暂存结果 + 状态栏通知。
 
-        这个槽连接到 RankDetector.rank_icon_detected 信号。
+        这个槽连接到 RankWorker.rank_icon_detected 信号。
         信号在双方段位都检测到后发射（player 和 opponent 都有值）。
 
         虽然这里就收到了结果，但不立即写入 CSV——因为对局还没结束。
@@ -1227,7 +1227,7 @@ class MainWindow(QMainWindow):
         """取出缓存的段位图标结果，返回 (己方段位字符串, 对方段位字符串)。
 
         调用后缓存被清空（取后即焚），保证每次对局最多用一次。
-        RankDetector 可能检测到多次（如连续两帧都匹配到），但只有第一次有效。
+        RankWorker 可能检测到多次（如连续两帧都匹配到），但只有第一次有效。
 
         Returns:
             ("铂金 II", "钻石 I") 或 ("", "") 表示未检测到
@@ -1257,9 +1257,9 @@ class MainWindow(QMainWindow):
         """
         if not self._match.advance_turn(turn):
             return
-        # 段位图标已消失，通知 RankDetector 停止搜索
-        if self._rank_detector is not None:
-            self._rank_detector.stop_searching()
+        # 段位图标已消失，通知 RankWorker 停止搜索
+        if self._rank_worker is not None:
+            self._rank_worker.stop_searching()
         self._update_manual_buttons()
         turn_text = "先攻" if turn == "first" else "后攻"
         self._show_status(f"已识别: {turn_text} — 等待胜负…")
@@ -1281,7 +1281,7 @@ class MainWindow(QMainWindow):
         rank_cache = cached["rank"]
         result_text = "胜" if result == "win" else "负"
 
-        # 段位图标信息：从 RankDetector 缓存取出（如 "铂金 II"、"钻石 I"）
+        # 段位图标信息：从 RankWorker 缓存取出（如 "铂金 II"、"钻石 I"）
         # _rank_icon_strs() 取后清除缓存，保证同一局不会重复写入
         player_rank, opponent_rank = self._rank_icon_strs()
         new_record = add_record(coin_win=self._match.coin_cache,
@@ -1295,8 +1295,8 @@ class MainWindow(QMainWindow):
         self._reset_stage()
         self._reload_tables()
         # 对局完成 → 通知段位检测线程准备搜索下一局的段位图标
-        if self._rank_detector is not None:
-            self._rank_detector.resume_for_next_game()
+        if self._rank_worker is not None:
+            self._rank_worker.resume_for_next_game()
 
         if new_record is not None:
             self._show_status(f"已记录: {result_text} — 等待下一局…")
@@ -1390,8 +1390,8 @@ class MainWindow(QMainWindow):
             self._sync_worker_stage()
             self._reload_tables()
             # 对局完成 → 段位检测线程准备下一局
-            if self._rank_detector is not None:
-                self._rank_detector.resume_for_next_game()
+            if self._rank_worker is not None:
+                self._rank_worker.resume_for_next_game()
             if new_record is not None:
                 self._show_status(f"手动添加: {result_text} — 已写入 CSV")
             else:
@@ -1980,9 +1980,9 @@ class MainWindow(QMainWindow):
         if worker_was_running:
             self._worker.stop()
             self._worker.wait(1000)
-        if self._rank_detector is not None:
-            self._rank_detector.stop()
-            self._rank_detector.wait(1000)
+        if self._rank_worker is not None:
+            self._rank_worker.stop()
+            self._rank_worker.wait(1000)
         if worker_was_running:
             self._start_worker()
 
@@ -2232,9 +2232,9 @@ class MainWindow(QMainWindow):
             if worker.isRunning():
                 worker.terminate()       # 超时兜底
                 worker.wait()
-        if self._rank_detector is not None:
-            self._rank_detector.terminate()  # 段位线程不影响 CSV，直接杀
-            self._rank_detector.wait()
+        if self._rank_worker is not None:
+            self._rank_worker.terminate()  # 段位线程不影响 CSV，直接杀
+            self._rank_worker.wait()
 
         # ---- 4. 注销全局热键并退出事件循环 ----
         self._snapshot_ctrl.unregister_hotkeys()

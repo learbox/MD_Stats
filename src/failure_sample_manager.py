@@ -33,7 +33,7 @@
 线程安全
 ================================================================================
 
-StatsWorker 和 RankDetector 运行在不同线程中，共用同一个管理器实例。
+StatsWorker 和 RankWorker 运行在不同线程中，共用同一个管理器实例。
 所有涉及缓存读写和文件操作的方法都通过 threading.Lock 保护。
 
 ================================================================================
@@ -75,7 +75,7 @@ class FailureSampleManager:
 
     两个线程共用同一个实例：
         - StatsWorker: 三阶段检测（8 个 target）
-        - RankDetector: 段位图标检测（2 个 target）
+        - RankWorker: 段位图标检测（2 个 target）
 
     工作流程示例（以硬币检测为例）：
         用户设置 threshold=0.80, offset=0.10 → record_threshold=0.70

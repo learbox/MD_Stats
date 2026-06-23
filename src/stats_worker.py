@@ -175,7 +175,7 @@ class StatsWorker(QThread):
 
         关于 failure_mgr（最佳失败样本）：
             由 MainWindow 创建并传入，同一实例同时传给 StatsWorker 和
-            RankDetector。当用户在设置中勾选「保存最佳失败样本」时生效。
+            RankWorker。当用户在设置中勾选「保存最佳失败样本」时生效。
             工作线程在每个检测步骤中调用 failure_mgr.consider()，
             一轮对局结束时调用 failure_mgr.clear_cache()。
 

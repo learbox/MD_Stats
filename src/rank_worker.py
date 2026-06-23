@@ -36,7 +36,7 @@ from src.config import load_config
 from src.failure_sample_manager import FailureSampleManager
 
 
-class RankDetector(QThread):
+class RankWorker(QThread):
     """独立线程：循环截图检测双方段位图标。
 
     QThread 是 PySide6 的线程封装。PySide6 中不能在其他线程直接操作
