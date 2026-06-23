@@ -517,12 +517,12 @@ class ConfigDialog(_BaseFramelessDialog):
         dbg_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         lo.addWidget(dbg_label)
 
-        # ---- 保存检测截图 ----
+        # ---- 识别成功时保存截图 ----
         ss_row = QHBoxLayout()
-        self._save_screenshots_cb = QCheckBox("保存检测截图")
+        self._save_screenshots_cb = QCheckBox("识别成功时保存截图")
         self._save_screenshots_cb.setToolTip(
-            "开启后，每次检测到硬币输赢、先后攻、对局胜负时自动保存截图\n"
-            "到 screenshots/ 目录。下一局开始时自动清除上一局的截图。"
+            "检测到硬币/先后攻/胜负时自动保存截图到 screenshots/。\n"
+            "下一局开始时自动清除上一局的截图。用于收集模板素材。"
         )
         ss_row.addWidget(self._save_screenshots_cb)
         self._btn_view_screenshots = QPushButton("查看截图")
@@ -543,12 +543,12 @@ class ConfigDialog(_BaseFramelessDialog):
         self._save_screenshots_cb.toggled.connect(
             lambda on: self._set_sub_disabled(self._auto_clear_cb, not on))
 
-        # ---- 保存接近成功的截图 ----
+        # ---- 识别失败时诊断截图 ----
         fail_row = QHBoxLayout()
-        self._failure_samples_cb = QCheckBox("保存接近成功的截图")
+        self._failure_samples_cb = QCheckBox("识别失败时诊断截图")
         self._failure_samples_cb.setToolTip(
-            "识别接近成功但未达阈值时，自动保存截图到 screenshots/debug/。\n"
-            "用于排查识别问题（字体变化、模板失效等），问题解决后关闭即可。"
+            "识别未达标但接近阈值时，自动保存截图 + 诊断数据到 screenshots/debug/。\n"
+            "用于排查问题（字体变化、模板失效等），问题解决后关闭即可。"
         )
         fail_row.addWidget(self._failure_samples_cb)
         self._btn_view_debug = QPushButton("查看截图")
@@ -561,7 +561,7 @@ class ConfigDialog(_BaseFramelessDialog):
 
         offset_row = QHBoxLayout()
         offset_row.setContentsMargins(24, 0, 0, 0)
-        offset_row.addWidget(QLabel("置信度偏移:"))
+        offset_row.addWidget(QLabel("触发偏移:"))
         self._failure_offset = QDoubleSpinBox()
         self._failure_offset.setRange(0.01, 0.50)
         self._failure_offset.setSingleStep(0.01)
@@ -1507,7 +1507,7 @@ class ConfigDialog(_BaseFramelessDialog):
         _kv("show_confidence", dbg.get("show_confidence", False),
             "状态栏显示检测置信度（段位图标 NCC、等级判读、三阶段检测分数）")
         _kv("save_failure_samples", dbg.get("save_failure_samples", False),
-            "保存接近成功的截图（匹配度接近阈值但未达标时自动截图）")
+            "识别失败时诊断截图（匹配度接近阈值但未达标时自动截图 + 诊断数据）")
         _kv("failure_sample_offset", dbg.get("failure_sample_offset", 0.10),
             "偏移量（值越大越容易触发，0 = 仅保存未达标的最高分）")
 

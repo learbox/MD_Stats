@@ -42,7 +42,7 @@
 
 **排查步骤**：
 
-1. **开启调试功能**：设置 → 识别 → 调试设置 → 勾选「保存接近成功的截图」，配置文件中的 `debug.save_failure_samples` 设为 `true`
+1. **开启调试功能**：设置 → 识别 → 调试设置 → 勾选「识别失败时诊断截图」，配置文件中的 `debug.save_failure_samples` 设为 `true`
 2. 置信度偏移量（`debug.failure_sample_offset`）控制记录范围——偏移量越大越容易触发记录，默认 0.10 通常够用
 3. **正常玩游戏**：让程序跑几局。程序会把每一阶段中最接近成功的截图和诊断信息自动保存到 `screenshots/debug/` 目录
 4. **分析诊断截图**：打开 `screenshots/debug/`，每个 target 至多一个 PNG + TOML 文件：

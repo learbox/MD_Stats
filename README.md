@@ -16,7 +16,7 @@
 - **主题系统** — 内置暗色/亮色/马卡龙三套主题，支持纯色和图片纹理，可自行制作
 - **悬浮统计窗** — 可拖拽的半透明悬浮窗，实时显示当前卡组关键数据，位置持久化
 - **版本更新检查** — 在"关于"弹窗中一键检测 GitHub 最新版本
-- **调试工具** — 可选的检测截图保存、最佳失败样本自动保留和日志模式，方便排查问题
+- **调试工具** — 可选的截图保存（成功/失败双模式）、诊断数据和日志，方便排查问题
 - **CSV 占用保护** — WPS/Excel 占用 CSV 时记录自动暂存到内存，状态栏持续告警，关闭占用程序后自动补写
 - **系统通知** — 对局结束时弹出气泡通知，支持最小化到系统托盘
 
@@ -121,7 +121,7 @@ python main.py
 | `window.width` / `height` | 主窗口尺寸（像素） | `1300` / `700` |
 | `appearance.theme` | 界面主题，填写 `themes/` 下的文件夹名 | `"macaron"` |
 | `opponent_decks.presets` | 对方卡组预设列表 | `["炎兽", "闪刀姬", ...]` |
-| `debug.save_screenshots` | 保存检测截图（开启后写入 `screenshots/`） | `false` |
+| `debug.save_screenshots` | 识别成功时保存截图（开启后写入 `screenshots/`） | `false` |
 | `debug.auto_clear_screenshots` | 下一局开始时自动清除上一局的截图 | `true` |
 | `debug.hotkey_enabled` | 启用截图热键（全局热键） | `false` |
 | `debug.snapshot_hotkey` | 单次截图热键 | `"Ctrl+Shift+S"` |
@@ -130,8 +130,8 @@ python main.py
 | `debug.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
 | `debug.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
 | `debug.show_confidence` | 状态栏显示检测置信度 | `false` |
-| `debug.save_failure_samples` | 保存最佳失败样本（识别接近成功时记录到 `screenshots/debug/`） | `false` |
-| `debug.failure_sample_offset` | 置信度偏移量（阈值 − 偏移 = 记录下限） | `0.10` |
+| `debug.save_failure_samples` | 识别失败时诊断截图（匹配度接近阈值时自动截图 + 诊断数据到 `screenshots/debug/`） | `false` |
+| `debug.failure_sample_offset` | 触发偏移（值越大越容易触发，0 = 仅保存未达标帧的最高分） | `0.10` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
 | `stats.columns` | 统计表格显示的列（空 = 全部） | `[]` |
 | `recorder.remember_last_deck` | 启动时自动填入上次使用的卡组 | `true` |

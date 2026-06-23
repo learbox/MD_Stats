@@ -160,7 +160,7 @@ log_mode = false
 log_scope = ["status", "screenshots", "errors"]
 # 状态栏显示置信度（段位图标 NCC、等级判读、三阶段检测分数）
 show_confidence = false
-# 保存接近成功的截图（匹配度接近阈值但未达标时自动截图到 screenshots/debug/）
+# 识别失败时诊断截图（匹配度接近阈值但未达标时自动截图 + 诊断数据）
 save_failure_samples = false
 # 偏移量（值越大越容易触发，0 = 仅保存未达标帧的最高分）
 failure_sample_offset = 0.10
