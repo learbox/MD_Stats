@@ -1013,7 +1013,10 @@ def detect_rank_icon(
 
     # 分别检测玩家（左侧）和对手（右侧）
     def _search_bbox(cx: int, cy: int, cw: int, ch: int) -> tuple[int, int, int, int]:
-        """以 (cx,cy) 为中心、±50px 为余量，计算搜索范围并裁剪到画面内。"""
+        """以图标的精确位置为中心，±50px 扩展为搜索区域并裁剪到画面内。
+
+        与 roi_manager 中三阶段 ROI 的 save_region() 使用相同的 MARGIN=50。
+        """
         MARGIN = 50
         x = max(0, cx - MARGIN)
         y = max(0, cy - MARGIN)
@@ -1033,7 +1036,6 @@ def detect_rank_icon(
 
         if cached:
             # ===== 有位置缓存：在已知位置附近精搜 =====
-            # 新格式 (x, y, w_icon, h_icon)
             cx, cy, cw, ch = cached
             px, py, pw, ph = _search_bbox(cx, cy, cw, ch)
             search_roi = screenshot[py:py + ph, px:px + pw]
@@ -1069,8 +1071,8 @@ def detect_rank_icon(
             rw = int(fw / scale)
             rh = int(fh / scale)
 
-            sx2, sy2, sw, sh = _search_bbox(rx, ry, rw, rh)
-            search_roi = screenshot[sy2:sy2 + sh, sx2:sx2 + sw]
+            sx2, sy2, sw2, sh2 = _search_bbox(rx, ry, rw, rh)
+            search_roi = screenshot[sy2:sy2 + sh2, sx2:sx2 + sw2]
             tmpl = _composite_rank_icon(name, rw, rh, bg_color)
             if tmpl is not None:
                 res = cv2.matchTemplate(search_roi, tmpl, cv2.TM_CCOEFF_NORMED)
@@ -1078,6 +1080,7 @@ def detect_rank_icon(
                 rx = sx2 + loc[0]
                 ry = sy2 + loc[1]
 
+            # 缓存存精确位置，搜索时 _search_bbox 统一加 MARGIN=50
             _position_cache[pos_key] = (rx, ry, rw, rh)
             save_icon_position(w, h, side, rx, ry, rw, rh)
 
