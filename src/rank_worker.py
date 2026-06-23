@@ -76,9 +76,9 @@ class RankWorker(QThread):
         """
         super().__init__(parent)
         cfg = load_config()
-        rc = cfg.get("rank_detection", {})  # 读取 [rank_detection] 段
-        self._interval: float = rc.get("interval", 0.5)
-        self._threshold: float = rc.get("confidence_threshold", 0.7)
+        rank_cfg = cfg.get("rank_detection", {})  # 读取 [rank_detection] 段
+        self._interval: float = rank_cfg.get("interval", 0.5)
+        self._threshold: float = rank_cfg.get("confidence_threshold", 0.7)
         self._running = False               # 线程主循环开关
         self._paused = False                # 暂停标志（一局结束到下一局开始之间）
         self._result: dict | None = None    # 暂存当前这局的检测结果
