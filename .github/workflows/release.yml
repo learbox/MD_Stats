@@ -123,7 +123,7 @@ jobs:
           Copy-Item -Recurse csv $release
           Copy-Item -Recurse resource $release
           Copy-Item config.toml $release
-          Copy-Item .app_state.json $release
+          Copy-Item .app_state.toml $release
           Copy-Item docs/README_release.md "$release/README.md"
           Copy-Item docs/TROUBLESHOOTING.md $release
           Copy-Item LICENSE $release
