@@ -131,11 +131,18 @@ class RankWorker(QThread):
 
     def _sleep(self, ms: int) -> None:
         """可中断休眠：每 50ms 醒一次检查 _running，stop() 后最多 50ms 退出。"""
+        import time, sys
         remaining = ms
         while remaining > 0 and self._running:
             chunk = min(remaining, 50)
-            self._sleep(chunk)
+            t0 = time.time()
+            self.msleep(chunk)
+            dt = time.time() - t0
+            if dt > 0.1:
+                print(f"[perf] RankWorker msleep({chunk}) 实际睡了 {dt:.3f}s", file=sys.stderr, flush=True)
             remaining -= chunk
+        if not self._running:
+            print(f"[perf] RankWorker 检测到 stop，剩余 {remaining}ms 未睡完", file=sys.stderr, flush=True)
 
     def stop(self) -> None:
         """优雅停止线程。不强制 kill，只把 _running 设为 False。

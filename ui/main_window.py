@@ -1353,22 +1353,31 @@ class MainWindow(QMainWindow):
             self._float_window.set_running(True)
 
     def _on_stop(self) -> None:
-        """点击"停止"按钮: 停止后台识别线程并恢复 UI。
+        """点击"停止"按钮: 停止后台识别线程并恢复 UI。"""
+        import time
 
-        先同时发停止信号（让两个线程并发退出），再等待。
-        比之前串行快一倍：最坏从 2 秒降到 1 秒，通常 0.5 秒内完成。
-        """
-        # 1. 同时发信号 → 两个线程并发退出
+        t0 = time.time()
         if self._worker is not None:
             self._worker.stop()
         if self._rank_worker is not None:
             self._rank_worker.stop()
+        t_stop = time.time()
 
-        # 2. 等待线程退出（最多等一轮检测间隔 ≈ 1s）
+        t_wait1 = time.time()
         if self._worker is not None:
             self._worker.wait(1500)
+        t_wait2 = time.time()
+
         if self._rank_worker is not None:
             self._rank_worker.wait(1500)
+        t_wait3 = time.time()
+
+        import sys
+        print(f"[perf] stop信号={t_stop-t0:.3f}s "
+              f"wait_worker={t_wait2-t_wait1:.3f}s "
+              f"wait_rank={t_wait3-t_wait2:.3f}s "
+              f"总计={t_wait3-t0:.3f}s",
+              file=sys.stderr, flush=True)
 
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
