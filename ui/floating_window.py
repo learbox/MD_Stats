@@ -56,9 +56,9 @@
             → 清空旧标签，重建新标签
 """
 
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPixmap
-from PySide6.QtWidgets import QGridLayout, QLabel, QWidget
+from PySide6.QtWidgets import QGridLayout, QLabel, QMenu, QWidget
 
 # 行名 → 统计键元组的映射表
 # 键 = 用户可见的行名（如"胜/负"），值 = compute_stats() 输出字典中的键
@@ -101,6 +101,13 @@ class FloatingWindow(QWidget):
     行配置由 set_rows() 动态替换。位置持久化由 MainWindow 管理。
     """
 
+    # ---- 信号（由 MainWindow 连接） ----
+    show_main_requested = Signal()    # 右键 → "显示主窗口"
+    quit_requested = Signal()         # 右键 → "退出程序"
+    toggle_start_stop = Signal()      # 右键 → "启动" / "停止"
+    # 三段手动按钮（stage 0/1/2 对应不同语义）
+    manual_action = Signal(str)       # 参数: "win" / "lose" / "undo"
+
     _DEFAULT_W = 250
     _DEFAULT_H = 330
 
@@ -122,6 +129,8 @@ class FloatingWindow(QWidget):
         self.setWindowTitle("MD Stats 悬浮窗")
         self._dragging = False
         self._drag_start = QPoint()
+        self._stage: int = 0          # 当前对局阶段（0=等硬币 1=等先后攻 2=等胜负）
+        self._running: bool = False   # 识别是否正在运行（控制启动/停止按钮文字）
         self._bg_color = QColor(152, 212, 187, 128)
         self._bg_pixmap: QPixmap | None = None
         self._text_color = "#000000"
@@ -493,6 +502,58 @@ class FloatingWindow(QWidget):
         """鼠标释放 — 退出拖拽模式。"""
         self._dragging = False
         super().mouseReleaseEvent(event)
+
+    # ------------------------------------------------------------------
+    # 右键菜单
+    # ------------------------------------------------------------------
+
+    def set_stage(self, stage: int) -> None:
+        """同步当前对局阶段（由 MainWindow._update_manual_buttons 调用）。"""
+        self._stage = stage
+
+    def set_running(self, running: bool) -> None:
+        """同步识别运行状态（控制右键菜单启动/停止按钮文字）。"""
+        self._running = running
+
+    def contextMenuEvent(self, event) -> None:
+        """右键菜单：根据对局阶段显示手动按钮 + 显示主窗口 + 退出。"""
+        menu = QMenu(self)
+
+        # ---- 第 1 段：手动按钮（根据阶段变化） ----
+        stage = self._stage
+        if stage == 0:
+            win_btn = menu.addAction("赢硬币")
+            win_btn.triggered.connect(lambda: self.manual_action.emit("win"))
+            lose_btn = menu.addAction("输硬币")
+            lose_btn.triggered.connect(lambda: self.manual_action.emit("lose"))
+        elif stage == 1:
+            first_btn = menu.addAction("先攻")
+            first_btn.triggered.connect(lambda: self.manual_action.emit("win"))
+            second_btn = menu.addAction("后攻")
+            second_btn.triggered.connect(lambda: self.manual_action.emit("lose"))
+            menu.addSeparator()
+            undo_btn = menu.addAction("撤销")
+            undo_btn.triggered.connect(lambda: self.manual_action.emit("undo"))
+        elif stage == 2:
+            win_btn = menu.addAction("胜")
+            win_btn.triggered.connect(lambda: self.manual_action.emit("win"))
+            lose_btn = menu.addAction("负")
+            lose_btn.triggered.connect(lambda: self.manual_action.emit("lose"))
+            menu.addSeparator()
+            undo_btn = menu.addAction("撤销")
+            undo_btn.triggered.connect(lambda: self.manual_action.emit("undo"))
+
+        # ---- 第 2 段：启动 / 停止 ----
+        menu.addSeparator()
+        start_stop_text = "停止" if self._running else "启动"
+        menu.addAction(start_stop_text).triggered.connect(self.toggle_start_stop.emit)
+
+        # ---- 第 3 段：固定菜单项 ----
+        menu.addSeparator()
+        menu.addAction("显示主窗口").triggered.connect(self.show_main_requested.emit)
+        menu.addAction("退出程序").triggered.connect(self.quit_requested.emit)
+
+        menu.exec(event.globalPos())
 
     def _clear_owner(self) -> None:
         """真正调用 Win32 API 解除 Owner 关系。

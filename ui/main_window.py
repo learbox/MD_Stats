@@ -1345,6 +1345,8 @@ class MainWindow(QMainWindow):
         self._lock_deck()
         self._disable_bottom_buttons()
         self._update_manual_buttons()
+        if self._float_window is not None:
+            self._float_window.set_running(True)
 
     def _on_stop(self) -> None:
         """点击"停止"按钮: 停止后台识别线程并恢复 UI。
@@ -1366,6 +1368,8 @@ class MainWindow(QMainWindow):
         self._btn_stop.setEnabled(False)
         self._unlock_deck()
         self._enable_bottom_buttons()
+        if self._float_window is not None:
+            self._float_window.set_running(False)
 
     # =========================================================================
     # 自动识别回调（由 StatsWorker 的信号触发，在主线程中执行）
@@ -1604,6 +1608,20 @@ class MainWindow(QMainWindow):
     #   手动点了"赢硬币" → worker.jump_to(1) → worker 跳过硬币检测，直接用自动检测先后攻
     # =========================================================================
 
+    def _on_float_manual_action(self, action: str) -> None:
+        """悬浮窗右键菜单触发的手动操作。"""
+        if action == "undo":
+            self._on_undo()
+        else:
+            self._manual_step_clicked(action)
+
+    def _on_float_toggle_start_stop(self) -> None:
+        """悬浮窗右键菜单：启动/停止识别。"""
+        if self._worker is not None:
+            self._on_stop()
+        else:
+            self._on_start()
+
     def _manual_step_clicked(self, side: str) -> None:
         """手动按钮被点击，根据当前阶段解释 side 的语义并推进。"""
         if self._match.stage == 0:
@@ -1743,6 +1761,10 @@ class MainWindow(QMainWindow):
         self._btn_manual_win.setStyleSheet(self._tm.make_button_style(left_color))
         self._btn_manual_lose.setText(right_text)
         self._btn_manual_lose.setStyleSheet(self._tm.make_button_style(right_color))
+
+        # 同步阶段到悬浮窗（右键菜单根据阶段显示不同按钮）
+        if self._float_window is not None:
+            self._float_window.set_stage(self._match.stage)
 
     # =========================================================================
     # 表格刷新
@@ -1945,8 +1967,10 @@ class MainWindow(QMainWindow):
         owner.setFixedSize(1, 1)
         # 透明：WA_TranslucentBackground + 确保 paint 什么都不画
         owner.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        # 显示窗口（Windows 的要求：Owner 必须可见才生效）
+        # 显示窗口（Windows 要求 Owner 必须可见才生效）
         owner.show()
+        # 移到屏幕外 -10000 像素处，防止 1×1 像素点被看到
+        owner.move(-10000, -10000)
         self._float_owner_hwnd = int(owner.winId())
         # 保持引用防止 GC 回收
         self._float_owner_widget = owner
@@ -1970,6 +1994,13 @@ class MainWindow(QMainWindow):
         self._apply_float_style(cfg)
         self._refresh_float_window()                   # 填入当前统计数据
         self._restore_float_window_pos()               # 恢复上次位置
+        self._float_window.set_stage(self._match.stage) # 同步当前阶段到右键菜单
+        # 悬浮窗右键菜单信号
+        self._float_window.show_main_requested.connect(self._show_from_tray)
+        self._float_window.quit_requested.connect(self._quit_app)
+        self._float_window.toggle_start_stop.connect(self._on_float_toggle_start_stop)
+        self._float_window.manual_action.connect(self._on_float_manual_action)
+        self._float_window.set_running(self._worker is not None)
         # 将悬浮窗挂到隐藏 Owner → 去掉任务栏图标
         self._float_window._apply_owner(self._float_owner_hwnd)
         self._float_window.show()
