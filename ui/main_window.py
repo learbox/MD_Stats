@@ -1368,13 +1368,6 @@ class MainWindow(QMainWindow):
         if self._rank_worker is not None:
             self._rank_worker.wait(1500)
 
-        import sys
-        print(f"[perf] stop信号={t_stop-t0:.3f}s "
-              f"wait_worker={t_wait2-t_wait1:.3f}s "
-              f"wait_rank={t_wait3-t_wait2:.3f}s "
-              f"总计={t_wait3-t0:.3f}s",
-              file=sys.stderr, flush=True)
-
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
         self._btn_start.setEnabled(True)
