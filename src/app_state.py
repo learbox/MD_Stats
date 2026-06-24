@@ -14,12 +14,13 @@ _APP_STATE_PATH = get_project_root() / ".app_state.toml"
 # 各字段默认值（集中管理兜底，新增字段在此添加）
 # stats / record 为全部列宽（像素），record 不含隐藏列 0
 # splitter 为 [上, 下] 分割条绝对尺寸，main_pos / float_pos 为 [x, y]
-APP_STATE_DEFAULTS: dict[str, list[int]] = {
+APP_STATE_DEFAULTS: dict[str, Any] = {
     "stats":     [80, 60, 45, 45, 70, 75, 75, 75, 85, 85, 80, 75, 70, 70, 75],
     "record":    [115, 90, 80, 75, 80, 75, 65, 70, 50, 65],
     "splitter":  [200, 300],
     "main_pos":  [100, 100],
     "float_pos": [100, 100],
+    "float_visible": False,   # 上次退出时悬浮窗是否打开
 }
 
 
@@ -52,6 +53,7 @@ def write_app_state(data: dict[str, Any]) -> None:
         "splitter":  "主窗口上下分割比例 [统计区高度, 记录区高度]",
         "main_pos":  "主窗口上次关闭时的屏幕位置 [x, y]",
         "float_pos": "悬浮窗上次关闭时的屏幕位置 [x, y]",
+        "float_visible": "上次退出时悬浮窗是否打开（true = 启动时自动恢复）",
     }
 
     lines: list[str] = [
@@ -71,6 +73,8 @@ def write_app_state(data: dict[str, Any]) -> None:
         if isinstance(val, list):
             items = ", ".join(str(v) for v in val)
             lines.append(f"{key} = [{items}]  # {comment}")
+        elif isinstance(val, bool):
+            lines.append(f"{key} = {str(val).lower()}  # {comment}")
         else:
             lines.append(f"{key} = {val}  # {comment}")
 

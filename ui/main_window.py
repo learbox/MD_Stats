@@ -1060,6 +1060,10 @@ class MainWindow(QMainWindow):
         # 初始化完成后再注册热键（__init__ 早期 _status_label 尚未创建）
         self._snapshot_ctrl.sync_hotkeys()
 
+        # ---- 24. 上次退出时悬浮窗开着 → 自动恢复 ----
+        if read_app_state().get("float_visible", False):
+            self._on_toggle_float()
+
 
     # =========================================================================
     # 底部按钮状态管理
@@ -1984,6 +1988,7 @@ class MainWindow(QMainWindow):
             self._float_window.close()
             self._float_window = None
             self._btn_float.setText("悬浮窗")
+            self._save_float_visible(False)     # 记住：下次不自动打开
             return
 
         # ---- 打开悬浮窗 ----
@@ -2005,6 +2010,7 @@ class MainWindow(QMainWindow):
         self._float_window._apply_owner(self._float_owner_hwnd)
         self._float_window.show()
         self._btn_float.setText("关闭悬浮")
+        self._save_float_visible(True)     # 记住：下次启动自动打开
         self._btn_float.setText("关闭悬浮")
 
 
@@ -2015,6 +2021,12 @@ class MainWindow(QMainWindow):
         saved = read_app_state()
         pos = self._float_window.pos()
         saved["float_pos"] = [pos.x(), pos.y()]
+        write_app_state(saved)
+
+    def _save_float_visible(self, visible: bool) -> None:
+        """将悬浮窗开关状态持久化到 .app_state.toml（退出时自动恢复）。"""
+        saved = read_app_state()
+        saved["float_visible"] = visible
         write_app_state(saved)
 
     def _restore_float_window_pos(self) -> None:
