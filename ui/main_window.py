@@ -101,6 +101,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
+    QStyle,
     QStyledItemDelegate,
     QTableWidget,
     QToolButton,
@@ -111,7 +112,9 @@ from PySide6.QtWidgets import (
 from src.app_state import read_app_state, write_app_state, parse_pos, APP_STATE_DEFAULTS
 from src.config import get_project_root, load_config
 from src.match_state import MatchState
+from src.rank_icons import get_rank_icon, init_rank_icons
 from src.snapshot_controller import SnapshotController
+from ui.rank_edit_panel import RankEditPanel
 from src import logger as _log
 from src.recorder import (
     add_record,
@@ -226,6 +229,249 @@ class ComboDelegate(QStyledItemDelegate):
     def setModelData(self, editor: QComboBox, model, index) -> None:
         """把编辑器选择的值写回表格模型。"""
         model.setData(index, editor.currentText(), Qt.ItemDataRole.EditRole)
+
+
+# =============================================================================
+# RankIconDelegate — 段位列委托（图标缩略图 + 段位名称）
+# =============================================================================
+
+class RankIconDelegate(QStyledItemDelegate):
+    """段位列的自定义委托 — 负责单元格的"画"和"编辑"。
+
+    QStyledItemDelegate 是 Qt 提供的"委托"机制，允许你接管某个列的
+    显示（paint）和编辑（createEditor）行为，而不改变底层数据。
+
+    这个委托接管了以下两列：
+    - 列 4：己方段位
+    - 列 6：对方段位
+
+    ============================================================================
+    绘制（paint）
+
+    单元格平时显示的内容由 paint() 方法决定。
+    逻辑：从单元格取文本 → 查段位图标 → 画"图标 + 文字"，整体居中。
+    如果找不到图标（文件缺失 / 不在已知段位中）→ 退化画纯文字。
+
+    ============================================================================
+    编辑（createEditor / setEditorData / setModelData）
+
+    用户双击单元格时，Qt 自动调用：
+    1. createEditor()  → 创建编辑控件（这里返回 RankEditPanel 弹窗面板）
+    2. setEditorData() → 把单元格当前值填入面板
+    3. 用户操作面板……
+    4. 面板发射 rank_selected → 触发 commitData + closeEditor
+    5. setModelData()  → 把面板选中的新值写回单元格
+
+    详见 ui/rank_edit_panel.py 的模块文档。
+    ============================================================================
+    """
+
+    # 图标和后面文字之间的水平间距（像素）
+    ICON_TEXT_SPACING = 4
+
+    def __init__(self, parent: QTableWidget | None = None,
+                 colors: dict[str, str] | None = None) -> None:
+        """创建段位委托实例。
+
+        Args:
+            parent: 所属的 QTableWidget。Qt 用它管理 delegate 的生命周期。
+            colors: 主题颜色字典，会传给 RankEditPanel。
+                    切换皮肤时 _on_reload_config 会更新此属性。
+        """
+        super().__init__(parent)
+        self._colors = colors
+
+    # =========================================================================
+    # 绘制（paint）— 单元格正常显示时的样子
+    # =========================================================================
+
+    def paint(self, painter, option, index) -> None:
+        """绘制段位单元格：图标缩略图 + 段位名称，整体居中。
+
+        Qt 在需要重绘单元格时会调用这个方法（比如窗口首次显示、滚动等）。
+        painter 是 Qt 的"画笔"，option 包含单元格的几何信息和状态，
+        index 告诉你这是哪一行哪一列。
+
+        绘制步骤：
+        1. 从 model 取单元格文本
+        2. 调用 get_rank_icon() 查图标
+        3. 没图标 → 用父类默认绘制（纯文字）
+        4. 有图标 → 先画选中/hover 背景 → 再画图标 → 再画文字
+        """
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        text = str(text) if text else ""
+        pixmap = get_rank_icon(text) if text else None
+
+        if pixmap is None or pixmap.isNull():
+            # 查不到图标（文件缺失 / 空值 / 未知段位）
+            # → 交给父类默认绘制，只显示纯文字，居中
+            super().paint(painter, option, index)
+            return
+
+        # ===== 以下是有图标的情况 =====
+
+        # painter.save() / painter.restore() 成对使用：
+        # save() 保存当前画笔状态（颜色、字体等），restore() 恢复。
+        # 这样我们临时修改画笔不会影响其他单元格的绘制。
+        painter.save()
+
+        # ---- 绘制单元格背景 ----
+        # option.state 是 Qt 标志位组合，用 & 检查特定标志是否置位
+        # 选中态：用户点击了这一行 → 画高亮背景
+        # hover 态：鼠标悬停 → 画稍亮的背景
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, option.palette.highlight())
+        elif option.state & QStyle.StateFlag.State_MouseOver:
+            painter.fillRect(option.rect, option.palette.alternateBase())
+
+        # ---- 计算图标 + 文字作为一个整体的居中起始位置 ----
+        icon_size = pixmap.width()
+        # horizontalAdvance() 返回这段文字在屏幕上占多少像素宽
+        text_width = painter.fontMetrics().horizontalAdvance(text)
+        # 整体宽度 = 图标宽度 + 间距 + 文字宽度
+        total_width = icon_size + self.ICON_TEXT_SPACING + text_width
+        # 起始 X = 单元格左边 + （单元格宽度 - 整体宽度） / 2
+        # 这样整个 (图标+文字) 组就在单元格正中
+        start_x = option.rect.left() + (option.rect.width() - total_width) // 2
+
+        # ---- 绘制图标 ----
+        # 图标垂直居中：(单元格高度 - 图标高度) / 2
+        icon_y = option.rect.top() + (option.rect.height() - icon_size) // 2
+        painter.drawPixmap(start_x, icon_y, pixmap)
+
+        # ---- 绘制文字（在图标右边，垂直居中） ----
+        text_x = start_x + icon_size + self.ICON_TEXT_SPACING
+        # 选中态文字用白色（高亮文字色），普通态用默认文字色
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.setPen(option.palette.highlightedText().color())
+        else:
+            painter.setPen(option.palette.text().color())
+        # drawText 的 x,y,w,h 版本：在指定矩形内画文字，左对齐 + 垂直居中
+        painter.drawText(
+            text_x, option.rect.top(), text_width, option.rect.height(),
+            int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+            text,
+        )
+
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        """告诉 Qt 这个单元格建议多宽。
+
+        有图标时，在默认宽度基础上加上图标 + 间距的宽度，
+        避免列太窄导致图标被截断。
+        """
+        hint = super().sizeHint(option, index)
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        if text and get_rank_icon(str(text)):
+            hint.setWidth(hint.width() + 22 + self.ICON_TEXT_SPACING)
+        return hint
+
+    # =========================================================================
+    # 编辑 — 用户双击单元格后弹出 RankEditPanel
+    #
+    # Qt 的编辑流程：
+    #   createEditor()   → 创建编辑控件
+    #   setEditorData()  → 把旧值填入编辑控件
+    #   （用户操作……面板发射 rank_selected 信号）
+    #   commitData       → Qt 内部标记"有数据要提交"
+    #   setModelData()   → 把新值写回数据模型
+    #   closeEditor      → Qt 销毁编辑控件
+    # =========================================================================
+
+    def createEditor(self, parent_widget, _option, _index) -> RankEditPanel:
+        """Qt 调用：创建一个编辑控件。
+
+        这里返回 RankEditPanel（按钮矩阵弹窗），而不是默认的 QLineEdit。
+        连接面板的两个信号到 Qt 的委托机制：
+        - rank_selected → commitData.emit(panel)：通知 Qt "用户确认了，有数据要提交"
+        - rank_selected → closeEditor.emit(panel)：通知 Qt "编辑完了，关掉面板"
+        - cancelled      → closeEditor.emit(panel)：通知 Qt "用户取消了，关掉面板"
+
+        注意：commitData 和 closeEditor 是 QStyledItemDelegate 提供的信号，
+        不是我们自己定义的。Qt 监听它们来推进编辑→提交→关闭的流程。
+        """
+        panel = RankEditPanel(parent=None, colors=self._colors)
+
+        # 用户点了按钮确认了选择 → 提交 + 关闭
+        panel.rank_selected.connect(
+            lambda val: self.commitData.emit(panel)
+        )
+        panel.rank_selected.connect(
+            lambda val: self.closeEditor.emit(panel)
+        )
+
+        # 用户按 Esc / 点面板外 / 切程序 → 仅关闭，不提交
+        panel.cancelled.connect(
+            lambda: self.closeEditor.emit(panel)
+        )
+        return panel
+
+    def setEditorData(self, editor: RankEditPanel, index) -> None:
+        """Qt 调用：把单元格的当前值填入编辑面板。
+
+        这样面板打开时就能看到原来的值（比如 "钻石 IV"），
+        大段、小段按钮也会自动高亮。
+        """
+        value = index.data(Qt.ItemDataRole.EditRole) or ""
+        editor.set_current_value(str(value))
+
+    def setModelData(self, editor: RankEditPanel, model, index) -> None:
+        """Qt 调用：把编辑面板的最终选择写回数据模型。
+
+        editor.committed_value 在面板 _commit() 时设置，
+        包含用户最终选择的段位字符串（如 "黄金 Ⅲ"）。
+
+        只在新值非空时才写入。空值意味着用户点确认但没选任何东西。
+        """
+        new_value = editor.committed_value
+        if new_value:
+            model.setData(index, new_value, Qt.ItemDataRole.EditRole)
+
+    def updateEditorGeometry(self, editor: RankEditPanel, option, index) -> None:
+        """Qt 调用：设置编辑面板的屏幕位置和尺寸。
+
+        策略：面板显示在正在编辑的单元格下方 4px 处。
+        如果下方屏幕空间不够（面板会超出屏幕底部），
+        则改为显示在单元格上方。
+
+        坐标系说明：
+        - option.rect 是单元格在 viewport 坐标系中的矩形
+        - viewport.mapToGlobal() 把 viewport 坐标转换为屏幕全局坐标
+        - 面板是顶层 Tool 窗口，需要用屏幕全局坐标定位
+        """
+        # ---- 获取单元格左上角的屏幕全局坐标 ----
+        table = self.parent()
+        if isinstance(table, QTableWidget) and index.isValid():
+            item = table.item(index.row(), index.column())
+            if item is not None:
+                # visualItemRect 返回单元格在 viewport 中的可见矩形
+                cell_rect = table.visualItemRect(item)
+                # mapToGlobal 把 viewport 坐标转为显示器屏幕坐标
+                global_top_left = table.viewport().mapToGlobal(cell_rect.topLeft())
+            else:
+                global_top_left = option.rect.topLeft()
+        else:
+            global_top_left = option.rect.topLeft()
+
+        panel_size = editor.sizeHint()
+        x = global_top_left.x()
+
+        # ---- 纵向定位：优先放下方，空间不够放上方 ----
+        # 放在单元格下方，留 4px 间距
+        y = global_top_left.y() + option.rect.height() + 4
+
+        # 检查是否会超出屏幕底部
+        screen = QApplication.primaryScreen()
+        if screen:
+            # availableGeometry 是屏幕可用区域（排除任务栏）
+            screen_geo = screen.availableGeometry()
+            if y + panel_size.height() > screen_geo.bottom():
+                # 超出屏幕底部 → 改为放在单元格上方
+                y = global_top_left.y() - panel_size.height() - 4
+
+        # 设置面板的屏幕位置和大小
+        editor.setGeometry(x, y, panel_size.width(), panel_size.height())
 
 
 # =============================================================================
@@ -737,6 +983,15 @@ class MainWindow(QMainWindow):
             table.verticalHeader().setObjectName("verticalHeader")
 
         # ---- 15. 记录表格列委托（下拉菜单） ----
+        # 段位图标初始化（预加载 + 缩放缓存，需在 QApplication 之后调用）
+        init_rank_icons(22)
+        rank_colors = self._tm.colors
+        # 列4: 己方段位（图标缩略图 + 段位名）
+        self._rank_delegate_player = RankIconDelegate(self._record_table, colors=rank_colors)
+        self._record_table.setItemDelegateForColumn(4, self._rank_delegate_player)
+        # 列6: 对方段位（图标缩略图 + 段位名）
+        self._rank_delegate_opponent = RankIconDelegate(self._record_table, colors=rank_colors)
+        self._record_table.setItemDelegateForColumn(6, self._rank_delegate_opponent)
         # 列7: 赢硬币 (是/否)
         self._record_table.setItemDelegateForColumn(7, ComboDelegate(["是", "否"], self._record_table))
         # 列8: 先后攻 (先攻/后攻)
@@ -1971,9 +2226,14 @@ class MainWindow(QMainWindow):
                 self._apply_float_style(new_cfg)
                 self._refresh_float_window()
 
-        # 对方卡组预设更新
+        # 段位 delegate 同步新主题色（切换皮肤后面板颜色跟着更新）
+        new_colors = self._tm.colors
+        self._rank_delegate_player._colors = new_colors
+        self._rank_delegate_opponent._colors = new_colors
+
+        # 对方卡组预设更新（列5 = 对方卡组）
         new_presets = self._config.get("opponent_decks", {}).get("presets", [])
-        self._record_table.setItemDelegateForColumn(6, EditableComboDelegate(new_presets, self._record_table))
+        self._record_table.setItemDelegateForColumn(5, EditableComboDelegate(new_presets, self._record_table))
 
         # Worker 正在运行 → 停止后用新配置重启
         worker_was_running = self._worker is not None

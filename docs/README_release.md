@@ -14,6 +14,8 @@
 - **自动识别** — 程序定时截图并匹配游戏界面，自动检测硬币输赢（含段位升降）、先后攻、对局胜负，状态栏显示匹配分数
 - **手动补录** — 自动识别遗漏时，可点击手动按钮补录（按钮与自动识别状态联动）
 - **记录编辑** — 双击记录表格中的单元格可直接编辑，修改自动写回 CSV
+- **段位图标显示** — 段位列自动显示图标缩略图 + 段位名称（图标文件放入 `rankicons/` 目录即可，缺失时降级为纯文字）
+- **段位快速编辑** — 双击段位单元格弹出按钮矩阵面板：点大段 → 点小段，两次点击完成选择；也支持输入自定义文字
 - **统计表格** — 按卡组汇总对局数、胜率、硬币胜负率、先后攻胜率、段位胜率，支持自定义显示列
 - **剪贴板复制** — 横排 TSV × 竖排 key: value 两种格式，一键复制
 - **悬浮统计窗** — 可拖拽的半透明悬浮窗，实时显示当前卡组关键数据和检测状态
@@ -85,18 +87,78 @@ resource/templates/
 MDStats/
 ├── MDStats.exe              # 主程序
 ├── LICENSE                  # MIT 开源协议
-├── README.md                # 使用说明
+├── README.md                # 使用说明（当前文件）
 ├── TROUBLESHOOTING.md       # 常见问题排查
 ├── config.toml              # 配置文件
-├── .app_state.toml          # 窗口状态持久化
-├── csv/                     # 对战数据
+├── .app_state.toml          # 窗口状态持久化（自动生成）
+├── csv/                     # 对战数据 CSV
 ├── screenshots/             # 调试截图（开启后自动生成）
-│   └── debug/               # 诊断截图（开启后自动生成）
+│   └── debug/               # 诊断截图（匹配接近阈值时自动保留）
 ├── logs/                    # 日志文件（开启后自动生成）
-├── resource/templates/      # 模板图片 + roi.toml 搜索区域配置
-│   ├── rankicons/           # 段位图标源素材（需自行准备 ⚠️）
-│   └── 1920x1080/ ...       # 按分辨率分目录
-├── themes/                  # 主题目录（自定义主题文件放这）
+│
+├── resource/                # 静态资源
+│   ├── icons/               # 程序图标
+│   │   ├── app_icon.png           # 主窗口 + 系统托盘图标
+│   │   └── floating_window_icon.png  # 悬浮窗图标
+│   │
+│   └── templates/           # 图像识别模板
+│       ├── README.md              # 模板制作指南
+│       │
+│       ├── rankicons/             # 段位图标（识别用 + 表格显示用 ⚠️）
+│       │   ├── img_rankicon_01_l.png  → 新手
+│       │   ├── img_rankicon_02_l.png  → 青铜
+│       │   ├── img_rankicon_03_l.png  → 白银
+│       │   ├── img_rankicon_04_l.png  → 黄金
+│       │   ├── img_rankicon_05_l.png  → 铂金
+│       │   ├── img_rankicon_06_l.png  → 钻石
+│       │   ├── img_rankicon_07_l.png  → 大师
+│       │   ├── img_rateicon_01_l.png  → 巅峰
+│       │   ├── img_rankicon_crown_l.png  （备用，未使用）
+│       │   └── rank_positions.toml    # 图标位置缓存（自动生成）
+│       │
+│       ├── 1600x900/        # 1600×900 分辨率
+│       │   ├── coin_win.png / coin_lose.png   ← 赢/输硬币（必选）
+│       │   ├── go_first.png / go_second.png   ← 先攻/后攻（必选）
+│       │   ├── victory.png / defeat.png       ← 胜/负界面（必选）
+│       │   ├── rank_up.png / rank_down.png    ← 升段/降段（可选）
+│       │   └── roi.toml                       ← 搜索区域裁剪（可选）
+│       │
+│       ├── 1920x1080/       # 1920×1080（同上结构）
+│       ├── 2048x1152/       # 2048×1152（同上，无 rank_up/down）
+│       ├── 2560x1440/       # 2560×1440（同上，无 rank_up/down）
+│       ├── 3200x1800/       # 3200×1800（同上，无 rank_up/down）
+│       └── 3840x2160/       # 3840×2160（同上，无 rank_up/down）
+│
+├── themes/                  # 主题目录
+│   ├── README.md            # 自定义主题制作指南
+│   │
+│   ├── dark/                # 暗色沉浸主题
+│   │   ├── theme.toml       #   颜色 / 字体 / 标题栏配置
+│   │   └── style.qss        #   Qt 样式表
+│   │
+│   ├── light/               # 亮色清爽主题
+│   │   ├── theme.toml
+│   │   └── style.qss
+│   │
+│   └── macaron/             # 马卡龙水彩纹理主题
+│       ├── theme.toml
+│       ├── style.qss
+│       └── assets/          #   主题图片 + 字体
+│           ├── main_bg.png        # 主窗口背景图
+│           ├── settings_bg.png    # 设置弹窗背景图
+│           ├── table_bg.png       # 表格背景纹理
+│           ├── header_bg.png      # 表头背景
+│           ├── row_header_bg.png  # 行号列背景
+│           ├── statusbar_bg.png   # 状态栏背景
+│           ├── panel_bg.png       # 面板背景
+│           ├── corner_bg.png      # 边角装饰
+│           ├── button_texture.png # 按钮纹理
+│           ├── float_bg.png       # 悬浮窗背景
+│           ├── title_close.png    # 关闭按钮图标
+│           ├── title_min.png      # 最小化按钮图标
+│           ├── *.ttf / *.otf      # 自定义字体
+│           └── OFL*.txt           # 字体开源许可证
+│
 └── .runtime/                # 运行时依赖（请勿修改）
 ```
 
