@@ -18,9 +18,10 @@
 
 1. **无边框 + 置顶**
    窗口没有标题栏和边框，使用 FramelessWindowHint + WindowStaysOnTopHint。
-   两种模式可选：
-   - Tool 模式（默认）：无任务栏图标，OBS 需用"显示器捕获"
-   - Window 模式（OBS 模式）：有任务栏图标，OBS 可用"窗口捕获"
+   窗口类型始终为 Qt.Window（OBS 窗口捕获可识别），但通过 Win32 API
+   将窗口挂到一个隐藏的 Owner 窗口下，从而隐藏任务栏图标。
+   这比原来的 Qt.Tool / Qt.Window 二选一方案更完美：
+   → 无任务栏图标 ✓  +  OBS 窗口捕获 ✓  +  不需要用户手动切换设置
 
 2. **半透明背景**
    通过 WA_TranslucentBackground 属性实现窗口背景透明，
@@ -128,23 +129,17 @@ class FloatingWindow(QWidget):
         self._font_family = ""
         self._rows: tuple[str, ...] = tuple(rows) if rows else _DEFAULT_ROWS
 
-        # 根据 obs_mode 决定窗口类型：Window（OBS 可捕获，有任务栏图标）
-        #                         或 Tool（无任务栏图标，OBS 需用显示器捕获）
-        from src.config import load_config
-        obs = load_config().get("notification", {}).get("obs_mode", False)
+        # 始终使用 Qt.Window（OBS 窗口捕获可识别）。
+        # 任务栏图标通过 Win32 SetWindowLongPtr(GWLP_HWNDPARENT) 隐藏，
+        # 不再需要 obs_mode 切换。见 _apply_owner() 方法。
         self.setWindowFlags(
-            (Qt.WindowType.Window if obs else Qt.WindowType.Tool)
+            Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
-        # OBS 模式下的任务栏图标
-        if obs:
-            from PySide6.QtGui import QIcon
-            from src.config import get_project_root
-            ico = get_project_root() / "resource" / "icons" / "floating_window_icon.png"
-            if ico.exists():
-                self.setWindowIcon(QIcon(str(ico)))
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # Owner 窗口句柄，由 MainWindow 调用 _apply_owner() 设置
+        self._owner_hwnd: int = 0
         w0, h0 = self._DEFAULT_W, 40 + len(self._rows) * 26
         self.setMinimumSize(w0, h0)
         self.setMaximumSize(w0 + 200, h0 + 200)
@@ -431,6 +426,52 @@ class FloatingWindow(QWidget):
                 self._values[i].setText(f"{v1} / {v2}")
 
     # ------------------------------------------------------------------
+    # 隐藏任务栏图标（Win32 GWLP_HWNDPARENT 方案）
+    #
+    # Windows 规则：顶层无主窗口 → 一定显示在任务栏上。
+    # 只去掉 WS_EX_APPWINDOW 不够，必须有 Owner。
+    #
+    # 方案：始终用 Qt.Window（OBS 可捕获），窗口显示后用
+    # SetWindowLongPtr(GWLP_HWNDPARENT) 把主窗口设为 Owner。
+    # Owned 窗口不显示任务栏图标 → 无图标 ✓ + OBS 正常捕获 ✓。
+    #
+    # 副作用：主窗口最小化时悬浮窗也会隐藏（Windows 标准行为）。
+    # ------------------------------------------------------------------
+
+    def _hide_taskbar_icon(self) -> None:
+        """将主窗口设为悬浮窗的 Owner，隐藏任务栏图标。
+
+        调用时机：_apply_owner(hwnd) 被 MainWindow 在 show() 之后调用。
+        用 QTimer.singleShot 延迟执行，确保 Qt 已完成窗口创建。
+        """
+        import ctypes
+        GWLP_HWNDPARENT = -8
+
+        hwnd = int(self.winId())
+        if hwnd == 0 or self._owner_hwnd == 0:
+            return
+
+        user32 = ctypes.windll.user32
+        user32.SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, self._owner_hwnd)
+
+    def _apply_owner(self, owner_hwnd: int) -> None:
+        """记录 Owner 窗口句柄，等待 showEvent 后生效。
+
+        由 MainWindow._on_toggle_float 在 show() 之前调用。
+        不能在这里立即执行 API，因为此时 HWND 可能还未创建。
+        """
+        self._owner_hwnd = owner_hwnd
+
+    def showEvent(self, event) -> None:
+        """窗口显示后，用延迟调用执行 Owner 绑定。
+
+        QTimer.singleShot(0) 确保 Qt 已完成所有窗口初始化后再调 API。
+        """
+        super().showEvent(event)
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self._hide_taskbar_icon)
+
+    # ------------------------------------------------------------------
     # 拖拽
     # ------------------------------------------------------------------
 
@@ -453,3 +494,21 @@ class FloatingWindow(QWidget):
         """鼠标释放 — 退出拖拽模式。"""
         self._dragging = False
         super().mouseReleaseEvent(event)
+
+    def _clear_owner(self) -> None:
+        """真正调用 Win32 API 解除 Owner 关系。
+
+        只把 _owner_hwnd 设成 0 不够——Windows 不知道 Python 变量变了。
+        必须 SetWindowLongPtr(GWLP_HWNDPARENT, 0) 才能真正断开。
+        """
+        if self._owner_hwnd != 0 and self.winId() != 0:
+            import ctypes
+            ctypes.windll.user32.SetWindowLongPtrW(
+                int(self.winId()), -8, 0,  # GWLP_HWNDPARENT → 0
+            )
+        self._owner_hwnd = 0
+
+    def closeEvent(self, event) -> None:
+        """关闭前解除 Owner 关系。"""
+        self._clear_owner()
+        super().closeEvent(event)

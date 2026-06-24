@@ -435,12 +435,11 @@ class RankEditPanel(QFrame):
     def _on_custom_confirm(self) -> None:
         """用户点击"确认"按钮或按 Enter 键。
 
-        读取输入框中的文字，非空则作为自定义段位提交。
-        如果输入框是空的，什么也不做（用户可以继续操作按钮）。
+        提交输入框中的文字。允许空字符串——用户清空输入框点确认
+        意味着"把段位清掉"，和选择大段+小段的行为一致。
         """
         text = self._custom_edit.text().strip()
-        if text:
-            self._commit(text)
+        self._commit(text)
 
     def _commit(self, value: str) -> None:
         """提交段位值并关闭面板。

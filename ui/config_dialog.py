@@ -1061,13 +1061,11 @@ class ConfigDialog(_BaseFramelessDialog):
         )
         lo.addWidget(self._use_theme_bg)
 
-        # ---- OBS 捕获模式 ----
-        self._obs_mode_cb = QCheckBox("OBS 捕获模式（悬浮窗显示任务栏图标）")
-        self._obs_mode_cb.setToolTip(
-            "开启后悬浮窗显示任务栏图标，OBS 窗口捕获可以正常识别。\n"
-            "关闭后无任务栏图标，OBS 需用显示器捕获替代。"
-        )
-        lo.addWidget(self._obs_mode_cb)
+        # ---- OBS 捕获模式（已废弃） ----
+        # v1.10+ 用 SetWindowLongPtr 隐藏 Owner 方案替代，
+        # 无需用户手动切换，OBS 窗口捕获 + 无任务栏图标同时满足。
+        # 保留 _obs_mode_cb 属性为空，避免 load/save 报错。
+        self._obs_mode_cb = None
 
         # ---- 底部状态栏 ----
         self._show_status_cb = QCheckBox("底部显示检测状态")
@@ -1211,7 +1209,7 @@ class ConfigDialog(_BaseFramelessDialog):
         self._notify_cb.setChecked(n.get("enabled", False))
         self._notify_duration.setValue(n.get("duration", 5))
         self._tray_minimize_cb.setChecked(n.get("minimize_to_tray", False))
-        self._obs_mode_cb.setChecked(n.get("obs_mode", False))
+        # obs_mode 已废弃（v1.10+），不再回显
 
         # ---- 段位检测 ----
         rk = c.get("rank_detection", {})
@@ -1426,7 +1424,6 @@ class ConfigDialog(_BaseFramelessDialog):
                 "enabled": self._notify_cb.isChecked(),
                 "duration": self._notify_duration.value(),
                 "minimize_to_tray": self._tray_minimize_cb.isChecked(),
-                "obs_mode": self._obs_mode_cb.isChecked(),
             },
             "rank_detection": {
                 "enabled": self._rank_enabled_cb.isChecked(),
@@ -1548,8 +1545,6 @@ class ConfigDialog(_BaseFramelessDialog):
             "通知显示持续时间（秒）")
         _kv("minimize_to_tray", ntfy.get("minimize_to_tray", False),
             "最小化时隐藏到系统托盘（而非任务栏）")
-        _kv("obs_mode", ntfy.get("obs_mode", False),
-            "OBS 捕获模式（悬浮窗显示任务栏图标以允许 OBS 捕获）")
 
         lines.extend(["", "# 段位图标检测", "[rank_detection]"])
         _kv("enabled", rk.get("enabled", True),

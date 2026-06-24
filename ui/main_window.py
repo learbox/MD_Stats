@@ -86,7 +86,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QIcon, QPalette
 from PySide6.QtWidgets import (
     QApplication,
@@ -420,13 +420,10 @@ class RankIconDelegate(QStyledItemDelegate):
         """Qt 调用：把编辑面板的最终选择写回数据模型。
 
         editor.committed_value 在面板 _commit() 时设置，
-        包含用户最终选择的段位字符串（如 "黄金 Ⅲ"）。
-
-        只在新值非空时才写入。空值意味着用户点确认但没选任何东西。
+        空字符串表示用户主动清空了段位（确认按钮现在允许空值）。
+        _committed 标志确保只有用户主动操作才会走到这里。
         """
-        new_value = editor.committed_value
-        if new_value:
-            model.setData(index, new_value, Qt.ItemDataRole.EditRole)
+        model.setData(index, editor.committed_value, Qt.ItemDataRole.EditRole)
 
     def updateEditorGeometry(self, editor: RankEditPanel, option, index) -> None:
         """Qt 调用：设置编辑面板的屏幕位置和尺寸。
@@ -962,6 +959,7 @@ class MainWindow(QMainWindow):
         self._btn_float = _require_widget(content.findChild(QPushButton, "btn_float"), "btn_float")
         self._btn_float.clicked.connect(self._on_toggle_float)
         self._float_window: Any = None           # 悬浮窗实例（延迟创建）
+        self._float_owner_hwnd: int = 0          # 隐藏 Owner 窗口句柄（延迟创建）
 
         # ---- 14. 表格配置 ----
         # 统计表格: 只读，整行选中
@@ -1926,24 +1924,56 @@ class MainWindow(QMainWindow):
     # 用户可拖拽移动，位置会持久化到 .app_state.toml。
     # =========================================================================
 
+    def _ensure_float_owner(self) -> None:
+        """创建 Owner 窗口（首次打开悬浮窗时调用一次）。
+
+        Windows 规则：Owned 窗口的任务栏图标会被隐藏，但前提是
+        Owner 本身是"可见"的（IsWindowVisible 返回 true）。
+        如果 Owner 是隐藏窗口，Owned 窗口仍会出现在任务栏。
+
+        所以这里创建一个 1×1 透明 Tool 窗口并保持显示。
+        Tool 类型本身不显示任务栏图标，1×1 透明用户也看不到，
+        但 Windows 认为它是一个可见的 Owner → 悬浮窗任务栏图标隐藏。
+        """
+        if self._float_owner_hwnd != 0:
+            return
+
+        from PySide6.QtWidgets import QWidget
+        owner = QWidget()
+        # Tool 类型：没有自己的任务栏按钮
+        owner.setWindowFlags(Qt.WindowType.Tool)
+        owner.setFixedSize(1, 1)
+        # 透明：WA_TranslucentBackground + 确保 paint 什么都不画
+        owner.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # 显示窗口（Windows 的要求：Owner 必须可见才生效）
+        owner.show()
+        self._float_owner_hwnd = int(owner.winId())
+        # 保持引用防止 GC 回收
+        self._float_owner_widget = owner
+
     def _on_toggle_float(self) -> None:
         """打开/关闭悬浮统计窗。"""
         if self._float_window is not None:
             # ---- 关闭悬浮窗 ----
             self._save_float_window_pos()
+            self._float_window._clear_owner()   # Win32 API 真解除 Owner
             self._float_window.close()
             self._float_window = None
             self._btn_float.setText("悬浮窗")
             return
 
         # ---- 打开悬浮窗 ----
+        self._ensure_float_owner()
         cfg = self._config.get("floating_window", {})
         rows = cfg.get("rows")  # 用户自定义行；空列表或 None → FloatingWindow 内部使用默认行
         self._float_window = FloatingWindow(rows=rows if rows else None)
         self._apply_float_style(cfg)
         self._refresh_float_window()                   # 填入当前统计数据
         self._restore_float_window_pos()               # 恢复上次位置
+        # 将悬浮窗挂到隐藏 Owner → 去掉任务栏图标
+        self._float_window._apply_owner(self._float_owner_hwnd)
         self._float_window.show()
+        self._btn_float.setText("关闭悬浮")
         self._btn_float.setText("关闭悬浮")
 
 
@@ -2184,8 +2214,6 @@ class MainWindow(QMainWindow):
             3. 如果 Worker 正在运行: 停止后用新配置重启（如新的检测间隔）
             4. 更新状态栏和信息标签
         """
-        # 在覆盖旧配置前先记录需要比较的旧值
-        old_obs_mode = self._config.get("notification", {}).get("obs_mode", False)
         self._config = load_config()                       # 重新读取 config.toml
         if self._config.get("debug", {}).get("log_mode", False):
             _log.init_log(get_project_root() / "logs")
@@ -2211,20 +2239,10 @@ class MainWindow(QMainWindow):
         if self._float_window is not None:
             new_cfg = self._config.get("floating_window", {})
             new_rows = new_cfg.get("rows")
-
-            # obs_mode 变化时需要重建悬浮窗（WindowFlags 无法运行时修改）
-            new_obs = self._config.get("notification", {}).get("obs_mode", False)
-            if old_obs_mode != new_obs:
-                # obs_mode 变了 → 关闭旧窗口，重新创建
-                self._save_float_window_pos()
-                self._float_window.close()
-                self._float_window = None
-                self._on_toggle_float()  # 用新配置重建
-            else:
-                if new_rows:
-                    self._float_window.set_rows(new_rows)
-                self._apply_float_style(new_cfg)
-                self._refresh_float_window()
+            if new_rows:
+                self._float_window.set_rows(new_rows)
+            self._apply_float_style(new_cfg)
+            self._refresh_float_window()
 
         # 段位 delegate 同步新主题色（切换皮肤后面板颜色跟着更新）
         new_colors = self._tm.colors
@@ -2387,8 +2405,26 @@ class MainWindow(QMainWindow):
         self.raise_()
 
     def changeEvent(self, event: Any) -> None:
-        """窗口状态变化时触发。最小化按钮正常最小化，不拦截。"""
+        """最小化 → 延迟隐藏到托盘（需开启 minimize_to_tray）。
+
+        用 QTimer.singleShot(0) 延迟，让 Qt 先完成最小化状态转换，
+        然后再隐藏。直接在同一次 changeEvent 里 hide() 会与
+        最小化动画冲突，导致窗口闪烁后重新出现。
+        """
+        if (event.type() == QEvent.Type.WindowStateChange
+                and self.isMinimized()
+                and self._config.get("notification", {}).get("minimize_to_tray", False)):
+            QTimer.singleShot(0, self._hide_to_tray)
         super().changeEvent(event)
+
+    def _hide_to_tray(self) -> None:
+        """确认仍在最小化状态后，隐藏窗口到托盘。"""
+        if self.isMinimized():
+            self.hide()
+            self._tray.showMessage(
+                "MD Stats", "已最小化到托盘，程序在后台继续运行",
+                QSystemTrayIcon.MessageIcon.Information, 1500,
+            )
 
     def _quit_app(self) -> None:
         """托盘右键退出：绕过托盘模式，直接保存状态并退出。"""
@@ -2412,6 +2448,13 @@ class MainWindow(QMainWindow):
             True  — 已执行退出流程
             False — 用户取消退出（如点「不退出」）
         """
+        # ---- 0. 先清理悬浮窗 Owner 关系，防止退出时 Windows 发送 WM_DESTROY 警告 ----
+        if self._float_window is not None:
+            self._float_window._clear_owner()   # 调 Win32 API 真解除
+        if hasattr(self, '_float_owner_widget') and self._float_owner_hwnd != 0:
+            self._float_owner_widget.close()    # Owner 安全销毁
+            self._float_owner_hwnd = 0
+
         data = read_app_state()
         p = self.pos()
         data["main_pos"] = [p.x(), p.y()]

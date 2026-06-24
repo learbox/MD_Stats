@@ -146,7 +146,6 @@ python main.py
 | `notification.enabled` | 对局结束系统气泡通知 | `false` |
 | `notification.duration` | 通知显示时长（秒） | `5` |
 | `notification.minimize_to_tray` | 最小化到系统托盘 | `false` |
-| `notification.obs_mode` | OBS 捕获模式（悬浮窗显示任务栏图标） | `false` |
 | `floating_window.bg_color` | 悬浮窗背景色 | `#BDEF0A` |
 | `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
 | `floating_window.show_status` | 悬浮窗底部显示检测状态 | `false` |
