@@ -223,14 +223,11 @@ class StatsWorker(QThread):
 
     def _sleep(self, ms: int) -> None:
         """可中断休眠：每 50ms 醒一次检查 _running，stop() 后最多 50ms 退出。"""
-        import sys
         remaining = ms
         while remaining > 0 and self._running:
             chunk = min(remaining, 50)
             self.msleep(chunk)
             remaining -= chunk
-        if not self._running:
-            print(f"[perf] StatsWorker._sleep 检测到 stop, 剩余 {remaining}ms", file=sys.stderr, flush=True)
 
     def _skip(self) -> None:
         """休眠 interval 秒。"""
@@ -560,9 +557,6 @@ class StatsWorker(QThread):
         # ================================================================
         _paused = False  # 暂停标志（窗口不可用时设为 True）
 
-        import sys
-        import time as _perf_time
-        _t_loop = _perf_time.time()
         while self._running:
 
             # [0] 每轮都检查分辨率（用户可能中途切换分辨率）
@@ -597,8 +591,6 @@ class StatsWorker(QThread):
 
             # 截图后立即检查 stop（mss 截图在部分系统需数百 ms）
             if not self._running:
-                import sys
-                print("[perf] StatsWorker 截图后检测到 stop，立即退出", file=sys.stderr, flush=True)
                 return
 
             # [3] 状态机：根据当前阶段执行对应识别
@@ -715,16 +707,9 @@ class StatsWorker(QThread):
 
             # 状态机执行完毕后检查 stop（detect_* 可能耗时数百 ms）
             if not self._running:
-                print("[perf] StatsWorker 状态机后检测到 stop", file=sys.stderr, flush=True)
                 return
 
             # [4] 休眠 interval 秒
-            _t = _perf_time.time()
-            _dt = _t - _t_loop
-            if _dt > 0.5:
-                import sys
-                print(f"[perf] StatsWorker 循环一轮耗时 {_dt:.3f}s（含休眠）", file=sys.stderr, flush=True)
-            _t_loop = _t
             self._skip()
 
             # _skip 可能因 stop() 提前返回 → 立即退出，不再执行后续慢操作

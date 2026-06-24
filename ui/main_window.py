@@ -1353,35 +1353,25 @@ class MainWindow(QMainWindow):
             self._float_window.set_running(True)
 
     def _on_stop(self) -> None:
-        """点击"停止"按钮: 停止后台识别线程并恢复 UI。"""
-        import time, sys
+        """点击"停止"按钮: 停止后台识别线程并恢复 UI。
+
+        先同时发停止信号（两个线程并发退出），再轮询等待。
+        _sleep 每 50ms 检查 _running，关键路径有额外检查点。
+        """
         from PySide6.QtCore import QThread
 
-        t0 = time.time()
         if self._worker is not None:
             self._worker.stop()
         if self._rank_worker is not None:
             self._rank_worker.stop()
-        t1 = time.time()
 
-        # 轮询等待，每 50ms 检查 → 退出时间精确到 50ms
-        if self._worker is not None:
-            for _ in range(60):  # 最多等 3s
-                if not self._worker.isRunning():
-                    break
-                QThread.msleep(50)
-        t2 = time.time()
-
-        if self._rank_worker is not None:
-            for _ in range(60):
-                if not self._rank_worker.isRunning():
-                    break
-                QThread.msleep(50)
-        t3 = time.time()
-
-        print(f"[perf] stop={t1-t0:.3f}s wait_worker={t2-t1:.3f}s "
-              f"wait_rank={t3-t2:.3f}s 总计={t3-t0:.3f}s",
-              file=sys.stderr, flush=True)
+        # 轮询等待（不阻塞事件循环太久）
+        for _ in range(60):
+            w_alive = self._worker is not None and self._worker.isRunning()
+            r_alive = self._rank_worker is not None and self._rank_worker.isRunning()
+            if not w_alive and not r_alive:
+                break
+            QThread.msleep(50)
 
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
