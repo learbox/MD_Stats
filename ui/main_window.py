@@ -2486,7 +2486,13 @@ class MainWindow(QMainWindow):
             True  — 已执行退出流程
             False — 用户取消退出（如点「不退出」）
         """
-        # ---- 0. 先清理悬浮窗 Owner 关系，防止退出时 Windows 发送 WM_DESTROY 警告 ----
+        # ---- 0. 先发停止信号（两个线程并发退出，不阻塞） ----
+        if self._worker is not None:
+            self._worker.stop()
+        if self._rank_worker is not None:
+            self._rank_worker.stop()
+
+        # ---- 1. 清理悬浮窗 Owner 关系，防止退出时 Windows 发送 WM_DESTROY 警告 ----
         if self._float_window is not None:
             self._float_window._clear_owner()   # 调 Win32 API 真解除
         if hasattr(self, '_float_owner_widget') and self._float_owner_hwnd != 0:
@@ -2561,21 +2567,20 @@ class MainWindow(QMainWindow):
                         # 否则回到选择弹窗
                         continue
 
-        # ---- 3. 停止所有定时器和后台线程 ----
+        # ---- 3. 停止定时器 ----
         if self._info_timer is not None:
             self._info_timer.stop()
         if self._wait_timer is not None:
             self._wait_timer.stop()
-        worker = self._worker
-        if worker is not None:
-            worker.stop()               # 优雅停止：让最后一轮检测跑完并 emit 结果
-            worker.wait(1000)           # 等最多 1 秒处理完 pending 写入
-            if worker.isRunning():
-                worker.terminate()       # 超时兜底
-                worker.wait()
-        if self._rank_worker is not None:
-            self._rank_worker.terminate()  # 段位线程不影响 CSV，直接杀
-            self._rank_worker.wait()
+
+        # ---- 4. 等待后台线程退出（停止信号已在步骤 0 发送，它们已在退出中） ----
+        from PySide6.QtCore import QThread
+        for _ in range(60):  # 最多等 3s
+            w_alive = self._worker is not None and self._worker.isRunning()
+            r_alive = self._rank_worker is not None and self._rank_worker.isRunning()
+            if not w_alive and not r_alive:
+                break
+            QThread.msleep(50)
 
         # ---- 4. 注销全局热键并退出事件循环 ----
         self._snapshot_ctrl.unregister_hotkeys()
