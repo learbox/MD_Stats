@@ -339,8 +339,8 @@ class FailureSampleManager:
         except OSError as e:
             _log.write("SCRN", f"失败样本 TOML 写入失败: {stem} ({e})")
 
+    @staticmethod
     def _build_metadata(
-        self,
         target: str,
         confidence: float,
         threshold: float,
