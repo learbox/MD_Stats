@@ -1328,7 +1328,7 @@ class MainWindow(QMainWindow):
         self._worker.rank_detected.connect(self._on_rank_detected)
         self._worker.turn_detected.connect(self._on_turn_detected)
         self._worker.result_detected.connect(self._on_result_detected)
-        self._worker.finished.connect(lambda: setattr(self, "_worker", None))
+        self._worker.finished.connect(self._on_worker_finished)
 
         self._worker.start()
 
@@ -1618,6 +1618,12 @@ class MainWindow(QMainWindow):
             self._on_undo()
         else:
             self._manual_step_clicked(action)
+
+    def _on_worker_finished(self) -> None:
+        """StatsWorker 线程退出（游戏关闭或意外终止）。"""
+        self._worker = None
+        if self._float_window is not None:
+            self._float_window.set_running(False)
 
     def _on_float_toggle_start_stop(self) -> None:
         """悬浮窗右键菜单：启动/停止识别。"""
