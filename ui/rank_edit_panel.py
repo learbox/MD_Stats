@@ -62,7 +62,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtGui import QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -630,7 +630,8 @@ class RankEditPanel(QFrame):
             return False
 
         # ----- 情况 2：面板外的鼠标点击 -----
-        if event.type() == QEvent.Type.MouseButtonPress:
+        if (isinstance(event, QMouseEvent)
+                and event.type() == QEvent.Type.MouseButtonPress):
             # QApplication.widgetAt(globalPos) 返回鼠标所在位置的控件
             clicked_widget = QApplication.widgetAt(event.globalPos())
 
