@@ -29,7 +29,6 @@
 from __future__ import annotations
 
 import tomllib
-from pathlib import Path
 
 from src.config import get_project_root
 
@@ -87,7 +86,10 @@ def save_region(resolution: str, section: str,
     Args:
         resolution: 分辨率字符串，如 "1920x1080"。
         section: ROI 名称，"coin" / "turn" / "result" / "rank"。
-        x, y, w, h: ROI 坐标和尺寸（像素）。
+        x: ROI 左上角 X 坐标（像素）。
+        y: ROI 左上角 Y 坐标（像素）。
+        w: ROI 宽度（像素）。
+        h: ROI 高度（像素）。
     """
     path = _TEMPLATES_DIR / resolution / "roi.toml"
     try:
@@ -186,9 +188,13 @@ def save_icon_position(resolution_w: int, resolution_h: int,
     首次检测成功后调用，后续启动直接读取以跳过全图搜索。
 
     Args:
-        resolution_w, resolution_h: 分辨率宽高。
+        resolution_w: 分辨率宽度（像素）。
+        resolution_h: 分辨率高度（像素）。
         side: "player" 或 "opponent"。
-        x, y, w, h: 图标位置和尺寸（像素，w 通常等于 h）。
+        x: 图标左上角 X 坐标（像素）。
+        y: 图标左上角 Y 坐标（像素）。
+        w: 图标宽度（像素）。
+        h: 图标高度（像素，通常 w = h）。
     """
     label_map = {"player": "己方", "opponent": "对方"}
 
