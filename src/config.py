@@ -171,7 +171,7 @@ failure_sample_offset = 0.10
 enabled = false
 # 通知显示持续时间（秒）
 duration = 5
-# 最小化时隐藏到系统托盘（而非任务栏）
+# 关闭时隐藏到系统托盘（点 × 按钮时隐藏，最小化按钮正常最小化）
 minimize_to_tray = false
 
 # 悬浮统计窗

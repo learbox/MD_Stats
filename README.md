@@ -20,7 +20,7 @@
 - **版本更新检查** — 在"关于"弹窗中一键检测 GitHub 最新版本
 - **调试工具** — 可选的截图保存（成功/失败双模式）、诊断数据和日志，方便排查问题
 - **CSV 占用保护** — WPS/Excel 占用 CSV 时记录自动暂存到内存，状态栏持续告警，关闭占用程序后自动补写
-- **系统通知** — 对局结束时弹出气泡通知，支持最小化到系统托盘
+- **系统通知** — 对局结束时弹出气泡通知，支持关闭时隐藏到系统托盘
 
 ## 截图
 
@@ -145,7 +145,7 @@ python main.py
 | `floating_window.width` / `height` | 悬浮窗尺寸（高度低于内容时自动扩容） | `250` / `330` |
 | `notification.enabled` | 对局结束系统气泡通知 | `false` |
 | `notification.duration` | 通知显示时长（秒） | `5` |
-| `notification.minimize_to_tray` | 最小化到系统托盘 | `false` |
+| `notification.minimize_to_tray` | 关闭时隐藏到系统托盘 | `false` |
 | `floating_window.bg_color` | 悬浮窗背景色 | `#BDEF0A` |
 | `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
 | `floating_window.show_status` | 悬浮窗底部显示检测状态 | `false` |

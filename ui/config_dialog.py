@@ -619,7 +619,7 @@ class ConfigDialog(_BaseFramelessDialog):
     # =========================================================================
 
     def _make_notification_tab(self) -> QWidget:
-        """创建"系统"标签页：日志模式、系统通知、最小化到托盘。"""
+        """创建"系统"标签页：日志模式、系统通知、关闭时隐藏到托盘。"""
         w = QWidget()
         lo = QVBoxLayout(w)
         lo.setSpacing(12)
@@ -675,10 +675,10 @@ class ConfigDialog(_BaseFramelessDialog):
         lo.addLayout(dur_row)
 
         # ---- 托盘 ----
-        self._tray_minimize_cb = QCheckBox("最小化到系统托盘")
+        self._tray_minimize_cb = QCheckBox("关闭时隐藏到系统托盘")
         self._tray_minimize_cb.setToolTip(
-            "开启后，最小化主窗口时隐藏到系统托盘（悬浮窗不受影响）。\n"
-            "右键托盘图标可还原窗口或退出程序。"
+            "开启后，点击关闭按钮（×）时隐藏到系统托盘而非退出程序。\n"
+            "双击托盘图标可还原窗口，右键可退出程序。"
         )
         lo.addWidget(self._tray_minimize_cb)
 
@@ -1537,7 +1537,7 @@ class ConfigDialog(_BaseFramelessDialog):
         _kv("duration", ntfy.get("duration", 5),
             "通知显示持续时间（秒）")
         _kv("minimize_to_tray", ntfy.get("minimize_to_tray", False),
-            "最小化时隐藏到系统托盘（而非任务栏）")
+            "关闭时隐藏到系统托盘（点 × 按钮时隐藏）")
 
         lines.extend(["", "# 段位图标检测", "[rank_detection]"])
         _kv("enabled", rk.get("enabled", True),

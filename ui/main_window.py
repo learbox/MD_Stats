@@ -2436,26 +2436,8 @@ class MainWindow(QMainWindow):
         self.raise_()
 
     def changeEvent(self, event: Any) -> None:
-        """最小化 → 延迟隐藏到托盘（需开启 minimize_to_tray）。
-
-        用 QTimer.singleShot(0) 延迟，让 Qt 先完成最小化状态转换，
-        然后再隐藏。直接在同一次 changeEvent 里 hide() 会与
-        最小化动画冲突，导致窗口闪烁后重新出现。
-        """
-        if (event.type() == QEvent.Type.WindowStateChange
-                and self.isMinimized()
-                and self._config.get("notification", {}).get("minimize_to_tray", False)):
-            QTimer.singleShot(0, self._hide_to_tray)
+        """窗口状态变化时触发。最小化按钮正常最小化到任务栏，不拦截。"""
         super().changeEvent(event)
-
-    def _hide_to_tray(self) -> None:
-        """确认仍在最小化状态后，隐藏窗口到托盘。"""
-        if self.isMinimized():
-            self.hide()
-            self._tray.showMessage(
-                "MD Stats", "已最小化到托盘，程序在后台继续运行",
-                QSystemTrayIcon.MessageIcon.Information, 1500,
-            )
 
     def _quit_app(self) -> None:
         """托盘右键退出：绕过托盘模式，直接保存状态并退出。"""

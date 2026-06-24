@@ -4,7 +4,7 @@ requires-python = ">=3.12"
 
 [[package]]
 name = "mdstats"
-version = "1.9.0"
+version = "1.10.0"
 source = { virtual = "." }
 dependencies = [
     { name = "mss" },
