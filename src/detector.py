@@ -1034,15 +1034,18 @@ def detect_rank_icon(
         skip_sides = set()
 
     # 分别检测玩家（左侧）和对手（右侧）
-    def _search_bbox(cx: int, cy: int, cw: int, ch: int) -> tuple[int, int, int, int]:
+    def _search_bbox(icon_x: int, icon_y: int, icon_w: int, icon_h: int
+                     ) -> tuple[int, int, int, int]:
         """以图标的精确位置为中心，±50px 扩展为搜索区域并裁剪到画面内。
 
-        与 roi_manager 中三阶段 ROI 的 save_region() 使用相同的 MARGIN=50。
+        与 roi_manager 中三阶段 ROI 的 save_region() 使用相同的 margin=50。
         """
-        MARGIN = 50
-        x = max(0, cx - MARGIN)
-        y = max(0, cy - MARGIN)
-        return x, y, min(cw + MARGIN * 2, w - x), min(ch + MARGIN * 2, h - y)
+        margin = 50
+        x = max(0, icon_x - margin)
+        y = max(0, icon_y - margin)
+        return (x, y,
+                min(icon_w + margin * 2, w - x),
+                min(icon_h + margin * 2, h - y))
 
     # 收集每侧所有图标的最佳分数（供 TOML 元数据 all_scores 字段）
     global _last_rank_icon_all_scores
