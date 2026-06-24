@@ -363,11 +363,11 @@ def _detect_with_roi(
             tpl = _get_cached_template(best_key)
             if tpl is not None:
                 th, tw = tpl.shape[:2]
-                MARGIN = 50
-                rx = max(0, best_x - MARGIN)
-                ry = max(0, best_y - MARGIN)
-                rw = min(tw + MARGIN * 2, screenshot.shape[1] - rx)
-                rh = min(th + MARGIN * 2, screenshot.shape[0] - ry)
+                margin = 50
+                rx = max(0, best_x - margin)
+                ry = max(0, best_y - margin)
+                rw = min(tw + margin * 2, screenshot.shape[1] - rx)
+                rh = min(th + margin * 2, screenshot.shape[0] - ry)
                 _save_roi(roi_section, rx, ry, rw, rh)
         return result_map.get(best_key)
     return None
@@ -457,11 +457,11 @@ def detect_rank(screenshot: np.ndarray, threshold: float = 0.8) -> str | None:
             tpl = _get_cached_template(best_key)
             if tpl is not None:
                 th, tw = tpl.shape[:2]
-                MARGIN = 50
-                rx = max(0, best_x - MARGIN)
-                ry = max(0, best_y - MARGIN)
-                rw = min(tw + MARGIN * 2, screenshot.shape[1] - rx)
-                rh = min(th + MARGIN * 2, screenshot.shape[0] - ry)
+                margin = 50
+                rx = max(0, best_x - margin)
+                ry = max(0, best_y - margin)
+                rw = min(tw + margin * 2, screenshot.shape[1] - rx)
+                rh = min(th + margin * 2, screenshot.shape[0] - ry)
                 _save_roi("rank", rx, ry, rw, rh)
         return "up" if best_key == "rank_up" else "down"
     return None
