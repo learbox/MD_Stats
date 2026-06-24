@@ -1365,13 +1365,21 @@ class MainWindow(QMainWindow):
         if self._rank_worker is not None:
             self._rank_worker.stop()
 
-        # 轮询等待（不阻塞事件循环太久）
+        # 轮询等待
         for _ in range(60):
             w_alive = self._worker is not None and self._worker.isRunning()
             r_alive = self._rank_worker is not None and self._rank_worker.isRunning()
             if not w_alive and not r_alive:
                 break
             QThread.msleep(50)
+
+        # 超时兜底：3 秒还没退出 → 强制终止
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.terminate()
+            self._worker.wait()
+        if self._rank_worker is not None and self._rank_worker.isRunning():
+            self._rank_worker.terminate()
+            self._rank_worker.wait()
 
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
@@ -2586,7 +2594,15 @@ class MainWindow(QMainWindow):
                 break
             QThread.msleep(50)
 
-        # ---- 4. 注销全局热键并退出事件循环 ----
+        # 超时兜底：3 秒还没退出 → 强制终止（不走优雅路径，但比卡死强）
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.terminate()
+            self._worker.wait()
+        if self._rank_worker is not None and self._rank_worker.isRunning():
+            self._rank_worker.terminate()
+            self._rank_worker.wait()
+
+        # ---- 5. 注销全局热键并退出事件循环 ----
         self._snapshot_ctrl.unregister_hotkeys()
         QApplication.quit()
         return True
