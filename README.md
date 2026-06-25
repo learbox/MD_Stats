@@ -46,7 +46,7 @@
 
 ### 环境要求
 
-- Python ≥ 3.11
+- Python ≥ 3.12
 - Windows（依赖 `pywin32` 进行窗口定位）
 
 ### 使用 uv（推荐）
