@@ -16,10 +16,10 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: 安装 uv（含 Python 3.12）
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: '3.12'
 
@@ -140,7 +140,7 @@ jobs:
 
       - name: 创建 GitHub Release（草稿，仅 tag 触发）
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/MD Stats-${{ github.ref_name }}.zip
           name: MD Stats ${{ github.ref_name }}
