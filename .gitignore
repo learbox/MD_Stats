@@ -1,5 +1,6 @@
 # IDE
 .idea/
+.aiignore
 
 # Python
 __pycache__/
@@ -13,8 +14,9 @@ build/
 dist/
 *.spec
 
-# Claude Code
+# AI tooling (local only)
 .claude/
+.agents/
 
 # Data files
 csv/*.csv
