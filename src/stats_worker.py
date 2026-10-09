@@ -272,7 +272,13 @@ class StatsWorker(QThread):
 
         Returns:
             符合 FailureSampleManager.consider() extra_meta 格式的字典。
+            失败样本功能关闭时返回空字典（跳过窗口查找等白工）。
         """
+        # 功能关闭 → 直接返回。调用处是 _consider_best(..., self._build_extra_meta())
+        # 的参数预求值：即使 _consider_best 会立刻退出，这里也会每帧执行一次，
+        # 不提前返回的话会白做两次窗口查找（约 1~2ms/帧）
+        if self._failure_mgr is None:
+            return {}
         roi_info = _det.get_last_roi_info()
         # 短名称 → 完整路径（如 "coin_win" → "resource/templates/1600x900/coin_win.png"）
         tmpl_name = _det.get_last_matched_template()
@@ -407,9 +413,9 @@ class StatsWorker(QThread):
 
         为什么检查 C_CONTIGUOUS 标志？
             OpenCV 的 imencode 要求传入的 numpy 数组在内存中是连续存储的。
-            mss 截图返回的数组通过 [:, :, :3] 切片后通常仍是连续的，但
-            在极少数情况下（如经过某种变换），可能变成非连续视图。
-            对非连续数组调用 .copy() 会分配一块连续内存，确保 imencode 正常。
+            mss 截图经 [:, :, :3] 切片后是非连续视图（每像素保留 4 字节
+            步长、只取前 3 个通道），因此这里会始终 copy 一份连续副本，
+            确保 imencode 正常。（判断保留，兼容将来可能的连续输入。）
 
         Args:
             screenshot: BGR 格式的 numpy 数组 (H, W, 3)，来自 capture_window。
@@ -762,8 +768,8 @@ class StatsWorker(QThread):
                 - 已分配的内存可能泄漏
             Qt 官方建议用标志位 + 循环检查的方式优雅退出。
 
-        最坏情况：线程刚进入 self._skip() 休眠，需要等待 interval 秒才能退出。
-        如果要立即退出，可以在 stop() 之前先调用 self.quit() + self.wait(timeout)。
+        最坏情况：线程刚进入 _sleep() 的某个 50ms 睡眠分片，最多 50ms 后
+        检查到 _running 为 False 并退出（_sleep 每 50ms 醒一次检查标志位）。
         """
         self._running = False
         self.status_update.emit("已停止")
