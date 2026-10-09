@@ -50,7 +50,7 @@ from ui.floating_window import _ROW_KEY_MAP, _DEFAULT_ROWS
 # 加载 Qt 内置中文翻译（让取色器等系统弹窗显示中文，翻译文件缺失时静默跳过）
 _qt_translator = QTranslator()
 if _qt_translator.load(
-    QLibraryInfo.location(QLibraryInfo.LibraryPath.TranslationsPath) + "/qt_zh_CN.qm"
+    QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath) + "/qt_zh_CN.qm"
 ):
     if _qapp := QApplication.instance():
         _qapp.installTranslator(_qt_translator)
