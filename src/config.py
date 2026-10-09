@@ -92,6 +92,32 @@ def _get_config_path() -> Path:
     return get_project_root() / "config.toml"
 
 
+# 各段 interval 的合法范围（下限与设置界面的 QDoubleSpinBox 一致）。
+# 手改 config.toml 可能写入 0/负数（_sleep 不睡 → 忙循环烧 CPU）
+# 或非法类型（工作线程 TypeError 退出），这里在读取时统一规范化。
+_INTERVAL_LIMITS = {
+    "detection": (0.1, 10.0),
+    "rank_detection": (0.2, 10.0),
+}
+
+
+def _sanitize_intervals(cfg: dict) -> None:
+    """规范化各段的 interval 值（原地修改内存中的配置，不写回文件）。
+
+    - 数值超界 → 夹到 [下限, 上限] 范围内
+    - 非数值类型（字符串/布尔等）→ 删除该项，让读取方使用默认值
+    """
+    for section, (lo, hi) in _INTERVAL_LIMITS.items():
+        sec = cfg.get(section)
+        if not isinstance(sec, dict) or "interval" not in sec:
+            continue
+        value = sec["interval"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            del sec["interval"]
+        else:
+            sec["interval"] = max(lo, min(float(value), hi))
+
+
 def load_config() -> dict:
     """加载并解析 config.toml，返回嵌套字典。
 
@@ -107,13 +133,16 @@ def load_config() -> dict:
     注意事项:
         - TOML 文件必须以二进制模式 ("rb") 打开，这是 tomllib 的要求。
         - 返回值中所有值都是 Python 原生类型 (dict/list/str/int/float/bool)。
+        - interval 值会经 _sanitize_intervals 规范化（见该函数说明）。
     """
     path = _get_config_path()
     if not path.exists():
         _generate_default_config(path)
 
     with open(path, "rb") as f:
-        return tomllib.load(f)
+        cfg = tomllib.load(f)
+    _sanitize_intervals(cfg)
+    return cfg
 
 
 def _generate_default_config(path: Path) -> None:
