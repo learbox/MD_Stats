@@ -81,7 +81,7 @@
 
 import ctypes
 import os
-import subprocess
+lazy import subprocess  # 仅"打开数据文件夹"用到（~14ms），启动时不加载
 from datetime import datetime
 from pathlib import Path
 
@@ -114,7 +114,7 @@ from src.config import get_project_root, load_config
 from src.match_state import MatchState
 from src.rank_icons import get_rank_icon, init_rank_icons
 from src.snapshot_controller import SnapshotController
-from ui.rank_edit_panel import RankEditPanel
+lazy from ui.rank_edit_panel import RankEditPanel  # 双击编辑段位时才实例化（~5ms），启动时不加载
 from src import logger as _log
 from src.recorder import (
     add_record,
@@ -130,7 +130,17 @@ from src.recorder import (
     STATS_COLUMNS,
     try_flush_pending,
 )
-# capture / stats_worker 延迟导入（启动时才需要 OpenCV，避免程序启动等待 ~260ms）
+# ---- 启动提速：以下模块用 PEP 810 懒加载，功能触发时才真正导入 ----
+# capture/worker 链（含 cv2/numpy）在"开始识别"或热键截图时加载；
+# 各对话框在用户点开对应窗口时加载。启动时全部不加载。
+lazy from src.capture import is_window_open, get_window_status
+lazy from src.stats_worker import StatsWorker
+lazy from src.rank_worker import RankWorker
+lazy from src.failure_sample_manager import FailureSampleManager
+lazy from ui.about_dialog import AboutDialog
+lazy from ui.rank_stats_dialog import RankStatsDialog
+lazy from ui.config_dialog import ConfigDialog
+lazy from ui.main_window_ui import Ui_MainWindow  # 构造主界面时才加载（uic 生成文件）
 from src.theme_loader import Theme, load_theme
 from ui.floating_window import FloatingWindow, _ROW_KEY_MAP
 from ui.theme_manager import ThemeManager
@@ -875,7 +885,6 @@ class MainWindow(QMainWindow):
         # ⚠ main_window_ui.py 是 pyside6-uic 从 main_window.ui 自动编译生成，
         #   严禁手动修改。所有界面改动请在 main_window.ui (Qt Designer) 中进行，
         #   然后运行: pyside6-uic ui/main_window.ui -o ui/main_window_ui.py
-        from ui.main_window_ui import Ui_MainWindow
         content = QWidget()
         ui = Ui_MainWindow()
         ui.setupUi(content)
@@ -1235,7 +1244,6 @@ class MainWindow(QMainWindow):
 
     def _on_start(self) -> None:
         """点击"启动"按钮: 检测 Master Duel 窗口，必要时启动游戏并等待。"""
-        from src.capture import is_window_open
 
         # 情况1: 正在等待游戏启动中，点击表示"终止等待"
         if self._wait_timer is not None:
@@ -1284,7 +1292,6 @@ class MainWindow(QMainWindow):
 
     def _on_wait_tick(self) -> None:
         """轮询检测 Master Duel 窗口是否出现（每 2 秒触发一次）。"""
-        from src.capture import is_window_open
         if is_window_open("masterduel"):
             self._cancel_wait()          # 窗口出现，取消等待
             self._start_worker()         # 开始识别
@@ -1312,9 +1319,6 @@ class MainWindow(QMainWindow):
 
         finished 信号自动清理 worker 引用，避免 QThread 被 GC 时仍在运行。
         """
-        from src.stats_worker import StatsWorker
-        from src.rank_worker import RankWorker
-        from src.failure_sample_manager import FailureSampleManager
 
         # 创建失败样本管理器（两个线程共用同一实例）
         failure_mgr = FailureSampleManager(self._config)
@@ -2126,7 +2130,6 @@ class MainWindow(QMainWindow):
 
     def _on_about(self) -> None:
         """显示"关于"对话框，与设置弹窗风格一致。"""
-        from ui.about_dialog import AboutDialog
         close_hover = "#e74c3c"
         bg_path = None
         if self._tm.titlebar_cfg:
@@ -2237,7 +2240,6 @@ class MainWindow(QMainWindow):
             - widget_bg: 内容区背景色
             - main_bg: 对话框底色（纯色主题用偏移值形成对比）
         """
-        from ui.rank_stats_dialog import RankStatsDialog
         # 如果主题提供了 __settings_bg__ 背景图，传给弹窗做半透明效果
         bg_path: str = self._tm.pixmap_paths.get("__settings_bg__", "") if self._tm.pixmap_paths else ""
         dialog = RankStatsDialog(
@@ -2257,7 +2259,6 @@ class MainWindow(QMainWindow):
             - widget_bg:   控件背景色（半透明面板的底色）
             - main_bg:     弹窗主背景色（无背景图时的底色）
         """
-        from ui.config_dialog import ConfigDialog
         # 背景图：部分主题（如 dark）提供 settings_bg 图片作为弹窗背景
         bg_path = None
         if self._tm.pixmap_paths:
@@ -2369,8 +2370,6 @@ class MainWindow(QMainWindow):
             - 截图间隔和匹配置信度（来自 config.toml）
             - Master Duel 窗口状态（未启动 / 已最小化 / 分辨率 W×H）
         """
-        from src.capture import get_window_status
-
         interval = self._config.get("detection", {}).get("interval", 0.5)
         threshold = self._config.get("detection", {}).get("confidence_threshold", 0.8)
 
