@@ -18,10 +18,10 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v6
 
-      - name: 安装 uv（含 Python 3.12）
+      - name: 安装 uv（含 Python 3.15）
         uses: astral-sh/setup-uv@v8.2.0
         with:
-          python-version: '3.12'
+          python-version: '3.15'
 
       - name: 同步依赖（按 uv.lock 精确复现）
         run: uv sync --frozen
@@ -107,7 +107,7 @@ jobs:
 
           '@ | Set-Content "MD Stats.spec" -Encoding UTF8
 
-          uv run --with 'pyinstaller>=6.10,<7' pyinstaller "MD Stats.spec" --noconfirm
+          uv run --with 'pyinstaller>=6.22,<7' pyinstaller "MD Stats.spec" --noconfirm
 
       - name: 组装发布目录
         shell: pwsh

@@ -20,10 +20,13 @@ MainWindow 只需持有 SnapshotController 实例并通过信号接收状态消�
 
 from datetime import datetime
 
-import cv2
+# PEP 810 懒加载（Python 3.15+）：启动时不导入 cv2（约 340ms），
+# 首次使用（热键截图的 cv2.imencode）时才真正加载
+lazy import cv2
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from src.config import get_project_root
+lazy from src import capture as _cap  # 首次截图时才加载（连带 mss/numpy/win32gui）
 from src.hotkey_listener import HotkeyListener, parse_hotkey
 
 
@@ -98,7 +101,6 @@ class SnapshotController(QObject):
         文件名格式：screenshot_1920x1080_20260612_143025_123.png（含分辨率和毫秒时间戳）。
         """
         try:
-            from src import capture as _cap
             screenshot = _cap.capture_window("masterduel")
             ss_dir = get_project_root() / "screenshots"
             ss_dir.mkdir(parents=True, exist_ok=True)
