@@ -16,10 +16,10 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: 安装 uv（含 Python 3.15）
-        uses: astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@v10.3.0  # 该 action 无浮动 major tag，必须写精确版本
         with:
           python-version: '3.15'
 
@@ -133,7 +133,7 @@ jobs:
 
       - name: 上传 ZIP 为构建产物（非 tag 时在此下载）
         if: "!startsWith(github.ref, 'refs/tags/')"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MD Stats-${{ github.ref_name }}
           path: dist/MD Stats-${{ github.ref_name }}.zip
