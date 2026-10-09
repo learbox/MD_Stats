@@ -10,7 +10,7 @@
 - **段位快速编辑** — 双击段位单元格弹出按钮矩阵面板，两次点击即可选好段位，也支持输入自定义文字
 - **详细统计弹窗** — 按卡组 + 己方段位动态筛选，展示 17 项统计指标（对局数/胜率/硬币概率/先后攻胜率/段位升降率等），支持一键复制到剪贴板
 - **手动联动** — 手动按钮与自动识别状态同步，自动漏检时可手动补录，互不冲突
-- **统计表格** — 按卡组汇总对局数、胜率、硬币胜负率、先后攻胜率、段位胜率，支持自定义显示列
+- **统计表格** — 按卡组汇总对局数、胜率、硬币胜负率、先后攻胜率、段位胜率，支持自定义显示列，卡组按最近使用时间排序
 - **记录表格** — 每条对局的详细信息，支持倒序显示和单元格编辑（下拉菜单 + 自由输入）
 - **多分辨率** — 自动检测游戏分辨率，切换对应模板子目录
 - **撤销 / 删除** — 手动录入支持逐级撤销，支持删除最后 / 全部记录
@@ -46,7 +46,7 @@
 
 ### 环境要求
 
-- Python ≥ 3.12
+- Python ≥ 3.15
 - Windows（依赖 `pywin32` 进行窗口定位）
 
 ### 使用 uv（推荐）
@@ -60,7 +60,7 @@ uv sync
 ### 使用 pip
 
 ```bash
-pip install mss numpy opencv-python pyside6 pywin32
+pip install "mss>=10.2.0" "numpy>=2.5.3" "opencv-python>=5.0.0.93" "pyside6>=6.12.0" "pywin32>=312"
 ```
 
 ## 准备模板图片
@@ -123,7 +123,7 @@ python main.py
 | `detection.confidence_threshold` | 匹配置信度阈值 (0.0~1.0) | `0.8` |
 | `window.width` / `height` | 主窗口尺寸（像素） | `1300` / `700` |
 | `appearance.theme` | 界面主题，填写 `themes/` 下的文件夹名 | `"macaron"` |
-| `opponent_decks.presets` | 对方卡组预设列表 | `["炎兽", "闪刀姬", ...]` |
+| `opponent_decks.presets` | 对方卡组预设列表 | `["闪刀姬", "烙印", "白银城", "k9vs"]` |
 | `debug.save_screenshots` | 识别成功时保存截图（开启后写入 `screenshots/`） | `false` |
 | `debug.auto_clear_screenshots` | 下一局开始时自动清除上一局的截图 | `true` |
 | `debug.hotkey_enabled` | 启用截图热键（全局热键） | `false` |
@@ -239,6 +239,7 @@ MD_Stats/
 - 设计思路参考了 [ULeang/mdstats](https://github.com/ULeang/mdstats)（GPL-3.0，C++）— 代码完全独立编写
 - 马卡龙主题感谢 [KleeKlee](https://github.com/slimpigs) 提供代码修改支持和无偿提供的美术资源
 - 感谢 [ULya_tooru](https://github.com/ULeang) 提供原版思路
+
 ## 工具与资源
 
 - 代码辅助：Claude Code (Anthropic)、GLM-5.1 (智谱)、DeepSeek-V4-Pro（深度求索）
