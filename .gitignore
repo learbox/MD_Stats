@@ -23,6 +23,11 @@ csv/*.csv
 screenshots/
 logs/
 
+# Runtime config/state (发布包中的 config.toml 由 CI 按代码模板生成；
+# .app_state.toml 为程序运行状态，首次运行自动创建)
+config.toml
+.app_state.toml
+
 # Dev docs (internal, not for distribution)
 docs/_dev/
 docs/screenshots/

@@ -32,7 +32,7 @@
     [floating_window]
     use_theme_bg = false          # 是否使用主题背景图（false=纯色，方便 OBS 绿幕）
     show_status = false           # 底部显示状态消息（程序运行状态、识别进度等）
-    show_status_compact = false   #   简洁模式：只显示"——"前面部分（需勾选 show_status）
+    show_status_compact = true    #   简洁模式：只显示"——"前面部分（需勾选 show_status）
     width = 250                   # 悬浮窗宽度（像素）
     height = 300                  # 悬浮窗高度（像素）
     bg_color = "#BDEF0A"          # 悬浮窗背景色（十六进制 RGB）
@@ -47,25 +47,30 @@
 
     [debug]
     save_screenshots = false      # 检测到关键事件时保存截图到 screenshots/
-    auto_clear_screenshots = true #   下一局开始时自动清除上一局截图
+    auto_clear_screenshots = false #  下一局开始时自动清除上一局截图
     hotkey_enabled = false        # 启用截图热键（全局，游戏全屏时也可用）
     snapshot_hotkey = "Ctrl+Shift+S"  # 单次截图热键
+    snapshot_sound = false        #   单次截图的结果音效（成功提示/失败警示）
+    detection_sound = false       #   检测事件提示音总开关（硬币/先后攻/胜负）
+    coin_sound = false            #   识别到硬币结果时播放
+    turn_sound = false            #   识别到先后攻时播放
+    result_sound = false          #   识别到胜负时播放
     periodic_hotkey = "Ctrl+Shift+D"  # 周期截图热键（按一下开，再按停）
     periodic_interval = 0.5       #   周期截图间隔（秒）
     log_mode = false              # 日志模式：将运行信息写入 logs/ 目录
     log_scope = ["status", "screenshots", "errors"]  # 日志记录范围
     show_confidence = false       # 状态栏显示匹配置信度
     save_failure_samples = false  # 识别失败时保存诊断截图+数据
-    failure_sample_offset = 0.10  #   诊断触发偏移量
+    failure_sample_offset = 0.2   #   诊断触发偏移量
 
     [notification]
-    enabled = false               # 对局结束时弹出系统气泡通知
-    duration = 5                  # 通知显示时长（秒）
+    enabled = true                # 对局结束时弹出系统气泡通知
+    duration = 1                  # 通知显示时长（秒）
     minimize_to_tray = false      # 关闭时隐藏到系统托盘
 
     [rank_detection]
     enabled = true                # 是否启用段位图标检测
-    interval = 0.5                # 截图间隔（秒），0.3 ~ 1.0
+    interval = 0.3                # 截图间隔（秒），0.3 ~ 1.0
     confidence_threshold = 0.7    # 匹配置信度阈值 (0.0~1.0)
 
 """
@@ -137,7 +142,7 @@ def load_config() -> dict:
     """
     path = _get_config_path()
     if not path.exists():
-        _generate_default_config(path)
+        generate_default_config(path)
 
     with open(path, "rb") as f:
         cfg = tomllib.load(f)
@@ -145,8 +150,12 @@ def load_config() -> dict:
     return cfg
 
 
-def _generate_default_config(path: Path) -> None:
-    """生成一份包含所有内置默认值的 config.toml。"""
+def generate_default_config(path: Path) -> None:
+    """生成一份包含所有内置默认值的 config.toml。
+
+    程序首启时（config.toml 缺失）自动调用；CI 构建发布包时也调用
+    本函数生成包内默认配置——内容始终与代码模板一致，不再手工维护。
+    """
     path.write_text("""\
 # MD Stats 配置文件（由程序自动生成）
 # 修改后点击主窗口的「设置 → 确定」即时生效。
@@ -173,7 +182,7 @@ theme = "macaron"
 # 对方卡组预设
 [opponent_decks]
 # 记录表格下拉菜单的预设选项
-presets = ["闪刀姬", "烙印", "白银城", "k9vs"]
+presets = ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"]
 
 # 数据存储
 [recorder]
@@ -185,12 +194,12 @@ remember_last_deck = true
 # 统计表格显示
 [stats]
 # 统计表格显示的列名列表（空 = 全部显示）
-columns = []
+columns = ["卡组", "对局数", "胜", "负", "胜率", "赢硬币次数", "输硬币次数", "赢硬币概率", "赢硬币胜率", "输硬币胜率", "先攻次数", "后攻次数", "先攻胜", "后攻胜", "先攻胜率", "后攻胜率"]
 
 # 剪贴板复制行为
 [clipboard]
 # 竖排模式：true = 每行"key\\tvalue"，false = 横排 TSV
-vertical_layout = true
+vertical_layout = false
 # 复制范围："current" = 当前卡组，"all" = 全部卡组
 scope = "all"
 # 要复制的列名列表（空 = 默认 8 项）
@@ -201,11 +210,22 @@ columns = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率",
 # 每次检测到关键事件（硬币/先后攻/胜负）时保存截图到 screenshots/
 save_screenshots = false
 # 下一局开始时自动清除上一局的截图
-auto_clear_screenshots = true
+auto_clear_screenshots = false
 # 启用截图热键（全局热键，游戏全屏时也可用）
 hotkey_enabled = false
 # 单次截图热键（优先截取 Master Duel 窗口）
 snapshot_hotkey = "Ctrl+Shift+S"
+# 单次截图的结果音效：成功播提示音（resource/sounds/snapshot.wav），
+# 只要未成功（如窗口未找到、磁盘不可写）播警示音（resource/sounds/error.wav）
+snapshot_sound = false
+# 检测事件提示音总开关（关闭时硬币/先后攻/胜负三段音效全部静音）
+detection_sound = false
+# 识别到硬币结果时播放提示音（音效: resource/sounds/coin.wav）
+coin_sound = false
+# 识别到先后攻时播放提示音（音效: resource/sounds/turn.wav）
+turn_sound = false
+# 识别到对局胜负时播放提示音（音效: resource/sounds/result.wav）
+result_sound = false
 # 周期截图热键（按一下开始，再按停止）
 periodic_hotkey = "Ctrl+Shift+D"
 # 周期截图间隔（秒）
@@ -219,14 +239,14 @@ show_confidence = false
 # 识别失败时诊断截图（匹配度接近阈值但未达标时自动截图 + 诊断数据）
 save_failure_samples = false
 # 偏移量（值越大越容易触发，0 = 仅保存未达标帧的最高分）
-failure_sample_offset = 0.10
+failure_sample_offset = 0.2
 
 # 系统通知
 [notification]
 # 对局结束时弹出系统气泡通知
-enabled = false
+enabled = true
 # 通知显示持续时间（秒）
-duration = 5
+duration = 1
 # 关闭时隐藏到系统托盘（点 × 按钮时隐藏，最小化按钮正常最小化）
 minimize_to_tray = false
 
@@ -237,7 +257,7 @@ use_theme_bg = false
 # 在悬浮窗底部显示当前的状态消息（程序运行状态、识别进度等）
 show_status = false
 # 简洁模式：只显示"——"前面的部分（仅悬浮窗）
-show_status_compact = false
+show_status_compact = true
 # 悬浮窗宽度（像素）
 width = 250
 # 悬浮窗高度（像素，实际低于内容高度时自动扩容）
@@ -260,7 +280,7 @@ rows = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率", "�
 # 是否启用段位图标检测
 enabled = true
 # 截图间隔（秒），0.3 ~ 1.0
-interval = 0.5
+interval = 0.3
 # 匹配置信度阈值 (0.0~1.0)
 confidence_threshold = 0.7
 """, encoding="utf-8")
