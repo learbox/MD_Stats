@@ -21,6 +21,7 @@
 - **调试工具** — 可选的截图保存（成功/失败双模式）、诊断数据和日志，方便排查问题
 - **CSV 占用保护** — WPS/Excel 占用 CSV 时记录自动暂存到内存，状态栏持续告警，关闭占用程序后自动补写
 - **系统通知** — 对局结束时弹出气泡通知，支持关闭时隐藏到系统托盘
+- **提示音** — 单次截图结果音效（成功播提示音、失败播警示音）与三段检测事件提示音（硬币/先后攻/胜负，可分别开关），音效文件位于 `resource/sounds/`，可自行替换
 
 ## 截图
 
@@ -112,6 +113,7 @@ python main.py
 3. 对局结束后数据自动写入 `csv/` 目录
 4. 如果自动识别有遗漏，用手动按钮补录（按钮会跟随识别状态联动）
 5. 记录表格中的单元格可直接双击编辑，修改自动写回 CSV
+6. 首次运行会自动生成 `config.toml`（默认配置）与 `.app_state.toml`（窗口状态），随后可随时编辑
 
 ## 配置
 
@@ -123,34 +125,39 @@ python main.py
 | `detection.confidence_threshold` | 匹配置信度阈值 (0.0~1.0) | `0.8` |
 | `window.width` / `height` | 主窗口尺寸（像素） | `1300` / `700` |
 | `appearance.theme` | 界面主题，填写 `themes/` 下的文件夹名 | `"macaron"` |
-| `opponent_decks.presets` | 对方卡组预设列表 | `["闪刀姬", "烙印", "白银城", "k9vs"]` |
+| `opponent_decks.presets` | 对方卡组预设列表 | `["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"]` |
 | `debug.save_screenshots` | 识别成功时保存截图（开启后写入 `screenshots/`） | `false` |
-| `debug.auto_clear_screenshots` | 下一局开始时自动清除上一局的截图 | `true` |
+| `debug.auto_clear_screenshots` | 下一局开始时自动清除上一局的截图 | `false` |
 | `debug.hotkey_enabled` | 启用截图热键（全局热键） | `false` |
 | `debug.snapshot_hotkey` | 单次截图热键 | `"Ctrl+Shift+S"` |
+| `debug.snapshot_sound` | 单次截图结果音效（成功提示音 / 失败警示音） | `false` |
+| `debug.detection_sound` | 检测事件提示音总开关（硬币 / 先后攻 / 胜负） | `false` |
+| `debug.coin_sound` | 识别到硬币结果时播放提示音 | `false` |
+| `debug.turn_sound` | 识别到先后攻时播放提示音 | `false` |
+| `debug.result_sound` | 识别到对局胜负时播放提示音 | `false` |
 | `debug.periodic_hotkey` | 周期截图热键 | `"Ctrl+Shift+D"` |
 | `debug.periodic_interval` | 周期截图间隔（秒） | `0.5` |
 | `debug.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
 | `debug.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
 | `debug.show_confidence` | 状态栏显示检测置信度 | `false` |
 | `debug.save_failure_samples` | 识别失败时诊断截图（匹配度接近阈值时自动截图 + 诊断数据到 `screenshots/debug/`） | `false` |
-| `debug.failure_sample_offset` | 触发偏移（值越大越容易触发，0 = 仅保存未达标帧的最高分） | `0.10` |
+| `debug.failure_sample_offset` | 触发偏移（值越大越容易触发，0 = 仅保存未达标帧的最高分） | `0.2` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
-| `stats.columns` | 统计表格显示的列（空 = 全部） | `[]` |
+| `stats.columns` | 统计表格显示的列（空 = 全部） | 全部 16 列 |
 | `recorder.remember_last_deck` | 启动时自动填入上次使用的卡组 | `true` |
 | `rank_detection.enabled` | 启用段位图标检测 | `true` |
-| `rank_detection.interval` | 段位检测截图间隔（秒） | `0.5` |
+| `rank_detection.interval` | 段位检测截图间隔（秒） | `0.3` |
 | `rank_detection.confidence_threshold` | 段位匹配置信度阈值 | `0.7` |
-| `clipboard.vertical_layout` | 剪贴板竖排模式 | `true` |
+| `clipboard.vertical_layout` | 剪贴板竖排模式 | `false` |
 | `clipboard.scope` | 复制范围（`"all"` / `"current"`） | `"all"` |
 | `floating_window.width` / `height` | 悬浮窗尺寸（高度低于内容时自动扩容） | `250` / `330` |
-| `notification.enabled` | 对局结束系统气泡通知 | `false` |
-| `notification.duration` | 通知显示时长（秒） | `5` |
+| `notification.enabled` | 对局结束系统气泡通知 | `true` |
+| `notification.duration` | 通知显示时长（秒） | `1` |
 | `notification.minimize_to_tray` | 关闭时隐藏到系统托盘 | `false` |
 | `floating_window.bg_color` | 悬浮窗背景色 | `#BDEF0A` |
 | `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
 | `floating_window.show_status` | 悬浮窗底部显示状态消息 | `false` |
-| `floating_window.show_status_compact` | 状态消息简洁模式 | `false` |
+| `floating_window.show_status_compact` | 状态消息简洁模式 | `true` |
 | `floating_window.rows` | 悬浮窗显示数据行 | 8 项默认 |
 
 ### 日志模式快速上手
@@ -176,20 +183,22 @@ python main.py
 ```
 MD_Stats/
 ├── main.py                  # 程序入口
-├── config.toml              # 配置文件
+├── config.toml              # 配置文件（首次运行自动生成）
 ├── pyproject.toml           # 项目元数据与依赖 (uv)
 ├── uv.lock                  # 依赖锁定文件
 ├── CHANGELOG.md             # 更新日志
 ├── LICENSE                  # MIT 开源协议
-├── .app_state.toml          # 窗口状态持久化
+├── .app_state.toml          # 窗口状态持久化（首次运行自动生成）
 ├── docs/                    # 文档
 │   ├── README_release.md    # 发行包附带说明
 │   └── TROUBLESHOOTING.md   # 常见问题排查
-├── resource/templates/      # 模板图片（按分辨率分目录）
-│   ├── rankicons/            # 段位图标（源素材 + 位置缓存，需自行准备）
-│   ├── 1920x1080/            # 1080p 模板 + roi.toml
-│   ├── 2560x1440/            # 1440p 模板 + roi.toml
-│   └── ...                   # 其他分辨率子目录
+├── resource/                # 静态资源
+│   ├── sounds/              # 提示音效（可替换：snapshot / error / coin / turn / result.wav）
+│   └── templates/           # 模板图片（按分辨率分目录）
+│       ├── rankicons/            # 段位图标（源素材 + 位置缓存，需自行准备）
+│       ├── 1920x1080/            # 1080p 模板 + roi.toml
+│       ├── 2560x1440/            # 1440p 模板 + roi.toml
+│       └── ...                   # 其他分辨率子目录
 ├── csv/                     # 对战数据 CSV 文件
 ├── screenshots/             # 调试截图输出（开启 save_screenshots 后自动生成）
 ├── logs/                    # 日志文件输出（开启 log_mode 后自动生成）
@@ -219,6 +228,7 @@ MD_Stats/
 │   ├── roi_manager.py       # 统一位置缓存管理（roi.toml + rank_positions.toml）
 │   ├── rank_worker.py       # 段位图标检测（独立线程）
 │   ├── snapshot_controller.py # 截图热键与周期截图
+│   ├── sound.py             # 提示音效播放（winsound，首次播放时才加载）
 │   └── stats_worker.py      # 后台识别线程（QThread）
 └── ui/
     ├── main_window.py       # 主窗口逻辑

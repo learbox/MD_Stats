@@ -136,6 +136,7 @@ from src.recorder import (
 lazy from src.capture import is_window_open, get_window_status
 lazy from src.stats_worker import StatsWorker
 lazy from src.rank_worker import RankWorker
+lazy from src import sound as _sound  # 首次播放提示音时才加载（连带 winsound）
 lazy from src.failure_sample_manager import FailureSampleManager
 lazy from ui.about_dialog import AboutDialog
 lazy from ui.rank_stats_dialog import RankStatsDialog
@@ -1416,6 +1417,17 @@ class MainWindow(QMainWindow):
             self._unlock_deck()
             self._enable_bottom_buttons()
 
+    def _play_event_sound(self, name: str) -> None:
+        """播放检测事件提示音（总开关与对应分段开关均开启时）。
+
+        三种事件共用：coin（硬币结果）、turn（先后攻）、result（对局胜负）。
+        总开关为 debug.detection_sound，分段开关按 name 推导——
+        如 name="coin" 对应 debug.coin_sound，音效文件 resource/sounds/coin.wav。
+        """
+        dbg = self._config.get("debug", {})
+        if dbg.get("detection_sound", False) and dbg.get(f"{name}_sound", False):
+            _sound.play_sound(name)
+
     def _on_coin_win_detected(self, coin_win: str) -> None:
         """自动识别到硬币结果 → 缓存并推进到阶段1。
 
@@ -1424,6 +1436,7 @@ class MainWindow(QMainWindow):
         """
         if not self._match.advance_coin(coin_win):
             return
+        self._play_event_sound("coin")
         self.update_manual_buttons()
 
     def _on_rank_detected(self, rank: str) -> None:
@@ -1538,6 +1551,7 @@ class MainWindow(QMainWindow):
         """
         if not self._match.advance_turn(turn):
             return
+        self._play_event_sound("turn")
         # 段位图标已消失，通知 RankWorker 停止搜索
         if self._rank_worker is not None:
             self._rank_worker.stop_searching()
@@ -1556,6 +1570,7 @@ class MainWindow(QMainWindow):
         """
         if self._match.stage != 2:
             return
+        self._play_event_sound("result")
         cached = self._match.snapshot()
         coin_cache = cached["coin"]
         turn_cache = cached["turn"]

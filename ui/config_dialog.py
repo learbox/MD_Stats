@@ -33,7 +33,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTranslator, QLibraryInfo, Signal
+from PySide6.QtCore import Qt, QEvent, QTranslator, QLibraryInfo, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
@@ -407,7 +407,7 @@ class ConfigDialog(_BaseFramelessDialog):
         """创建"识别"标签页。
 
         布局分为两个分组：
-            功能设置 — 三阶段检测 + 段位检测（日常使用需调整的参数）
+            功能设置 — 三阶段检测（含识别提示音）+ 段位检测（日常使用需调整的参数）
             调试设置 — 保存截图、热键、诊断截图（排查问题时才需要）
         """
         # 内容较多，包裹在可滚动的区域中
@@ -460,6 +460,28 @@ class ConfigDialog(_BaseFramelessDialog):
         r2.addWidget(self._threshold)
         r2.addStretch()
         lo.addLayout(r2)
+
+        # ---- 识别提示音 ----
+        # 三阶段检测小节的最后一项：识别到硬币/先后攻/胜负时播放对应音效。
+        # 总开关 + 三段独立开关；自动检测触发，与热键总开关无关
+        # （不参与 _on_hk_enabled_toggled 联动）
+        self._snd_master = QCheckBox("识别到事件时播放提示音")
+        self._snd_master.setToolTip(
+            "识别到硬币、先后攻、胜负时播放对应提示音（音效位于 resource/sounds/）。\n"
+            "总开关：关闭时三段音效全部静音。"
+        )
+        self._snd_master.toggled.connect(self._on_detection_sound_toggled)
+        lo.addWidget(self._snd_master)
+
+        snd_row = QHBoxLayout()
+        snd_row.setContentsMargins(24, 0, 0, 0)
+        self._snd_coin = QCheckBox("硬币")
+        self._snd_turn = QCheckBox("先后攻")
+        self._snd_result = QCheckBox("胜负")
+        for cb in (self._snd_coin, self._snd_turn, self._snd_result):
+            snd_row.addWidget(cb)
+        snd_row.addStretch()
+        lo.addLayout(snd_row)
 
         # ---- 段位图标检测 ----
         # 分隔线 + 标题，视觉上从属于"功能设置"
@@ -589,6 +611,14 @@ class ConfigDialog(_BaseFramelessDialog):
         self._hk_snapshot = self._create_hotkey_input()
         r1.addWidget(self._hk_snapshot)
         gl_hk.addLayout(r1)
+
+        # 单次截图结果音效：成功提示/失败警示（受热键总开关联动启用/禁用）
+        self._hk_sound = QCheckBox("单次截图结果音效")
+        self._hk_sound.setToolTip(
+            "单次截图的结果音效：成功保存后播放提示音（resource/sounds/snapshot.wav），\n"
+            "只要截图未成功（如窗口未找到、磁盘不可写）播放警示音（resource/sounds/error.wav）。"
+        )
+        gl_hk.addWidget(self._hk_sound)
 
         r2 = QHBoxLayout()
         r2.addWidget(QLabel("周期截图:"))
@@ -1192,8 +1222,15 @@ class ConfigDialog(_BaseFramelessDialog):
         self._hk_enabled.setChecked(hk_on)
         self._on_hk_enabled_toggled(hk_on)  # 联动启用/禁用热键输入框
         self._hk_snapshot.setText(dbg.get("snapshot_hotkey", "Ctrl+Shift+S"))
+        self._hk_sound.setChecked(dbg.get("snapshot_sound", False))
         self._hk_periodic.setText(dbg.get("periodic_hotkey", "Ctrl+Shift+D"))
         self._hk_interval.setValue(dbg.get("periodic_interval", 0.5))
+        # 事件提示音（总开关 + 三段独立开关）
+        self._snd_master.setChecked(dbg.get("detection_sound", False))
+        self._snd_coin.setChecked(dbg.get("coin_sound", False))
+        self._snd_turn.setChecked(dbg.get("turn_sound", False))
+        self._snd_result.setChecked(dbg.get("result_sound", False))
+        self._on_detection_sound_toggled(dbg.get("detection_sound", False))
         self._log_mode_cb.setChecked(dbg.get("log_mode", False))
         # log_scope 是 TOML 数组，转成集合后分别设置三个子复选框
         scopes = set(dbg.get("log_scope", ["status", "screenshots", "errors"]))
@@ -1383,6 +1420,7 @@ class ConfigDialog(_BaseFramelessDialog):
                 "auto_clear_screenshots": self._auto_clear_cb.isChecked(),
                 "hotkey_enabled": self._hk_enabled.isChecked(),
                 "snapshot_hotkey": self._hk_snapshot.text(),
+                "snapshot_sound": self._hk_sound.isChecked(),
                 "periodic_hotkey": self._hk_periodic.text(),
                 "periodic_interval": round(self._hk_interval.value(), 1),
                 "log_mode": self._log_mode_cb.isChecked(),
@@ -1390,6 +1428,10 @@ class ConfigDialog(_BaseFramelessDialog):
                 "show_confidence": self._show_confidence_cb.isChecked(),
                 "save_failure_samples": self._failure_samples_cb.isChecked(),
                 "failure_sample_offset": round(self._failure_offset.value(), 2),
+                "detection_sound": self._snd_master.isChecked(),
+                "coin_sound": self._snd_coin.isChecked(),
+                "turn_sound": self._snd_turn.isChecked(),
+                "result_sound": self._snd_result.isChecked(),
             },
             "appearance": {
                 "theme": self._theme_combo.currentText(),
@@ -1499,6 +1541,8 @@ class ConfigDialog(_BaseFramelessDialog):
             "启用截图热键（全局热键，游戏全屏时也可用）")
         _kv("snapshot_hotkey", dbg.get("snapshot_hotkey", "Ctrl+Shift+S"),
             "单次截图热键")
+        _kv("snapshot_sound", dbg.get("snapshot_sound", False),
+            "单次截图的结果音效（成功: resource/sounds/snapshot.wav；失败: error.wav）")
         _kv("periodic_hotkey", dbg.get("periodic_hotkey", "Ctrl+Shift+D"),
             "周期截图热键（按一下开始，再按停止）")
         _kv("periodic_interval", dbg.get("periodic_interval", 0.5),
@@ -1513,6 +1557,14 @@ class ConfigDialog(_BaseFramelessDialog):
             "识别失败时诊断截图（匹配度接近阈值但未达标时自动截图 + 诊断数据）")
         _kv("failure_sample_offset", dbg.get("failure_sample_offset", 0.10),
             "偏移量（值越大越容易触发，0 = 仅保存未达标的最高分）")
+        _kv("detection_sound", dbg.get("detection_sound", False),
+            "检测事件提示音总开关（关闭时硬币/先后攻/胜负三段音效全部静音）")
+        _kv("coin_sound", dbg.get("coin_sound", False),
+            "识别到硬币结果时播放提示音（音效: resource/sounds/coin.wav）")
+        _kv("turn_sound", dbg.get("turn_sound", False),
+            "识别到先后攻时播放提示音（音效: resource/sounds/turn.wav）")
+        _kv("result_sound", dbg.get("result_sound", False),
+            "识别到对局胜负时播放提示音（音效: resource/sounds/result.wav）")
 
         lines.extend(["", "[window]"])
         _kv("width", w.get("width", 1300), "主窗口宽度（像素）")
@@ -1629,12 +1681,49 @@ class ConfigDialog(_BaseFramelessDialog):
         """热键启用开关切换时，联动启用/禁用热键相关控件。"""
         for w in (self._hk_snapshot, self._hk_periodic, self._hk_interval):
             w.setEnabled(enabled)
+        # 提示音复选框与日志模式子选项一致：属性模拟禁用色。
+        # 不用 setEnabled——真禁用会触发 Windows/Qt 禁用调色板，
+        # 在深色主题下文字被画成白色，与主题不协调。
+        self._set_sub_disabled(self._hk_sound, not enabled)
 
-    @staticmethod
-    def _set_sub_disabled(cb: QCheckBox | QRadioButton, disabled: bool) -> None:
-        """属性 + polish 模拟 disabled 文字色，不触发 Windows 接管。"""
+    def _on_detection_sound_toggled(self, enabled: bool) -> None:
+        """事件提示音总开关切换时，联动禁用三个分段复选框。"""
+        for cb in (self._snd_coin, self._snd_turn, self._snd_result):
+            self._set_sub_disabled(cb, not enabled)
+
+    def _set_sub_disabled(self, cb: QCheckBox | QRadioButton, disabled: bool) -> None:
+        """子选项禁用：主题化文字色 + 屏蔽全部交互，但不触发系统禁用绘制。
+
+        不用 setEnabled(False)——真禁用会触发原生样式的禁用绘制
+        （指示框被画淡、文字色被系统接管），与主题风格不协调。
+        这里保持控件"启用外观"（指示框绘制与正常态一致），通过
+        三层防护实现"不可更改"：
+        1. 属性 subDisabled —— QSS 画主题禁用文字色
+        2. 透明鼠标 + 无焦点 —— 真实用户在窗口系统层面点不到它
+        3. 事件过滤器 —— 兜底拦截一切输入事件（防御非常规来源）
+        """
         cb.setProperty("subDisabled", disabled)
+        cb.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, disabled)
+        cb.setFocusPolicy(Qt.FocusPolicy.NoFocus if disabled else Qt.FocusPolicy.StrongFocus)
+        if disabled:
+            cb.installEventFilter(self)
+        else:
+            cb.removeEventFilter(self)
         cb.style().polish(cb)
+
+    def eventFilter(self, obj, event) -> bool:
+        """兜底拦截 subDisabled 子选项的输入事件（鼠标/键盘），使其不可更改。
+
+        仅对安装了本过滤器的控件生效（即 _set_sub_disabled 标记过的子选项）。
+        """
+        if isinstance(obj, (QCheckBox, QRadioButton)) and obj.property("subDisabled"):
+            if event.type() in (QEvent.Type.MouseButtonPress,
+                                QEvent.Type.MouseButtonRelease,
+                                QEvent.Type.MouseButtonDblClick,
+                                QEvent.Type.KeyPress,
+                                QEvent.Type.KeyRelease):
+                return True
+        return super().eventFilter(obj, event)
 
     def _on_log_mode_toggled(self, enabled: bool) -> None:
         """日志模式开关切换时，属性模拟禁用/启用三个子复选框。"""

@@ -27,6 +27,7 @@ lazy import cv2
 from PySide6.QtCore import QObject, QTimer, Signal
 from src.config import get_project_root
 lazy from src import capture as _cap  # 首次截图时才加载（连带 mss/numpy/win32gui）
+lazy from src import sound as _sound  # 首次播放提示音时才加载（连带 winsound）
 from src.hotkey_listener import HotkeyListener, parse_hotkey
 
 
@@ -85,21 +86,44 @@ class SnapshotController(QObject):
     def _on_hotkey_pressed(self, hotkey_id: int) -> None:
         """热键按下回调（由 HotkeyListener 信号触发，在主线程中执行）。"""
         if hotkey_id == 1:
-            self._snapshot_single()
+            self._snapshot_single(feedback=True)
         elif hotkey_id == 2:
             self._toggle_periodic()
+
+    def _play_snapshot_feedback(self, ok: bool) -> None:
+        """播放单次截图的结果音效（debug.snapshot_sound 开启时）。
+
+        结果驱动：成败在截图完成后才确定，故音效在结果确定时播放——
+        成功 → 提示音（resource/sounds/snapshot.wav）；
+        只要未成功（无论何种原因，如窗口未找到、磁盘不可写、编码失败等）
+        → 警示音（resource/sounds/error.wav）。
+        仅热键 1（单次截图）触发，周期截图不播放。播放细节见 src/sound.py。
+        """
+        if not self._config.get("debug", {}).get("snapshot_sound", False):
+            return
+        if ok:
+            _sound.play_sound("snapshot")
+        else:
+            _sound.play_sound("error")
 
     def _on_register_failed(self, combo: str) -> None:
         """热键注册失败回调。"""
         self.status_message.emit(f"热键 {combo} 注册失败（可能被其他程序占用）")
 
-    def _snapshot_single(self) -> None:
+    def _snapshot_single(self, feedback: bool = False) -> None:
         """热键 1 回调：截取 Master Duel 窗口并保存到 screenshots/ 目录。
 
         与自动检测截图不同——此方法不管是否有对局在进行、是否检测到任何
         事件，直接截取当前窗口。适合用户手动截取特定 UI 画面作为模板。
         文件名格式：screenshot_1920x1080_20260612_143025_123.png（含分辨率和毫秒时间戳）。
+
+        Args:
+            feedback: 是否播放结果音效（仅热键手动触发时为 True）——
+                成功播提示音；只要未成功（无论何种原因，如窗口未找到、
+                磁盘不可写、编码失败）播警示音。
+                周期截图复用本方法时保持 False，不播放。
         """
+        ok = False
         try:
             screenshot = _cap.capture_window("masterduel")
             ss_dir = get_project_root() / "screenshots"
@@ -111,10 +135,13 @@ class SnapshotController(QObject):
             if success:
                 (ss_dir / fname).write_bytes(buf.tobytes())
                 self.status_message.emit(f"截图已保存: {fname}")
+                ok = True
             else:
                 self.status_message.emit("截图保存失败")
         except Exception as e:
             self.status_message.emit(f"截图失败: {e}")
+        if feedback:
+            self._play_snapshot_feedback(ok)
 
     def _periodic_tick(self) -> None:
         """周期截图定时器回调：直接复用单次截图逻辑。"""
