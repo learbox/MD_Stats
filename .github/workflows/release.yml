@@ -124,7 +124,8 @@ jobs:
           Copy-Item -Recurse resource $release
           # 默认配置由代码模板现场生成（仓库不再跟踪 config.toml，保证内容与代码一致）
           uv run python -c "from pathlib import Path; from src.config import generate_default_config; generate_default_config(Path('dist/release/config.toml'))"
-          # 注：.app_state.toml 不打包——首次运行用默认布局，程序退出时自动创建
+          # 初始布局预置：列宽/分割比例（不含窗口位置，由程序首启后自行记录）
+          uv run python -c "from pathlib import Path; from src.app_state import generate_initial_state; generate_initial_state(Path('dist/release/.app_state.toml'))"
           Copy-Item docs/README_release.md "$release/README.md"
           Copy-Item docs/TROUBLESHOOTING.md $release
           Copy-Item LICENSE $release
