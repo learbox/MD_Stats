@@ -1,6 +1,6 @@
 [project]
 name = "mdstats"
-version = "1.13.0"
+version = "1.14.0"
 requires-python = ">=3.15"
 dependencies = [
     "mss>=10.2.0",
