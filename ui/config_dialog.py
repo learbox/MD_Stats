@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui._base_dialog import _BaseFramelessDialog
-from src.config import get_project_root
+from src.config import get_project_root, render_config_toml
 from ui.floating_window import _ROW_KEY_MAP, _DEFAULT_ROWS
 
 # 加载 Qt 内置中文翻译（让取色器等系统弹窗显示中文，翻译文件缺失时静默跳过）
@@ -283,7 +283,10 @@ class DualListWidget(QWidget):
 class ConfigDialog(_BaseFramelessDialog):
     """设置弹窗，5 标签页 + 确定/取消。"""
 
-    config_saved = Signal()
+    # 参数 = 是否需要强制重载主题：更换字体写的是主题文件（theme.toml），
+    # 主题名没变，主窗口的"名字没变就跳过重载"判断会漏掉这次变化，
+    # 所以这类保存用 True 强制重载（见 MainWindow._on_reload_config）。
+    config_saved = Signal(bool)
 
     _ALL_KEYS = list(_ROW_KEY_MAP.keys())
 
@@ -407,7 +410,7 @@ class ConfigDialog(_BaseFramelessDialog):
         """创建"识别"标签页。
 
         布局分为两个分组：
-            功能设置 — 三阶段检测（含识别提示音）+ 段位检测（日常使用需调整的参数）
+            功能设置 — 对局事件检测（含识别提示音）+ 段位检测（日常使用需调整的参数）
             调试设置 — 保存截图、热键、诊断截图（排查问题时才需要）
         """
         # 内容较多，包裹在可滚动的区域中
@@ -423,7 +426,7 @@ class ConfigDialog(_BaseFramelessDialog):
         # ═══════════════════════════════════════════════════════════
         # 画面来源（全局）
         #
-        # 该设置影响全部获取游戏画面的功能：三阶段检测、段位检测、
+        # 该设置影响全部获取游戏画面的功能：对局事件检测、段位检测、
         # 识别成功/失败截图、截图热键与周期截图（tooltip 中有完整说明）
         # ═══════════════════════════════════════════════════════════
         g_cap = QGroupBox("画面来源")
@@ -436,7 +439,7 @@ class ConfigDialog(_BaseFramelessDialog):
         self._backend_combo.addItem("屏幕（mss，兼容模式）", "mss")
         self._backend_combo.setToolTip(
             "画面来源决定程序从哪读取游戏画面，影响全部识别与截图功能：\n"
-            "三阶段检测、段位检测、识别成功/失败截图、截图热键与周期截图。\n"
+            "对局事件检测、段位检测、识别成功/失败截图、截图热键与周期截图。\n"
             "\n"
             "游戏窗口（推荐）：直接读取游戏窗口画面，不受悬浮窗/其他窗口遮挡影响。\n"
             "屏幕（兼容模式）：读取屏幕上游戏窗口所在的区域，\n"
@@ -449,13 +452,13 @@ class ConfigDialog(_BaseFramelessDialog):
         lo.addWidget(g_cap)
 
         # ═══════════════════════════════════════════════════════════
-        # 检测（三阶段 + 段位图标，两个同级小节共用一个框）
+        # 检测（对局事件 + 段位图标，两个同级小节共用一个框）
         # ═══════════════════════════════════════════════════════════
         g_detect = QGroupBox("检测")
         gl_detect = QVBoxLayout(g_detect)
 
-        # ---- 小节：三阶段检测 ----
-        stage_title = QLabel("三阶段检测（硬币 · 先后攻 · 胜负 · 升降段可选）")
+        # ---- 小节：对局事件检测 ----
+        stage_title = QLabel("对局事件检测（硬币 · 先后攻 · 胜负 · 升降段可选）")
         stage_title.setStyleSheet("color: #666; font-size: 12px;")
         gl_detect.addWidget(stage_title)
 
@@ -489,13 +492,13 @@ class ConfigDialog(_BaseFramelessDialog):
         gl_detect.addLayout(r2)
 
         # ---- 识别提示音 ----
-        # 三阶段检测框内的最后一项：识别到硬币/先后攻/胜负时播放对应音效。
-        # 总开关 + 三段独立开关；自动检测触发，与热键总开关无关
+        # 对局事件检测框内的最后一项：识别到硬币/先后攻/胜负时播放对应音效。
+        # 总开关 + 三个子开关；自动检测触发，与热键总开关无关
         # （不参与 _on_hk_enabled_toggled 联动）
         self._snd_master = QCheckBox("识别到事件时播放提示音")
         self._snd_master.setToolTip(
             "识别到硬币、先后攻、胜负时播放对应提示音（音效位于 resource/sounds/）。\n"
-            "总开关：关闭时三段音效全部静音。"
+            "总开关：关闭时三个事件音效全部静音。"
         )
         self._snd_master.toggled.connect(self._on_detection_sound_toggled)
         gl_detect.addWidget(self._snd_master)
@@ -973,9 +976,10 @@ class ConfigDialog(_BaseFramelessDialog):
                 break
         toml_path.write_text("\n".join(lines), encoding="utf-8")
 
-        # 字体改的是 theme.toml，不属于 config.toml，_on_reload_config 检测不到
-        # 变化。这里直接通知主窗口重载整个主题，使字体立即生效。
-        self.config_saved.emit()
+        # 字体改的是 theme.toml，不属于 config.toml，主窗口按主题名判断
+        # 会认为"主题没变"而跳过重载——用 force=True 强制重载整个主题，
+        # 使字体立即生效（字体嵌在主题 QSS 里）。
+        self.config_saved.emit(True)
         self._update_font_display()
 
     # =========================================================================
@@ -1234,71 +1238,66 @@ class ConfigDialog(_BaseFramelessDialog):
         c = self._config
 
         # ---- 识别 ----
-        d = c.get("detection", {})
-        self._interval.setValue(d.get("interval", 0.3))
-        self._threshold.setValue(d.get("confidence_threshold", 0.8))
+        r = c.get("recognition", {})
+        self._interval.setValue(r.get("interval", 0.3))
+        self._threshold.setValue(r.get("confidence_threshold", 0.8))
         # 画面来源：按 data 值选中（未匹配到回退第一项 = printwindow）
-        backend_idx = self._backend_combo.findData(d.get("capture_backend", "printwindow"))
+        backend_idx = self._backend_combo.findData(r.get("capture_backend", "printwindow"))
         self._backend_combo.setCurrentIndex(backend_idx if backend_idx >= 0 else 0)
 
-        # ---- debug 段：调试与实验功能 ----
-        # 包含三个配置项：
-        #   save_screenshots (bool) — 保存检测截图
-        #   log_mode (bool)          — 日志模式主开关
-        #   log_scope (list[str])    — 日志记录范围
-        dbg = c.get("debug", {})
-        self._save_screenshots_cb.setChecked(dbg.get("save_screenshots", False))
-        self._auto_clear_cb.setChecked(dbg.get("auto_clear_screenshots", False))
+        # ---- 识别段：事件提示音 ----
+        # 总开关 + 三个子开关
+        self._snd_master.setChecked(r.get("detection_sound", False))
+        self._snd_coin.setChecked(r.get("coin_sound", False))
+        self._snd_turn.setChecked(r.get("turn_sound", False))
+        self._snd_result.setChecked(r.get("result_sound", False))
+        self._on_detection_sound_toggled(r.get("detection_sound", False))
+
+        # ---- 识别段：段位图标检测（rank_* 键）----
+        self._rank_enabled_cb.setChecked(r.get("rank_enabled", True))
+        self._rank_interval.setValue(r.get("rank_interval", 0.3))
+        self._rank_threshold.setValue(r.get("rank_confidence_threshold", 0.7))
+
+        # ---- 识别段：调试设置（截图 / 失败样本 / 热键）----
+        self._save_screenshots_cb.setChecked(r.get("save_screenshots", False))
+        self._auto_clear_cb.setChecked(r.get("auto_clear_screenshots", False))
         # "自动清除"子复选框的启用状态跟随主开关
         self._set_sub_disabled(self._auto_clear_cb,
-                                 not dbg.get("save_screenshots", False))
-        hk_on = dbg.get("hotkey_enabled", False)
+                                 not r.get("save_screenshots", False))
+        self._failure_samples_cb.setChecked(r.get("save_failure_samples", False))
+        self._failure_offset.setValue(r.get("failure_sample_offset", 0.2))
+        self._failure_offset.setEnabled(r.get("save_failure_samples", False))
+        hk_on = r.get("hotkey_enabled", False)
         self._hk_enabled.setChecked(hk_on)
         self._on_hk_enabled_toggled(hk_on)  # 联动启用/禁用热键输入框
-        self._hk_snapshot.setText(dbg.get("snapshot_hotkey", "Ctrl+Shift+S"))
-        self._hk_sound.setChecked(dbg.get("snapshot_sound", False))
-        self._hk_periodic.setText(dbg.get("periodic_hotkey", "Ctrl+Shift+D"))
-        self._hk_interval.setValue(dbg.get("periodic_interval", 0.5))
-        # 事件提示音（总开关 + 三段独立开关）
-        self._snd_master.setChecked(dbg.get("detection_sound", False))
-        self._snd_coin.setChecked(dbg.get("coin_sound", False))
-        self._snd_turn.setChecked(dbg.get("turn_sound", False))
-        self._snd_result.setChecked(dbg.get("result_sound", False))
-        self._on_detection_sound_toggled(dbg.get("detection_sound", False))
-        self._log_mode_cb.setChecked(dbg.get("log_mode", False))
+        self._hk_snapshot.setText(r.get("snapshot_hotkey", "Ctrl+Shift+S"))
+        self._hk_sound.setChecked(r.get("snapshot_sound", False))
+        self._hk_periodic.setText(r.get("periodic_hotkey", "Ctrl+Shift+D"))
+        self._hk_interval.setValue(r.get("periodic_interval", 0.5))
+
+        # ---- 系统（日志 / 通知 / 托盘 / 置信度显示）----
+        s = c.get("system", {})
+        self._log_mode_cb.setChecked(s.get("log_mode", False))
         # log_scope 是 TOML 数组，转成集合后分别设置三个子复选框
-        scopes = set(dbg.get("log_scope", ["status", "screenshots", "errors"]))
+        scopes = set(s.get("log_scope", ["status", "screenshots", "errors"]))
         self._log_scope_status.setChecked("status" in scopes)
         self._log_scope_screenshots.setChecked("screenshots" in scopes)
         self._log_scope_errors.setChecked("errors" in scopes)
         # 根据日志模式的初始状态设置子复选框的启用/禁用
-        self._on_log_mode_toggled(dbg.get("log_mode", False))
-        self._show_confidence_cb.setChecked(dbg.get("show_confidence", False))
-        self._failure_samples_cb.setChecked(dbg.get("save_failure_samples", False))
-        self._failure_offset.setValue(dbg.get("failure_sample_offset", 0.2))
-        self._failure_offset.setEnabled(dbg.get("save_failure_samples", False))
-
-        # ---- 通知与托盘 ----
-        n = c.get("notification", {})
-        self._notify_cb.setChecked(n.get("enabled", True))
-        self._notify_duration.setValue(n.get("duration", 1))
-        self._tray_minimize_cb.setChecked(n.get("minimize_to_tray", False))
-
-        # ---- 段位检测 ----
-        rk = c.get("rank_detection", {})
-        self._rank_enabled_cb.setChecked(rk.get("enabled", True))
-        self._rank_interval.setValue(rk.get("interval", 0.3))
-        self._rank_threshold.setValue(rk.get("confidence_threshold", 0.7))
+        self._on_log_mode_toggled(s.get("log_mode", False))
+        self._show_confidence_cb.setChecked(s.get("show_confidence", False))
+        self._notify_cb.setChecked(s.get("notification_enabled", True))
+        self._notify_duration.setValue(s.get("notification_duration", 1))
+        self._tray_minimize_cb.setChecked(s.get("minimize_to_tray", False))
 
         # ---- 外观 ----
         theme = c.get("appearance", {}).get("theme", "macaron")
         idx = self._theme_combo.findText(theme)
         if idx >= 0:
             self._theme_combo.setCurrentIndex(idx)
-        # 窗口尺寸
-        wd = c.get("window", {})
-        self._win_width.setValue(wd.get("width", 1300))
-        self._win_height.setValue(wd.get("height", 700))
+        # 窗口尺寸（外观段）
+        self._win_width.setValue(c.get("appearance", {}).get("window_width", 1300))
+        self._win_height.setValue(c.get("appearance", {}).get("window_height", 700))
 
         # ---- 剪贴板 ----
         cb = c.get("clipboard", {})
@@ -1357,23 +1356,20 @@ class ConfigDialog(_BaseFramelessDialog):
                                not fw.get("show_status", False))
 
         # ---- 数据 ----
+        dat = c.get("data", {})
         # 对方卡组预设列表
-        presets = c.get("opponent_decks", {}).get(
-            "presets", ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"])
+        presets = dat.get(
+            "deck_presets", ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"])
         self._preset_list.clear()
         for p in presets:
             if p.strip():
                 self._preset_list.addItem(p.strip())
         # 存储选项
-        self._daily_files.setChecked(
-            c.get("recorder", {}).get("daily_files", False)
-        )
-        self._remember_deck.setChecked(
-            c.get("recorder", {}).get("remember_last_deck", True)
-        )
+        self._daily_files.setChecked(dat.get("daily_files", False))
+        self._remember_deck.setChecked(dat.get("remember_last_deck", True))
 
         # 统计表格列选择：如果用户自定义过列，替换默认的 DualListWidget
-        saved_stats = c.get("stats", {}).get("columns")
+        saved_stats = dat.get("stats_columns")
         if saved_stats:
             from src.recorder import STATS_COLUMNS
             old = self._stats_dual
@@ -1446,35 +1442,39 @@ class ConfigDialog(_BaseFramelessDialog):
                    for i in range(self._preset_list.count())]
 
         data: dict = {
-            "detection": {
+            "recognition": {
+                "capture_backend": self._backend_combo.currentData(),
                 "interval": round(self._interval.value(), 1),
                 "confidence_threshold": round(self._threshold.value(), 2),
-                "capture_backend": self._backend_combo.currentData(),
-            },
-            "debug": {
+                "detection_sound": self._snd_master.isChecked(),
+                "coin_sound": self._snd_coin.isChecked(),
+                "turn_sound": self._snd_turn.isChecked(),
+                "result_sound": self._snd_result.isChecked(),
+                "rank_enabled": self._rank_enabled_cb.isChecked(),
+                "rank_interval": self._rank_interval.value(),
+                "rank_confidence_threshold": self._rank_threshold.value(),
                 "save_screenshots": self._save_screenshots_cb.isChecked(),
                 "auto_clear_screenshots": self._auto_clear_cb.isChecked(),
+                "save_failure_samples": self._failure_samples_cb.isChecked(),
+                "failure_sample_offset": round(self._failure_offset.value(), 2),
                 "hotkey_enabled": self._hk_enabled.isChecked(),
                 "snapshot_hotkey": self._hk_snapshot.text(),
                 "snapshot_sound": self._hk_sound.isChecked(),
                 "periodic_hotkey": self._hk_periodic.text(),
                 "periodic_interval": round(self._hk_interval.value(), 1),
+            },
+            "system": {
                 "log_mode": self._log_mode_cb.isChecked(),
                 "log_scope": self._get_log_scope(),
+                "notification_enabled": self._notify_cb.isChecked(),
+                "notification_duration": self._notify_duration.value(),
+                "minimize_to_tray": self._tray_minimize_cb.isChecked(),
                 "show_confidence": self._show_confidence_cb.isChecked(),
-                "save_failure_samples": self._failure_samples_cb.isChecked(),
-                "failure_sample_offset": round(self._failure_offset.value(), 2),
-                "detection_sound": self._snd_master.isChecked(),
-                "coin_sound": self._snd_coin.isChecked(),
-                "turn_sound": self._snd_turn.isChecked(),
-                "result_sound": self._snd_result.isChecked(),
             },
             "appearance": {
                 "theme": self._theme_combo.currentText(),
-            },
-            "window": {
-                "width": self._win_width.value(),
-                "height": self._win_height.value(),
+                "window_width": self._win_width.value(),
+                "window_height": self._win_height.value(),
             },
             "clipboard": {
                 "vertical_layout": self._cb_vert.isChecked(),
@@ -1482,9 +1482,6 @@ class ConfigDialog(_BaseFramelessDialog):
                 "columns": self._cb_dual.get_selected(),
             },
             "floating_window": {
-                "use_theme_bg": self._use_theme_bg.isChecked(),
-                "show_status": self._show_status_cb.isChecked(),
-                "show_status_compact": self._show_status_compact_cb.isChecked(),
                 "width": self._fw_w.value(),
                 "height": self._fw_h.value(),
                 "bg_color": self._fw_bg.color().name(),
@@ -1493,185 +1490,32 @@ class ConfigDialog(_BaseFramelessDialog):
                 "font_size": self._fw_fs.value(),
                 "font_family": self._fw_ff.currentFont().family(),
                 "rows": self._fw_dual.get_selected(),
+                "use_theme_bg": self._use_theme_bg.isChecked(),
+                "show_status": self._show_status_cb.isChecked(),
+                "show_status_compact": self._show_status_compact_cb.isChecked(),
             },
-            "opponent_decks": {
-                "presets": [p for p in presets if p],
-            },
-            "recorder": {
+            "data": {
+                "deck_presets": [p for p in presets if p],
+                "stats_columns": self._stats_dual.get_selected(),
                 "daily_files": self._daily_files.isChecked(),
                 "remember_last_deck": self._remember_deck.isChecked(),
-            },
-            "stats": {
-                "columns": self._stats_dual.get_selected(),
-            },
-            "notification": {
-                "enabled": self._notify_cb.isChecked(),
-                "duration": self._notify_duration.value(),
-                "minimize_to_tray": self._tray_minimize_cb.isChecked(),
-            },
-            "rank_detection": {
-                "enabled": self._rank_enabled_cb.isChecked(),
-                "interval": self._rank_interval.value(),
-                "confidence_threshold": self._rank_threshold.value(),
             },
         }
 
         self._write_toml(data)
-        self.config_saved.emit()
+        self.config_saved.emit(False)
         self.accept()
 
     @staticmethod
     def _write_toml(data: dict) -> None:
-        """把配置字典写成带注释的 config.toml 文件。"""
+        """把配置字典写成带注释的 config.toml 文件。
+
+        渲染规格（注释、段/键顺序、取值范围、默认值）统一在
+        src/config.py 的 render_config_toml —— 与首启自动生成的文件
+        逐字节一致，避免两处注释各自维护、互相漂移。
+        """
         path = get_project_root() / "config.toml"
-
-        def _kv(key: str, value, comment: str = "") -> None:
-            """写入 key = value 行，前面可选注释。"""
-            if comment:
-                lines.append(f"# {comment}")
-            if isinstance(value, bool):
-                lines.append(f"{key} = {str(value).lower()}")
-            elif isinstance(value, str):
-                lines.append(f'{key} = "{value}"')
-            elif isinstance(value, (int, float)):
-                lines.append(f"{key} = {value}")
-            elif isinstance(value, list):
-                if not value:
-                    lines.append(f"{key} = []")
-                else:
-                    items = ", ".join(f'"{x}"' for x in value)
-                    lines.append(f"{key} = [{items}]")
-
-        # 先提取所有段的值
-        d = data.get("detection", {})
-        w = data.get("window", {})
-        a = data.get("appearance", {})
-        od = data.get("opponent_decks", {})
-        r = data.get("recorder", {})
-        st = data.get("stats", {})
-        cb = data.get("clipboard", {})
-        fw = data.get("floating_window", {})
-        dbg = data.get("debug", {})
-        ntfy = data.get("notification", {})
-        rk = data.get("rank_detection", {})
-
-        lines: list[str] = [
-            "# MD Stats 配置文件（由设置 GUI 生成，也可手动编辑）",
-            "# 修改后点击主窗口的「设置 → 确定」即时生效。",
-            "# 所有时间单位为秒，所有颜色使用十六进制格式。",
-            "",
-            "# 图像识别相关配置",
-            "[detection]",
-        ]
-        _kv("interval", d.get("interval", 0.3),
-            "检测间隔（秒），推荐 0.3 ~ 1.0")
-        _kv("confidence_threshold", d.get("confidence_threshold", 0.8),
-            "匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90")
-        _kv("capture_backend", d.get("capture_backend", "printwindow"),
-            "画面来源：\"printwindow\" = 游戏窗口（默认，不受悬浮窗/其他窗口遮挡影响）；"
-            "\"mss\" = 屏幕（兼容模式）")
-
-        lines.extend(["", "# 调试与实验功能", "[debug]"])
-        _kv("save_screenshots", dbg.get("save_screenshots", False),
-            "检测到关键事件时保存截图到 screenshots/")
-        _kv("auto_clear_screenshots", dbg.get("auto_clear_screenshots", False),
-            "下一局开始时自动清除上一局的截图")
-        _kv("hotkey_enabled", dbg.get("hotkey_enabled", False),
-            "启用截图热键（全局热键，游戏全屏时也可用）")
-        _kv("snapshot_hotkey", dbg.get("snapshot_hotkey", "Ctrl+Shift+S"),
-            "单次截图热键")
-        _kv("snapshot_sound", dbg.get("snapshot_sound", False),
-            "单次截图的结果音效（成功: resource/sounds/snapshot.wav；失败: error.wav）")
-        _kv("periodic_hotkey", dbg.get("periodic_hotkey", "Ctrl+Shift+D"),
-            "周期截图热键（按一下开始，再按停止）")
-        _kv("periodic_interval", dbg.get("periodic_interval", 0.5),
-            "周期截图间隔（秒）")
-        _kv("log_mode", dbg.get("log_mode", False),
-            "开启日志模式：将运行信息写入 logs/ 目录")
-        _kv("log_scope", dbg.get("log_scope", ["status", "screenshots", "errors"]),
-            '日志记录范围："status"=状态栏消息, "screenshots"=截图事件, "errors"=错误信息')
-        _kv("show_confidence", dbg.get("show_confidence", False),
-            "状态栏显示检测置信度（段位图标 NCC、等级判读、三阶段检测分数）")
-        _kv("save_failure_samples", dbg.get("save_failure_samples", False),
-            "识别失败时诊断截图（匹配度接近阈值但未达标时自动截图 + 诊断数据）")
-        _kv("failure_sample_offset", dbg.get("failure_sample_offset", 0.2),
-            "偏移量（0.01 ~ 0.5）：记录下限 = 匹配阈值 − 偏移量，值越大越容易触发")
-        _kv("detection_sound", dbg.get("detection_sound", False),
-            "检测事件提示音总开关（关闭时硬币/先后攻/胜负三段音效全部静音）")
-        _kv("coin_sound", dbg.get("coin_sound", False),
-            "识别到硬币结果时播放提示音（音效: resource/sounds/coin.wav）")
-        _kv("turn_sound", dbg.get("turn_sound", False),
-            "识别到先后攻时播放提示音（音效: resource/sounds/turn.wav）")
-        _kv("result_sound", dbg.get("result_sound", False),
-            "识别到对局胜负时播放提示音（音效: resource/sounds/result.wav）")
-
-        lines.extend(["", "[window]"])
-        _kv("width", w.get("width", 1300), "主窗口宽度（像素）")
-        _kv("height", w.get("height", 700), "主窗口高度（像素）")
-
-        lines.extend(["", "# 界面外观", "[appearance]"])
-        _kv("theme", a.get("theme", "macaron"),
-            '主题文件夹名（内置: "dark" / "light" / "macaron"）')
-
-        lines.extend(["", "# 对方卡组预设", "[opponent_decks]"])
-        _kv("presets", od.get(
-            "presets", ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"]),
-            "记录表格下拉菜单的预设选项")
-
-        lines.extend(["", "# 数据存储", "[recorder]"])
-        _kv("daily_files", r.get("daily_files", False),
-            "是否按日期分文件存储 CSV")
-        _kv("remember_last_deck", r.get("remember_last_deck", True),
-            "启动时自动填入最近一次使用的卡组（从 CSV 读取）")
-
-        lines.extend(["", "# 统计表格显示", "[stats]"])
-        _kv("columns", st.get("columns", []),
-            "统计表格显示的列名列表（空 = 全部显示）")
-
-        lines.extend(["", "# 剪贴板复制行为", "[clipboard]"])
-        _kv("vertical_layout", cb.get("vertical_layout", False),
-            '竖排模式：true = 每行"key\\tvalue"，false = 横排 TSV')
-        _kv("scope", cb.get("scope", "all"),
-            '复制范围："current" = 当前卡组，"all" = 全部卡组')
-        _kv("columns", cb.get("columns", []),
-            "要复制的列名列表（空 = 默认 8 项）")
-
-        lines.extend(["", "# 系统通知", "[notification]"])
-        _kv("enabled", ntfy.get("enabled", True),
-            "对局结束时弹出系统气泡通知")
-        _kv("duration", ntfy.get("duration", 1),
-            "通知显示持续时间（秒）")
-        _kv("minimize_to_tray", ntfy.get("minimize_to_tray", False),
-            "关闭时隐藏到系统托盘（点 × 按钮时隐藏）")
-
-        lines.extend(["", "# 段位图标检测", "[rank_detection]"])
-        _kv("enabled", rk.get("enabled", True),
-            "是否启用段位图标检测")
-        _kv("interval", rk.get("interval", 0.3),
-            "检测间隔（秒），0.3 ~ 1.0")
-        _kv("confidence_threshold", rk.get("confidence_threshold", 0.7),
-            "匹配置信度阈值 (0.0~1.0)")
-
-        lines.extend(["", "# 悬浮统计窗", "[floating_window]"])
-        _kv("use_theme_bg", fw.get("use_theme_bg", False),
-            "是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）")
-        _kv("show_status", fw.get("show_status", False),
-            "在悬浮窗底部显示当前的状态消息（程序运行状态、识别进度等）")
-        _kv("show_status_compact", fw.get("show_status_compact", True),
-            "简洁模式：只显示\"——\"前面的部分（仅悬浮窗，不影响主窗口）")
-        _kv("width", fw.get("width", 250), "悬浮窗宽度（像素）")
-        _kv("height", fw.get("height", 330), "悬浮窗高度（像素）")
-        _kv("bg_color", fw.get("bg_color", "#bdef0a"), "背景色")
-        _kv("opacity", fw.get("opacity", 50), "不透明度 0-100")
-        _kv("font_size", fw.get("font_size", 20), "文字字号（像素）")
-        _kv("text_color", fw.get("text_color", "#000000"), "文字颜色")
-        _kv("font_family", fw.get("font_family", "Microsoft YaHei UI"),
-            "字体（Qt 从前往后找第一个可用的，含 macOS/Windows 回退）")
-        _kv("rows", fw.get("rows", []),
-            "显示数据行（空 = 默认 8 项）")
-
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
+        path.write_text(render_config_toml(data), encoding="utf-8")
 
     # =========================================================================
     # 卡组预设

@@ -27,11 +27,10 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QFrame, QGridLayout, QHBoxLayout,
-    QLabel, QPushButton, QVBoxLayout, QWidget,
+    QLabel, QPushButton, QVBoxLayout,
 )
 
 from ui._base_dialog import _BaseFramelessDialog
-from src.config import get_project_root
 from src.recorder import (
     compute_filtered_stats, get_available_rank_tiers, load_records,
 )
@@ -70,23 +69,8 @@ class RankStatsDialog(_BaseFramelessDialog):
         self.resize(450, 430)
         self.setObjectName("rankStatsDialog")
 
-        # ===== 对话框背景色（双模式） =====
-        # 把十六进制颜色 "#ffffff" 拆成 R、G、B 三个整数
-        r, g, b = int(widget_bg[1:3], 16), int(widget_bg[3:5], 16), int(widget_bg[5:7], 16)
-        # 半透明色：用于内容区，alpha≈70%（180/255），透出底下的背景图
-        bg_semi = f"rgba({r},{g},{b},180)"
-        # 对话框底色：有背景图就用 widget_bg，纯色主题用 main_bg 偏移色
-        dialog_bg = widget_bg
-        if self._bg_pixmap is None:
-            # 纯色主题 — 双向偏移 5 档，让对话框与主窗口产生深度辨识度
-            #   · 浅色主题（mr > 128）→ 变暗（-5）
-            #   · 深色主题（mr ≤ 128）→ 变亮（+5）
-            mr, mg, mb = int(main_bg[1:3], 16), int(main_bg[3:5], 16), int(main_bg[5:7], 16)
-            shift = 5
-            dr = mr + shift if mr <= 128 else mr - shift
-            dg = mg + shift if mg <= 128 else mg - shift
-            db = mb + shift if mb <= 128 else mb - shift
-            dialog_bg = f"#{dr:02x}{dg:02x}{db:02x}"
+        # ===== 对话框背景色（双模式，规则见基类 _themed_background_colors） =====
+        dialog_bg, content_bg = self._themed_background_colors(widget_bg, main_bg)
         self.setStyleSheet(f"#rankStatsDialog {{ background: {dialog_bg}; }}")
         self._apply_dwm_round_corners()
 
@@ -94,7 +78,7 @@ class RankStatsDialog(_BaseFramelessDialog):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)  # 无边距，内容撑满整个弹窗
         outer.setSpacing(0)                    # 标题栏和内容区之间无间隙
-        outer.addWidget(self._make_titlebar()) # 顶部：自定义标题栏
+        outer.addWidget(self._make_titlebar("  详细统计信息", "rankStatsTitle"))
 
         # 内容区：用 QFrame 而非 QWidget。
         # 为什么是 QFrame？纯 QWidget 对样式表 rgba() 解析不稳定（会报
@@ -103,16 +87,10 @@ class RankStatsDialog(_BaseFramelessDialog):
         content = QFrame()
         content.setFrameShape(QFrame.Shape.NoFrame)  # 不画边框，只做容器
         content.setObjectName("rankStatsContent")     # QSS 选择器用的 ID
-        if self._bg_pixmap is not None:
-            # 背景图主题：半透明背景，透出底层背景图
-            content.setStyleSheet(
-                f"#rankStatsContent {{ background: {bg_semi}; border: none; }}"
-            )
-        else:
-            # 纯色主题：实色背景
-            content.setStyleSheet(
-                f"#rankStatsContent {{ background: {widget_bg}; border: none; }}"
-            )
+        # 内容区背景：背景图主题半透明 / 纯色主题实色（见 _themed_background_colors）
+        content.setStyleSheet(
+            f"#rankStatsContent {{ background: {content_bg}; border: none; }}"
+        )
         outer.addWidget(content)
 
         # 内容区内部布局
@@ -189,47 +167,6 @@ class RankStatsDialog(_BaseFramelessDialog):
         # 首屏加载：填充下拉框 + 显示统计数据
         self._populate_decks()
         self._refresh()
-
-    # =========================================================================
-    # 标题栏
-    # =========================================================================
-
-    def _make_titlebar(self) -> QWidget:
-        """创建顶部自定义标题栏：标题文字 + 关闭按钮，支持拖拽移动窗口。
-
-        与 ConfigDialog._make_titlebar 结构一致：
-            - 背景透明，让下方内容区的背景透出
-            - 关闭按钮复用 TitleBar 的 _TitleBarButton（自带 hover 图标切换）
-            - 关闭按钮 hover 色从主题配色表读取
-        """
-        bar = QWidget()
-        bar.setObjectName("rankStatsTitle")         # QSS 选择器 ID
-        bar.setFixedHeight(36)                      # 固定 36px 高度
-        bar.setStyleSheet("#rankStatsTitle { background: transparent; }")
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(10, 0, 4, 0)      # 左 10px 右 4px
-
-        title = QLabel("  详细统计信息")
-        title.setStyleSheet("font-size: 13px; font-weight: bold; "
-                            "background: transparent; border: none;")
-        layout.addWidget(title)
-        layout.addStretch()  # 把标题顶到左边，关闭按钮推到右边
-
-        # 关闭按钮：复用主窗口标题栏的按钮组件
-        from ui.titlebar import _TitleBarButton
-        assets = get_project_root() / "resource"
-        btn_close = _TitleBarButton("title_close", assets, bar)
-        close_hover = self._colors.get("btn_close_hover", "#e74c3c")
-        # 默认透明，hover 变红
-        btn_close.setStyleSheet(
-            "QPushButton { background: transparent; border: 1px solid transparent; "
-            "border-radius: 4px; }"
-            f"QPushButton:hover {{ background-color: {close_hover}; "
-            f"border-color: {close_hover}; }}"
-        )
-        btn_close.clicked.connect(self.reject)  # reject() = 关闭弹窗
-        layout.addWidget(btn_close)
-        return bar
 
     # =========================================================================
     # 数据加载与下拉框填充

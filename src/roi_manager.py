@@ -5,7 +5,7 @@
 ================================================================================
 
 项目中有两套位置缓存系统，格式不统一：
-    1. roi.toml（每分辨率一个）— 三阶段检测的搜索区域 [x, y, w, h]
+    1. roi.toml（每分辨率一个）— 对局事件检测的搜索区域 [x, y, w, h]
     2. rank_positions.toml（全局一个）— 段位图标的屏幕位置 [x, y, size]
 
 两套系统的核心需求相同：记住"目标在屏幕上的位置"，下次跳过全图搜索。
@@ -17,7 +17,7 @@
 
     from src.roi_manager import load_regions, save_region, load_icon_positions, save_icon_position
 
-    # 三阶段 ROI
+    # 对局事件 ROI
     regions = load_regions("1920x1080")  # → {"coin": (700,630,500,200), ...}
     save_region("1920x1080", "coin", 700, 630, 500, 200)
 
@@ -38,7 +38,7 @@ _TEMPLATES_DIR = get_project_root() / "resource" / "templates"
 _ICON_POSITIONS_PATH = _TEMPLATES_DIR / "rankicons" / "rank_positions.toml"
 
 # ---------------------------------------------------------------------------
-# 三阶段 ROI（roi.toml）
+# 对局事件 ROI（roi.toml）
 # ---------------------------------------------------------------------------
 
 def load_regions(resolution: str) -> dict[str, tuple[int, int, int, int]]:

@@ -1,6 +1,6 @@
 """音效播放模块 — 基于标准库 winsound 播放 resource/sounds/ 下的 wav 音效。
 
-供截图提示音及后续其他提示音场景（如三段循环音效）复用。
+供截图提示音及后续其他提示音场景（如对局事件音效）复用。
 新增音效只需两步：
     1. 放入 resource/sounds/{name}.wav（标准 PCM wav，来源与许可注明在
        该目录 README.md）

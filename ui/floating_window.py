@@ -107,7 +107,7 @@ class FloatingWindow(QWidget):
     quit_requested = Signal()         # 右键 → "退出程序"
     toggle_start_stop = Signal()      # 右键 → "启动" / "停止"
     delete_last_requested = Signal()  # 右键 → "删除最后记录"
-    # 三段手动按钮（stage 0/1/2 对应不同语义）
+    # 手动按钮（stage 0/1/2 对应不同语义）
     manual_action = Signal(str)       # 参数: "win" / "lose" / "draw" / "undo"
 
     _DEFAULT_W = 250

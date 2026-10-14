@@ -65,10 +65,10 @@
                                                       (刷新记录表格)
 
 ================================================================================
-三阶段状态机（手动/自动共用）
+对局状态机（手动/自动共用）
 ================================================================================
 
-无论是自动识别还是手动录入，都使用统一的三阶段状态机:
+无论是自动识别还是手动录入，都使用统一的对局状态机:
 
     _stage == 0 → 等待硬币 (赢硬币/输硬币)
     _stage == 1 → 等待先后攻 (先攻/后攻)
@@ -144,6 +144,7 @@ lazy from ui.config_dialog import ConfigDialog
 lazy from ui.main_window_ui import Ui_MainWindow  # 构造主界面时才加载（uic 生成文件）
 from src.theme_loader import Theme, load_theme
 from ui.floating_window import FloatingWindow, _ROW_KEY_MAP
+from ui.message_dialog import ask_yes_no, show_message
 from ui.theme_manager import ThemeManager
 from ui.titlebar import TitleBar
 
@@ -544,6 +545,77 @@ def _require_widget(widget, name: str):
 
 
 # =============================================================================
+# 配置警告展示工具
+#
+# load_config 检出"值无法识别/超界，已被修正或忽略"的配置项时，会通过
+# warnings 出参给出条目（结构见 src/config.py），主窗口据此在状态栏提示
+# 并提供点击查看明细。状态栏只放定长汇总句（宽度随窗口变化，放不下
+# 明细），明细（原值 → 采用值）在弹窗与日志里逐条展示。
+# =============================================================================
+
+
+def _config_warning_status_text(n: int) -> str:
+    """状态栏汇总句（定长：长度只随处数的位数变化，不随条目/值长度变化）。"""
+    return f"⚠ {n} 处配置值已自动修正"
+
+
+def _config_warning_status(warnings: list[dict]) -> str:
+    """状态栏汇总句：整体解析失败用独立句（与计数句互斥），其余用计数句。"""
+    if any(w.get("action") == "file_error" for w in warnings):
+        return "⚠ config.toml 解析失败，已按内置默认配置运行"
+    return _config_warning_status_text(len(warnings))
+
+
+def _fmt_cfg_value(value) -> str:
+    """格式化配置原始值用于展示。
+
+    字符串加引号；布尔按 TOML 文件里的写法小写（true/false）；
+    其余类型直接 str。
+    """
+    if isinstance(value, str):
+        return f'"{value}"'
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _cfg_warning_action(w: dict) -> str:
+    """生成"如何处理该值"的展示文本（对应 config.py 的 action 取值）。
+
+    "ignore" 条目通常带模板默认值（展示为"已改用内置默认值 X"）；
+    自定义键的坏行没有默认值可显示，退回"已忽略"。
+    """
+    if w.get("action") == "fallback":
+        return f'已按 "{w["used"]}"'
+    if w.get("used") is not None:
+        return f'已改用内置默认值 {_fmt_cfg_value(w["used"])}'
+    return "已忽略"
+
+
+def _config_warning_lines(warnings: list[dict]) -> list[str]:
+    """把警告条目拼成弹窗明细行。
+
+    - 普通条目（值被忽略/替换）：两行 —— 配置位置 + 原值→处理方式；
+      带 "line" 字段（语法错误被跳过的行）时在位置后标注行号
+    - file_error 条目（整体解析失败）：三行 —— 位置 + 解析错误 + 兜底说明
+    """
+    lines: list[str] = []
+    for w in warnings:
+        if w.get("action") == "file_error":
+            pos = f'（第 {w["line"]} 行）' if w.get("line") else ""
+            lines.append(f'• {w["section"]}{pos}')
+            lines.append(f'    解析错误：{w["raw"]}')
+            lines.append("    无法安全跳过，已按内置默认配置运行")
+            continue
+        title = f'{w["section"]}.{w["key"]}' if w.get("key") else w["section"]
+        if w.get("line"):
+            title += f'（第 {w["line"]} 行，语法错误）'
+        lines.append(f"• {title}")
+        lines.append(f'    原值 {_fmt_cfg_value(w["raw"])} → {_cfg_warning_action(w)}')
+    return lines
+
+
+# =============================================================================
 # MainWindow
 # =============================================================================
 
@@ -600,26 +672,69 @@ class MainWindow(QMainWindow):
             _log.write("STATUS", msg)
         self._show_status(msg)
 
-    def _ask_yes_no(self, title: str, text: str) -> bool:
-        """弹出"是/否"确认对话框。
+    # =========================================================================
+    # 配置警告提示
+    #
+    # load_config 检出配置问题时（手改 config.toml 写错值、写出范围、或
+    # 语法损坏），启动/重载后：
+    #   1. 状态栏显示定长汇总句——不列条目与值，因为状态栏宽度随窗口变化、
+    #      非换行 QLabel 的长文本会把窗口最小宽度顶大甚至溢出，明细放不下
+    #   2. 点击状态栏 → 弹窗逐条展示明细（原值 → 采用值 / 解析错误行号），
+    #      任意长度都能容纳
+    #   3. 日志模式开启且勾选「错误」范围时，明细逐条写入日志
+    #
+    # 语法损坏分两级：坏行可安全跳过的走计数句（该键回退默认值），
+    # 结构性错误整体兜底时用独立句（"解析失败"）。所有修正都只改内存、
+    # 不写回文件，所以每次启动/重载都会重新检出并提示，直到用户手改文件
+    # 或在设置里点「确定」（按修正后的值写回文件）。
+    # =========================================================================
 
-        统一使用 QMessageBox，确保所有确认弹窗外观一致。
-        默认按钮为"否"，防止误操作。
+    def _log_config_warnings(self) -> None:
+        """把配置警告明细写入日志（ERROR 标签 → 受「错误」范围勾选过滤）。"""
+        for w in self._config_warnings:
+            _log.write("ERROR",
+                       f'配置值已自动修正: {w["section"]}.{w["key"]} '
+                       f'原值 {_fmt_cfg_value(w["raw"])} → {_cfg_warning_action(w)}')
+
+    def _update_config_warning_ui(self) -> None:
+        """按当前警告列表同步状态栏交互状态（手型光标 + 悬停提示）。
+
+        警告为空（如配置文件已修正后重载）时恢复普通状态。
+        """
+        if self._config_warnings:
+            self._status_label.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._status_label.setToolTip("点击查看配置问题详情")
+        else:
+            self._status_label.unsetCursor()
+            self._status_label.setToolTip("")
+
+    def _show_config_warning_dialog(self) -> None:
+        """点击状态栏 → 弹出全部配置问题明细（原值 → 采用值 / 解析错误）。
+
+        使用主题化消息弹窗（ui/message_dialog），风格与「详细统计」一致。
+        """
+        n = len(self._config_warnings)
+        lines: list[str]
+        if any(w.get("action") == "file_error" for w in self._config_warnings):
+            lines = ["config.toml 解析失败，本次运行使用内置默认配置：", ""]
+            lines += _config_warning_lines(self._config_warnings)
+            # 修复前别走「设置 → 确定」：那会把设置界面里的默认值写回文件，
+            # 覆盖掉用户原始内容（含他可能想手工修复的部分）
+            lines += ["", "提示：修正文件内容后重启程序即可恢复；",
+                      "修复前请勿在设置里点「确定」（会覆盖原始文件）。"]
+        else:
+            lines = [f"以下 {n} 处配置值无法识别或超出允许范围，已自动修正：", ""]
+            lines += _config_warning_lines(self._config_warnings)
+        show_message(self, "配置检查", "\n".join(lines))
+
+    def _ask_yes_no(self, title: str, text: str) -> bool:
+        """弹出「是/否」确认弹窗（主题化，风格与「详细统计」一致）。
+
+        默认按钮为「否」，防止误操作。
 
         返回: True=用户选了"是"，False=选了"否"或关闭窗口。
         """
-        msg = QMessageBox(self)
-        msg.setWindowTitle(title)
-        msg.setText(text)
-        msg.setWindowIcon(self.windowIcon())
-        msg.setIcon(QMessageBox.Icon.Warning)
-        msg.setStandardButtons(
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        msg.setDefaultButton(QMessageBox.StandardButton.No)  # 默认选中"否"
-        msg.button(QMessageBox.StandardButton.Yes).setText("是")
-        msg.button(QMessageBox.StandardButton.No).setText("否")
-        return msg.exec() == QMessageBox.StandardButton.Yes
+        return ask_yes_no(self, title, text)
 
     # =========================================================================
     # 窗口外观 — DWM 阴影 + 边缘 resize + 无边框窗口
@@ -711,9 +826,19 @@ class MainWindow(QMainWindow):
         return None  # 不在边缘区域
 
     def eventFilter(self, watched, event) -> bool:
-        """将子控件（content widget）的鼠标事件转发给窗口级 resize 检测。"""
+        """子控件事件过滤：窗口边缘 resize 转发 + 状态栏配置警告点击。
+
+        过滤对象有两个：content widget（resize 检测）与状态栏标签
+        （有配置警告时点击弹出明细）。状态栏标签创建晚于 content 的
+        过滤器安装，用 getattr 兜底避免早期事件访问到不存在的属性。
+        """
         from PySide6.QtCore import QEvent
         t = event.type()
+        if watched is getattr(self, "_status_label", None):
+            if t == QEvent.Type.MouseButtonRelease and self._config_warnings:
+                self._show_config_warning_dialog()
+                return True
+            return False
         if t == QEvent.Type.MouseMove:
             # PySide6 类型存根中 QEvent 没有 globalPosition，但 MouseEvent 有
             self._update_resize_cursor(event.globalPosition().toPoint())
@@ -813,13 +938,17 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # ---- 1. 加载配置 ----
-        self._config: dict = load_config()
+        # _config_warnings 收集"值无法识别/超界，已自动修正"的配置项，
+        # 供状态栏提示（点击查看详情）与日志记录使用
+        self._config_warnings: list[dict] = []
+        self._config: dict = load_config(self._config_warnings)
         # 如果用户开启了日志模式，初始化日志系统
         # 注意：init_log 多次调用只生效第一次（日志路径不变），
         #       set_scopes 每次都会更新（支持热重载时调整记录范围）
-        if self._config.get("debug", {}).get("log_mode", False):
+        if self._config.get("system", {}).get("log_mode", False):
             _log.init_log(get_project_root() / "logs")
-            _log.set_scopes(set(self._config.get("debug", {}).get("log_scope", ["status", "screenshots", "errors"])))
+            _log.set_scopes(set(self._config.get("system", {}).get("log_scope", ["status", "screenshots", "errors"])))
+            self._log_config_warnings()
 
         # ---- 1b. 初始化系统托盘（气泡通知） ----
         icon_path = get_project_root() / "resource" / "icons" / "app_icon.png"
@@ -854,7 +983,7 @@ class MainWindow(QMainWindow):
         self._worker = None              # 后台识别线程（StatsWorker）
         self._wait_timer: QTimer | None = None# 等待游戏启动的轮询定时器
         self._info_timer: QTimer | None = None# 右下角信息标签刷新定时器
-        self._match = MatchState()               # 三阶段对局状态机
+        self._match = MatchState()               # 对局状态机
         self._rank_worker = None  # 段位图标检测线程（延迟导入）
         self._rank_icon_result: dict | None = None        # 段位图标检测结果暂存
         self._notifying = False                         # 防_result_detected重入
@@ -942,8 +1071,8 @@ class MainWindow(QMainWindow):
 
         # ---- 11. 窗口基础设置 ----
         self.resize(
-            self._config.get("window", {}).get("width", 1300),
-            self._config.get("window", {}).get("height", 700),
+            self._config.get("appearance", {}).get("window_width", 1300),
+            self._config.get("appearance", {}).get("window_height", 700),
         )
         self._restore_main_window_pos()          # 恢复上次窗口位置
 
@@ -1019,7 +1148,7 @@ class MainWindow(QMainWindow):
         # 列10: 段位升降 (升段/降段/空白=普通局)
         self.record_table.setItemDelegateForColumn(10, ComboDelegate(["升段", "降段", ""], self.record_table))
         # 列6: 对方卡组 (可编辑下拉 — 预设值来自 config.toml)
-        opponent_presets: list[str] = self._config.get("opponent_decks", {}).get(
+        opponent_presets: list[str] = self._config.get("data", {}).get(
             "presets", ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"])
         self.record_table.setItemDelegateForColumn(5, EditableComboDelegate(opponent_presets, self.record_table))
 
@@ -1060,7 +1189,7 @@ class MainWindow(QMainWindow):
         self._reload_tables()
 
         # ---- 23. 若开启"记住上次卡组"，自动填入 ----
-        if self._config.get("recorder", {}).get("remember_last_deck", True):
+        if self._config.get("data", {}).get("remember_last_deck", True):
             last_deck = self._last_record_deck()
             if last_deck:
                 self._deck_input.setText(last_deck)
@@ -1071,6 +1200,15 @@ class MainWindow(QMainWindow):
         # ---- 24. 上次退出时悬浮窗开着 → 自动恢复 ----
         if read_app_state().get("float_visible", False):
             self._on_toggle_float()
+
+        # ---- 25. 配置警告提示 ----
+        # 必须是 __init__ 的最后一步：热键注册失败等消息会占用状态栏，
+        # 放在最后才能保证警告句不被覆盖（用户点《启动》后会被 worker
+        # 消息顶掉属预期——点击入口与悬停提示仍在，下次启动还会提示）
+        self._status_label.installEventFilter(self)
+        self._update_config_warning_ui()
+        if self._config_warnings:
+            self._show_status(_config_warning_status(self._config_warnings))
 
 
     # =========================================================================
@@ -1200,7 +1338,7 @@ class MainWindow(QMainWindow):
             return
 
         cfg = load_config()
-        daily = cfg.get("recorder", {}).get("daily_files", False)
+        daily = cfg.get("data", {}).get("daily_files", False)
         if daily:
             today = datetime.now().strftime("%Y-%m-%d")
             default_name = f"new_data-{today}.csv"
@@ -1339,7 +1477,7 @@ class MainWindow(QMainWindow):
         # 独立于主管线运行，以可配置间隔持续检测双方段位图标。
         # rank_icon_detected 信号在双方都检测到后发射，
         # 主窗口收到信号后更新状态栏 + 暂存结果等对局结束写入 CSV。
-        if self._config.get("rank_detection", {}).get("enabled", True):
+        if self._config.get("recognition", {}).get("rank_enabled", True):
             self._rank_worker = RankWorker(failure_mgr=failure_mgr)
             self._rank_worker.rank_icon_detected.connect(self._on_rank_icon_detected)
             self._rank_worker.partial_update.connect(self._on_rank_partial)
@@ -1422,11 +1560,11 @@ class MainWindow(QMainWindow):
         """播放检测事件提示音（总开关与对应分段开关均开启时）。
 
         三种事件共用：coin（硬币结果）、turn（先后攻）、result（对局胜负）。
-        总开关为 debug.detection_sound，分段开关按 name 推导——
-        如 name="coin" 对应 debug.coin_sound，音效文件 resource/sounds/coin.wav。
+        总开关为 recognition.detection_sound，分段开关按 name 推导——
+        如 name="coin" 对应 recognition.coin_sound，音效文件 resource/sounds/coin.wav。
         """
-        dbg = self._config.get("debug", {})
-        if dbg.get("detection_sound", False) and dbg.get(f"{name}_sound", False):
+        rcfg = self._config.get("recognition", {})
+        if rcfg.get("detection_sound", False) and rcfg.get(f"{name}_sound", False):
             _sound.play_sound(name)
 
     def _on_coin_win_detected(self, coin_win: str) -> None:
@@ -1464,7 +1602,7 @@ class MainWindow(QMainWindow):
         self._rank_icon_result = rank_info
 
         # 格式化段位字符串用于状态栏显示
-        show_conf = self._config.get("debug", {}).get("show_confidence", False)
+        show_conf = self._config.get("system", {}).get("show_confidence", False)
         def _fmt(key: str) -> str:
             rank = rank_info.get(f"{key}_rank") or "?"
             if rank == "?":
@@ -1494,7 +1632,7 @@ class MainWindow(QMainWindow):
         - 此槽仅更新状态栏显示，不存储结果（_rank_icon_result 不变）
         - 等双方齐备后 rank_icon_detected 发射时才正式存储
         """
-        show_conf = self._config.get("debug", {}).get("show_confidence", False)
+        show_conf = self._config.get("system", {}).get("show_confidence", False)
 
         def _partial_fmt(key: str) -> str:
             rank = rank_info.get(f"{key}_rank")
@@ -1736,7 +1874,7 @@ class MainWindow(QMainWindow):
             result_text: 结果中文文案 ('胜'/'负')
             new_record:  add_record 返回值，None 表示写入失败
         """
-        if not self._config.get("notification", {}).get("enabled", True):
+        if not self._config.get("system", {}).get("notification_enabled", True):
             return
         if self._notifying:                         # 防重入：避免同一结果弹两次气泡
             return
@@ -1751,7 +1889,7 @@ class MainWindow(QMainWindow):
         msg = f"{coin_text}{rank_text} → {turn_text} → {result_text}"
         if new_record is None:
             msg += "\n⚠ CSV 文件被占用，记录已暂存"
-        duration = self._config.get("notification", {}).get("duration", 1) * 1000
+        duration = self._config.get("system", {}).get("notification_duration", 1) * 1000
         self._tray.showMessage("MD Stats", msg,
                                QSystemTrayIcon.MessageIcon.Warning if new_record is None
                                else QSystemTrayIcon.MessageIcon.Information,
@@ -1842,7 +1980,7 @@ class MainWindow(QMainWindow):
         stats = compute_stats(records)
 
         # 读取用户选择的统计列（空列表 = 显示全部）
-        selected = self._config.get("stats", {}).get("columns")
+        selected = self._config.get("data", {}).get("stats_columns")
         columns = selected if selected else list(STATS_COLUMNS)
 
         self.stats_table.setColumnCount(len(columns))
@@ -2299,19 +2437,28 @@ class MainWindow(QMainWindow):
     # 如果 worker 正在运行，需要用新配置（如新的检测间隔）重启 worker。
     # =========================================================================
 
-    def _on_reload_config(self) -> None:
+    def _on_reload_config(self, force: bool = False) -> None:
         """重新加载 config.toml，包括主题、检测参数等所有配置。
 
         执行流程:
-            1. 主题没变 → 跳过重载（省 1s+），只刷新非主题配置
+            1. 主题没变 → 跳过重载（省 1s+），只刷新非主题配置；
+               force=True 时例外——即使主题名没变也强制重载（更换字体
+               写的是主题文件 theme.toml，字体嵌在主题 QSS 里，按名字
+               判断会漏掉这次变化）
             2. 主题变了 → 重新加载 QSS + QPalette + 图片 + 标题栏
             3. Worker 正在运行 → 停止后用新配置重启
             4. 更新状态栏和信息标签
+
+        Args:
+            force: 强制重载主题（见流程第 1 步）。对话框的 config_saved
+                信号携带此参数：普通保存 False、更换字体后 True。
         """
-        self._config = load_config()                       # 重新读取 config.toml
-        if self._config.get("debug", {}).get("log_mode", False):
+        self._config_warnings = []
+        self._config = load_config(self._config_warnings)   # 重新读取 config.toml
+        if self._config.get("system", {}).get("log_mode", False):
             _log.init_log(get_project_root() / "logs")
-            _log.set_scopes(set(self._config.get("debug", {}).get("log_scope", ["status", "screenshots", "errors"])))
+            _log.set_scopes(set(self._config.get("system", {}).get("log_scope", ["status", "screenshots", "errors"])))
+            self._log_config_warnings()
         self._snapshot_ctrl.sync_hotkeys()
         self._snapshot_ctrl.update_config(self._config)    # 同步新配置到截图控制器
         self._tm._config = self._config                    # 同步到 ThemeManager
@@ -2319,9 +2466,10 @@ class MainWindow(QMainWindow):
         init_active_csv_from_config()
         self._update_info_label()
 
-        # 主题没变 → 跳过加载（马卡龙读 10 张 PNG 可能上百 ms）
+        # 主题没变 → 跳过加载（马卡龙读 10 张 PNG 可能上百 ms）；
+        # force=True（更换字体后）时不跳过，见 _on_reload_config 说明
         old_theme_name = getattr(self._tm, '_theme_name', '')
-        if new_theme_name != old_theme_name:
+        if force or new_theme_name != old_theme_name:
             self._tm._theme_name = new_theme_name
             theme = load_theme(new_theme_name)
             self._tm.colors = theme.colors
@@ -2347,7 +2495,7 @@ class MainWindow(QMainWindow):
         self._rank_delegate_opponent._colors = new_colors
 
         # 对方卡组预设更新（列5 = 对方卡组）
-        new_presets = self._config.get("opponent_decks", {}).get(
+        new_presets = self._config.get("data", {}).get(
             "presets", ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"])
         self.record_table.setItemDelegateForColumn(5, EditableComboDelegate(new_presets, self.record_table))
 
@@ -2368,9 +2516,12 @@ class MainWindow(QMainWindow):
         if worker_was_running:
             self._start_worker()
         self._reload_tables()
-        self._show_status(
-            "配置已重新载入" + (" 并重启识别" if worker_was_running else "")
-        )
+        self._update_config_warning_ui()
+        status = "配置已重新载入" + (" 并重启识别" if worker_was_running else "")
+        if self._config_warnings:
+            # 重载场景在"配置已重新载入"后接短句，控制整句长度
+            status += "  |  " + _config_warning_status(self._config_warnings)
+        self._show_status(status)
 
     # =========================================================================
     # 右下角信息标签（定时刷新）
@@ -2387,8 +2538,8 @@ class MainWindow(QMainWindow):
             - 检测间隔和匹配置信度（来自 config.toml）
             - Master Duel 窗口状态（未启动 / 已最小化 / 分辨率 W×H）
         """
-        interval = self._config.get("detection", {}).get("interval", 0.3)
-        threshold = self._config.get("detection", {}).get("confidence_threshold", 0.8)
+        interval = self._config.get("recognition", {}).get("interval", 0.3)
+        threshold = self._config.get("recognition", {}).get("confidence_threshold", 0.8)
 
         size_info: str
         _hwnd, size, is_min = get_window_status("masterduel")
@@ -2516,7 +2667,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         """关闭窗口：最小化到托盘模式 → 隐藏，否则正常退出。"""
-        if self._config.get("notification", {}).get("minimize_to_tray", False):
+        if self._config.get("system", {}).get("minimize_to_tray", False):
             self.hide()
             self._tray.showMessage("MD Stats", "已最小化到托盘，程序在后台继续运行",
                                    QSystemTrayIcon.MessageIcon.Information, 1500)

@@ -71,7 +71,7 @@ class FailureSampleManager:
         是因为字体变了？UI 布局变了？还是模板本身需要更新？
 
     两个线程共用同一个实例：
-        - StatsWorker: 三阶段检测（8 个 target）
+        - StatsWorker: 对局事件检测（8 个 target）
         - RankWorker: 段位图标检测（2 个 target）
 
     工作流程示例（以硬币检测为例）：
@@ -104,9 +104,9 @@ class FailureSampleManager:
         """
         if config is None:
             config = load_config()
-        dbg = config.get("debug", {})
-        self._enabled: bool = dbg.get("save_failure_samples", False)
-        self._offset: float = dbg.get("failure_sample_offset", 0.2)
+        rcfg = config.get("recognition", {})
+        self._enabled: bool = rcfg.get("save_failure_samples", False)
+        self._offset: float = rcfg.get("failure_sample_offset", 0.2)
 
         # 内存缓存：{target: (confidence, file_stem)}
         # 生命周期 = 一轮对局，clear_cache() 清空
@@ -144,7 +144,7 @@ class FailureSampleManager:
 
         Args:
             target: 识别项名称。
-                    三阶段检测用: coin_win, coin_lose, turn_first, turn_second,
+                    对局事件检测用: coin_win, coin_lose, turn_first, turn_second,
                                 result_win, result_lose, rank_up, rank_down
                     段位检测用: my_rank_icon, opponent_rank_icon
             confidence: 本次匹配置信度 (0.0~1.0)。
@@ -153,8 +153,8 @@ class FailureSampleManager:
             screenshot: 完整游戏截图（BGR 格式 numpy 数组）。
                         保留整张截图而不是裁剪 ROI，便于定位 UI 整体变化。
             threshold: 当前识别阈值。
-                       三阶段检测用 detection.confidence_threshold（默认 0.80），
-                       段位图标用 rank_detection.confidence_threshold（默认 0.70）。
+                       对局事件检测用 recognition.confidence_threshold（默认 0.80），
+                       段位图标用 recognition.rank_confidence_threshold（默认 0.70）。
             extra_meta: 额外元数据字典，会写入同名的 .toml 文件。可包含：
                 all_scores       — {模板名: 分数}，所有候选模板的匹配分
                 matched_template — 实际匹配到的模板文件名

@@ -76,11 +76,11 @@ class RankWorker(QThread):
         """
         super().__init__(parent)
         cfg = load_config()
-        rank_cfg = cfg.get("rank_detection", {})  # 读取 [rank_detection] 段
-        self._interval: float = rank_cfg.get("interval", 0.3)
-        self._threshold: float = rank_cfg.get("confidence_threshold", 0.7)
-        # 画面来源与主识别管线共用同一配置（detection.capture_backend）
-        self._backend: str = cfg.get("detection", {}).get("capture_backend", "printwindow")
+        rcfg = cfg.get("recognition", {})  # 识别段（段位检测用其中的 rank_* 键）
+        self._interval: float = rcfg.get("rank_interval", 0.3)
+        self._threshold: float = rcfg.get("rank_confidence_threshold", 0.7)
+        # 画面来源与主识别管线共用同一配置（recognition.capture_backend）
+        self._backend: str = rcfg.get("capture_backend", "printwindow")
         self._running = False               # 线程主循环开关
         self._paused = False                # 暂停标志（一局结束到下一局开始之间）
         self._result: dict | None = None    # 暂存当前这局的检测结果
@@ -229,7 +229,7 @@ class RankWorker(QThread):
                 return
 
             # ---- 失败样本记录：段位图标两项 ----
-            # 和三阶段检测同理：每个 target 独立提交自己的置信度分数。
+            # 和对局事件检测同理：每个 target 独立提交自己的置信度分数。
             # 段位图标比较特殊——除了图标 NCC 匹配分数外，
             # 还有"等级数字识别"（I~V 的列投影），其分数也写入 TOML 供诊断。
             if self._failure_mgr is not None and result:

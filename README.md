@@ -7,7 +7,7 @@
 
 ## 功能
 
-- **自动识别** — 定时读取游戏画面 + OpenCV 模板匹配，自动检测对局三阶段（硬币→先后攻→胜负平），同步检测段位升降
+- **自动识别** — 定时读取游戏画面 + OpenCV 模板匹配，自动检测对局事件（硬币 → 先后攻 → 胜负平），同步检测段位升降
 - **段位图标检测** — 独立线程持续读取游戏画面，NCC 模板匹配 + RGBA 背景合成 + 列投影数字识别，自动识别双方段位（新手 ~ 巅峰，大师及以下区分 I~V），写入 CSV `己方段位`/`对方段位` 列，可在设置中关闭
 - **段位图标显示** — 记录表格中段位列自动显示段位图标缩略图 + 段位名称（需将图标 PNG 放入 `rankicons/` 目录，缺失时降级为纯文字）
 - **段位快速编辑** — 双击段位单元格弹出按钮矩阵面板，两次点击即可选好段位，也支持输入自定义文字
@@ -24,7 +24,7 @@
 - **调试工具** — 可选的截图保存（成功/失败双模式）、诊断数据和日志，方便排查问题
 - **CSV 占用保护** — WPS/Excel 占用 CSV 时记录自动暂存到内存，状态栏持续告警，关闭占用程序后自动补写
 - **系统通知** — 对局结束时弹出气泡通知，支持关闭时隐藏到系统托盘
-- **提示音** — 单次截图结果音效（成功播提示音、失败播警示音）与三段检测事件提示音（硬币/先后攻/胜负，可分别开关），音效文件位于 `resource/sounds/`，可自行替换
+- **提示音** — 单次截图结果音效（成功播提示音、失败播警示音）与对局事件提示音（识别到硬币/先后攻/胜负时播放，可分别开关），音效文件位于 `resource/sounds/`，可自行替换
 
 ## 截图
 
@@ -122,47 +122,54 @@ python main.py
 
 点击主界面的「设置」按钮打开图形化设置弹窗，可视化编辑所有配置项。也可以直接编辑 `config.toml` 后点击「设置 → 确定」重载。
 
+配置按设置界面标签页分组（顺序一致）：`recognition`=识别、`appearance`=外观、`clipboard`=剪贴板、`floating_window`=悬浮窗、`data`=数据、`system`=系统；键的顺序与界面上的控件顺序一致，每项注释中写明了允许范围与可选值。
+
 | 配置项 | 说明 | 默认值 |
 | --- | --- | --- |
-| `detection.interval` | 检测间隔（秒） | `0.3` |
-| `detection.confidence_threshold` | 匹配置信度阈值 (0.0~1.0) | `0.8` |
-| `detection.capture_backend` | 画面来源：`"printwindow"` 游戏窗口（不受悬浮窗/其他窗口遮挡影响）/ `"mss"` 屏幕（兼容模式） | `"printwindow"` |
-| `window.width` / `height` | 主窗口尺寸（像素） | `1300` / `700` |
+| `recognition.capture_backend` | 画面来源：`"printwindow"` 游戏窗口（不受悬浮窗/其他窗口遮挡影响）/ `"mss"` 屏幕（兼容模式） | `"printwindow"` |
+| `recognition.interval` | 检测间隔（秒），允许 0.1 ~ 10 | `0.3` |
+| `recognition.confidence_threshold` | 匹配置信度阈值 (0~1) | `0.8` |
+| `recognition.detection_sound` | 对局事件提示音总开关（硬币 / 先后攻 / 胜负） | `false` |
+| `recognition.coin_sound` | 识别到硬币结果时播放提示音 | `false` |
+| `recognition.turn_sound` | 识别到先后攻时播放提示音 | `false` |
+| `recognition.result_sound` | 识别到对局胜负时播放提示音 | `false` |
+| `recognition.rank_enabled` | 启用段位图标检测 | `true` |
+| `recognition.rank_interval` | 段位检测间隔（秒），允许 0.1 ~ 2 | `0.3` |
+| `recognition.rank_confidence_threshold` | 段位匹配置信度阈值，允许 0.5 ~ 0.95 | `0.7` |
+| `recognition.save_screenshots` | 识别成功时保存截图（开启后写入 `screenshots/`） | `false` |
+| `recognition.auto_clear_screenshots` | 下一局开始时自动清除上一局的截图 | `false` |
+| `recognition.save_failure_samples` | 识别失败时诊断截图（匹配度接近阈值时自动截图 + 诊断数据到 `screenshots/debug/`） | `false` |
+| `recognition.failure_sample_offset` | 触发偏移（0.01~0.5，记录下限 = 匹配阈值 − 偏移量） | `0.2` |
+| `recognition.hotkey_enabled` | 启用截图热键（全局热键） | `false` |
+| `recognition.snapshot_hotkey` | 单次截图热键 | `"Ctrl+Shift+S"` |
+| `recognition.snapshot_sound` | 单次截图结果音效（成功提示音 / 失败警示音） | `false` |
+| `recognition.periodic_hotkey` | 周期截图热键 | `"Ctrl+Shift+D"` |
+| `recognition.periodic_interval` | 周期截图间隔（秒），允许 0.1 ~ 10 | `0.5` |
 | `appearance.theme` | 界面主题，填写 `resource/themes/` 下的文件夹名 | `"macaron"` |
-| `opponent_decks.presets` | 对方卡组预设列表 | `["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"]` |
-| `debug.save_screenshots` | 识别成功时保存截图（开启后写入 `screenshots/`） | `false` |
-| `debug.auto_clear_screenshots` | 下一局开始时自动清除上一局的截图 | `false` |
-| `debug.hotkey_enabled` | 启用截图热键（全局热键） | `false` |
-| `debug.snapshot_hotkey` | 单次截图热键 | `"Ctrl+Shift+S"` |
-| `debug.snapshot_sound` | 单次截图结果音效（成功提示音 / 失败警示音） | `false` |
-| `debug.detection_sound` | 检测事件提示音总开关（硬币 / 先后攻 / 胜负） | `false` |
-| `debug.coin_sound` | 识别到硬币结果时播放提示音 | `false` |
-| `debug.turn_sound` | 识别到先后攻时播放提示音 | `false` |
-| `debug.result_sound` | 识别到对局胜负时播放提示音 | `false` |
-| `debug.periodic_hotkey` | 周期截图热键 | `"Ctrl+Shift+D"` |
-| `debug.periodic_interval` | 周期截图间隔（秒） | `0.5` |
-| `debug.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
-| `debug.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
-| `debug.show_confidence` | 状态栏显示检测置信度 | `false` |
-| `debug.save_failure_samples` | 识别失败时诊断截图（匹配度接近阈值时自动截图 + 诊断数据到 `screenshots/debug.bak`） | `false` |
-| `debug.failure_sample_offset` | 触发偏移（0.01~0.5，记录下限 = 匹配阈值 − 偏移量） | `0.2` |
-| `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
-| `stats.columns` | 统计表格显示的列（空 = 全部） | 全部 16 列 |
-| `recorder.remember_last_deck` | 启动时自动填入上次使用的卡组 | `true` |
-| `rank_detection.enabled` | 启用段位图标检测 | `true` |
-| `rank_detection.interval` | 段位检测间隔（秒） | `0.3` |
-| `rank_detection.confidence_threshold` | 段位匹配置信度阈值 | `0.7` |
+| `appearance.window_width` / `window_height` | 主窗口尺寸（像素） | `1300` / `700` |
 | `clipboard.vertical_layout` | 剪贴板竖排模式 | `false` |
 | `clipboard.scope` | 复制范围（`"all"` / `"current"`） | `"all"` |
+| `clipboard.columns` | 要复制的列名列表（空 = 默认 8 项） | 默认 8 项 |
 | `floating_window.width` / `height` | 悬浮窗尺寸（高度低于内容时自动扩容） | `250` / `330` |
-| `notification.enabled` | 对局结束系统气泡通知 | `true` |
-| `notification.duration` | 通知显示时长（秒） | `1` |
-| `notification.minimize_to_tray` | 关闭时隐藏到系统托盘 | `false` |
-| `floating_window.bg_color` | 悬浮窗背景色 | `#bdef0a` |
+| `floating_window.bg_color` | 悬浮窗背景色（十六进制 `#RRGGBB`） | `#bdef0a` |
 | `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
+| `floating_window.text_color` | 悬浮窗文字颜色（十六进制 `#RRGGBB`） | `#000000` |
+| `floating_window.font_size` | 悬浮窗文字字号（像素），允许 8 ~ 72 | `20` |
+| `floating_window.font_family` | 悬浮窗字体 | `"Microsoft YaHei UI"` |
+| `floating_window.rows` | 悬浮窗显示数据行 | 8 项默认 |
+| `floating_window.use_theme_bg` | 悬浮窗使用主题背景图（false = 纯色） | `false` |
 | `floating_window.show_status` | 悬浮窗底部显示状态消息 | `false` |
 | `floating_window.show_status_compact` | 状态消息简洁模式 | `true` |
-| `floating_window.rows` | 悬浮窗显示数据行 | 8 项默认 |
+| `data.deck_presets` | 对方卡组预设列表 | `["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"]` |
+| `data.stats_columns` | 统计表格显示的列（空 = 全部） | 全部 16 列 |
+| `data.daily_files` | 是否按日期分 CSV 文件 | `false` |
+| `data.remember_last_deck` | 启动时自动填入上次使用的卡组 | `true` |
+| `system.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
+| `system.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
+| `system.notification_enabled` | 对局结束系统气泡通知 | `true` |
+| `system.notification_duration` | 通知显示时长（秒），允许 1 ~ 30 | `1` |
+| `system.minimize_to_tray` | 关闭时隐藏到系统托盘 | `false` |
+| `system.show_confidence` | 状态栏显示检测置信度 | `false` |
 
 ### 日志模式快速上手
 
@@ -226,7 +233,7 @@ MD_Stats/
 │   ├── failure_sample_manager.py # 最佳失败样本管理器
 │   ├── hotkey_listener.py   # 全局热键监听（独立线程）
 │   ├── logger.py            # 日志模块（线程安全 + 作用域过滤）
-│   ├── match_state.py       # 对局三阶段状态机
+│   ├── match_state.py       # 对局状态机
 │   ├── rank_icons.py        # 段位图标加载与缓存（为 UI 提供缩放后图标）
 │   ├── recorder.py          # CSV 读写与统计计算
 │   ├── roi_manager.py       # 统一位置缓存管理（roi.toml + rank_positions.toml）

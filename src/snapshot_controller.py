@@ -28,7 +28,8 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from src.config import get_project_root
 lazy from src import capture as _cap  # 首次截图时才加载（连带 mss/numpy/win32gui）
 lazy from src import sound as _sound  # 首次播放提示音时才加载（连带 winsound）
-from src.hotkey_listener import HotkeyListener, parse_hotkey
+from src.hotkey_listener import HotkeyListener
+from src.hotkey_parse import parse_hotkey
 
 
 class SnapshotController(QObject):
@@ -54,7 +55,7 @@ class SnapshotController(QObject):
 
     def sync_hotkeys(self) -> None:
         """根据 hotkey_enabled 开关同步热键注册/注销。独立于检测启停。"""
-        if self._config.get("debug", {}).get("hotkey_enabled", False):
+        if self._config.get("recognition", {}).get("hotkey_enabled", False):
             self._register_hotkeys()
         else:
             self.unregister_hotkeys()
@@ -69,7 +70,7 @@ class SnapshotController(QObject):
 
     def _register_hotkeys(self) -> None:
         """注册全局热键。被占用时状态栏提示。"""
-        cfg = self._config.get("debug", {})
+        cfg = self._config.get("recognition", {})
         hotkeys = []
         for hid, name in [(1, "snapshot_hotkey"), (2, "periodic_hotkey")]:
             combo = cfg.get(name, "")
@@ -91,7 +92,7 @@ class SnapshotController(QObject):
             self._toggle_periodic()
 
     def _play_snapshot_feedback(self, ok: bool) -> None:
-        """播放单次截图的结果音效（debug.snapshot_sound 开启时）。
+        """播放单次截图的结果音效（recognition.snapshot_sound 开启时）。
 
         结果驱动：成败在截图完成后才确定，故音效在结果确定时播放——
         成功 → 提示音（resource/sounds/snapshot.wav）；
@@ -99,7 +100,7 @@ class SnapshotController(QObject):
         → 警示音（resource/sounds/error.wav）。
         仅热键 1（单次截图）触发，周期截图不播放。播放细节见 src/sound.py。
         """
-        if not self._config.get("debug", {}).get("snapshot_sound", False):
+        if not self._config.get("recognition", {}).get("snapshot_sound", False):
             return
         if ok:
             _sound.play_sound("snapshot")
@@ -124,7 +125,7 @@ class SnapshotController(QObject):
                 周期截图复用本方法时保持 False，不播放。
         """
         ok = False
-        backend = self._config.get("detection", {}).get("capture_backend", "printwindow")
+        backend = self._config.get("recognition", {}).get("capture_backend", "printwindow")
         try:
             screenshot = _cap.capture_window("masterduel", backend=backend)
             ss_dir = get_project_root() / "screenshots"
@@ -157,7 +158,7 @@ class SnapshotController(QObject):
     def _toggle_periodic(self) -> None:
         """热键 2 回调：切换周期截图开关。
 
-        第一次按 → 启动 QTimer（间隔取 debug.periodic_interval，默认 0.5s）
+        第一次按 → 启动 QTimer（间隔取 recognition.periodic_interval，默认 0.5s）
         第二次按 → 停止定时器，不再截图
         """
         if self._periodic_timer is not None:
@@ -165,7 +166,7 @@ class SnapshotController(QObject):
             self._periodic_timer = None
             self.status_message.emit("周期截图已停止")
             return
-        interval = self._config.get("debug", {}).get("periodic_interval", 0.5)
+        interval = self._config.get("recognition", {}).get("periodic_interval", 0.5)
         timer = QTimer(self)
         timer.timeout.connect(self._periodic_tick)
         timer.start(int(interval * 1000))

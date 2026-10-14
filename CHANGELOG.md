@@ -1,5 +1,56 @@
 # 更新日志
 
+## v1.16.0 (2026-10-14)
+
+### 新功能
+- **配置问题提示**：`config.toml` 中"值无法识别 / 超出允许范围"的项不再静默——启动/重载后状态栏提示 `⚠ N 处配置值已自动修正`，点击状态栏可查看逐条明细（原值 → 采用值）；日志模式开启且勾选「错误」范围时同步写入日志。每次启动重复提示，直到配置文件被修正
+- **配置文件语法损坏不再导致程序无法启动**：值忘加引号等语法错误会逐行跳过（其余配置照常生效，状态栏提示被跳过的行号），无法安全跳过时整体回退内置默认配置并在状态栏明示；任何情况下不会修改你的配置文件
+- **热键配置校验**：`snapshot_hotkey` / `periodic_hotkey` 填写无法解析的值（如 `"123abc"`）时回退默认热键并提示——此前这类值会被静默跳过注册，按键无反应且无任何提示
+
+### 行为变更（破坏性，升级前请备份 config.toml）
+- **配置文件结构重组**：改为与设置界面标签页一一对应（`recognition`=识别 / `appearance`=外观 / `clipboard`=剪贴板 / `floating_window`=悬浮窗 / `data`=数据 / `system`=系统，顺序与界面一致），键的顺序与界面控件顺序一致，重名项加前缀区分。**旧版配置项不会被读取**（程序按默认值运行，个性化设置会丢失）——迁移方式二选一：
+  1. 按下方对照表手工迁移（推荐，保留个性化设置）
+  2. 删除 `config.toml` 让程序重新生成默认配置
+  窗口布局（`.app_state.toml`）不受影响。
+
+  | 旧位置 | 新位置 |
+  | --- | --- |
+  | `detection.interval` / `confidence_threshold` / `capture_backend` | `recognition.*`（同名） |
+  | `rank_detection.enabled` | `recognition.rank_enabled` |
+  | `rank_detection.interval` | `recognition.rank_interval` |
+  | `rank_detection.confidence_threshold` | `recognition.rank_confidence_threshold` |
+  | `debug.save_screenshots` / `auto_clear_screenshots` | `recognition.*`（同名） |
+  | `debug.save_failure_samples` / `failure_sample_offset` | `recognition.*`（同名） |
+  | `debug.hotkey_enabled` / `snapshot_hotkey` / `snapshot_sound` / `periodic_hotkey` / `periodic_interval` | `recognition.*`（同名） |
+  | `debug.detection_sound` / `coin_sound` / `turn_sound` / `result_sound` | `recognition.*`（同名） |
+  | `debug.log_mode` / `log_scope` / `show_confidence` | `system.*`（同名） |
+  | `notification.enabled` | `system.notification_enabled` |
+  | `notification.duration` | `system.notification_duration` |
+  | `notification.minimize_to_tray` | `system.minimize_to_tray` |
+  | `appearance.theme` | `appearance.theme`（不变） |
+  | `window.width` / `height` | `appearance.window_width` / `window_height` |
+  | `opponent_decks.presets` | `data.deck_presets` |
+  | `stats.columns` | `data.stats_columns` |
+  | `recorder.daily_files` / `remember_last_deck` | `data.*`（同名） |
+  | `clipboard.*` / `floating_window.*` | 不变 |
+
+- **数值超界不再夹到边界**：手改 config.toml 写出范围的值（如置信度 `1000`）改为回退内置默认值（此前夹到边界值——置信度夹到 1.0 会造成识别全失效，比回退默认危险），并在状态栏提示
+
+### 修复
+- **布尔开关校验收紧**：开关类配置写成数字或字符串此前会被静默接受——最坑的是 `turn_sound = "false"` 这种写法（非空字符串为真，功能会反直觉地保持「开启」）；现在与其它非法值统一处理：回退默认值并在状态栏提示（开关清单自动从渲染规格推导，无需维护）
+- **设置里「更换字体」现在立即生效**：此前更换界面字体后，主窗口要重启程序或切换主题才真正应用（弹窗内的字体预览已更新，容易误判为已生效）——原因是主窗口按"主题名没变"跳过了主题重载，而字体嵌在主题 QSS 里；现在这类保存会强制重载主题
+
+### 改进
+- **配置警告 / 确认弹窗改为主题化外观**：此前「配置检查」与各处的「是/否」确认用的是系统原生消息框（标题栏、配色与主题脱节）；现改为与「详细统计」同款的主题化弹窗——自定义标题栏与关闭按钮、背景图/纯色主题适配、正文纯文本且超长可滚动、可选中复制。组件抽取为通用模块 `ui/message_dialog.py`
+- **术语更新**：原「三阶段检测」（部分文档写作「三段检测」）统一更名为**「对局事件检测」**——它检测的是对局中发生的事件（硬币、先后攻、胜负，升降段可选），新名称与其实际含义一致；设置界面、README、排错文档同步更新
+- **config.toml 注释补全取值说明**：每项注明允许范围 / 可选值——数值项的范围与程序强制范围（同设置界面滑块）自动同步，不会随代码更新而过期；布尔项标注 `true / false`，颜色 / 热键 / 主题等注明格式与可选值
+- **配置文件渲染唯一来源**：首次自动生成的 `config.toml` 与设置界面保存的版本由同一规格渲染，注释与段顺序完全一致（此前两套注释各自维护、已经互相漂移）
+
+### 代码质量
+- 配置文件的渲染规格（注释 / 段键顺序 / 默认值）集中为一张规格表；验证脚本扩展到 58 项断言（含渲染规格、语法修复、警告收集、日志过滤的端到端校验），另新增「更换字体立即生效」「消息弹窗」两个回归验证脚本
+- 弹窗共享件上提到基类：标题栏（标题 + 主题化关闭按钮）与主题底色计算抽为 `_BaseFramelessDialog` 的公共方法，「详细统计」与通用消息弹窗共用同一实现
+- 热键解析拆分为共享纯模块 `src/hotkey_parse.py`（配置校验与注册路径共用同一份解析规则）
+
 ## v1.15.0 (2026-10-14)
 
 ### 新功能

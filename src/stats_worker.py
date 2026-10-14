@@ -32,7 +32,7 @@ Qt 的 Signal/Slot 机制是线程安全的：
     由主线程在处理事件时执行对应的槽函数。子线程不用关心 GUI 更新细节。
 
 ================================================================================
-状态机（三阶段顺序识别）
+状态机（对局事件顺序识别）
 ================================================================================
 
 Master Duel 的一局对局有三个阶段，出现顺序是固定的：
@@ -164,11 +164,11 @@ class StatsWorker(QThread):
         """初始化工作线程。
 
         从 config.toml 读取以下参数：
-            detection.interval              — 检测间隔（秒），默认 0.3
-            detection.confidence_threshold   — 匹配置信度阈值 (0.0~1.0)，默认 0.8
-            debug.save_screenshots           — 是否保存检测截图，默认 false
-            debug.log_mode                  — 是否开启日志模式，默认 false
-            debug.log_scope                 — 日志记录范围列表，默认全开
+            recognition.interval             — 检测间隔（秒），默认 0.3
+            recognition.confidence_threshold — 匹配置信度阈值 (0.0~1.0)，默认 0.8
+            recognition.save_screenshots     — 是否保存检测截图，默认 false
+            system.log_mode                  — 是否开启日志模式，默认 false
+            system.log_scope                 — 日志记录范围列表，默认全开
 
         如果日志模式开启，同时初始化日志系统（init_log + set_scopes）。
         日志文件路径为项目根目录下的 logs/ 文件夹，文件名为 mdstats_YYYYMMDD.log。
@@ -189,23 +189,24 @@ class StatsWorker(QThread):
         self._failure_mgr = failure_mgr
         cfg = load_config()
         # ---- 识别参数 ----
-        self._interval: float = cfg.get("detection", {}).get("interval", 0.3)
-        self._threshold: float = cfg.get("detection", {}).get("confidence_threshold", 0.8)
-        self._backend: str = cfg.get("detection", {}).get("capture_backend", "printwindow")
+        rcfg = cfg.get("recognition", {})
+        self._interval: float = rcfg.get("interval", 0.3)
+        self._threshold: float = rcfg.get("confidence_threshold", 0.8)
+        self._backend: str = rcfg.get("capture_backend", "printwindow")
 
-        # ---- 调试/实验功能 ----
+        # ---- 调试/实验功能（截图与日志） ----
         # 注意：save_screenshots 控制是否把截图写到磁盘（PNG 文件），
         #       log_mode 控制是否写日志文件（logs/*.log），两者是独立开关。
         #       截图事件的日志记录由 log_scope 中的 "screenshots" 控制，
         #       即使用户没勾选"截图事件"作用域，只要 save_screenshots=true，
         #       截图文件仍然会保存，只是不会在日志中写"已保存"消息。
-        dbg = cfg.get("debug", {})
-        self._save_screenshots: bool = dbg.get("save_screenshots", False)
-        self._auto_clear: bool = dbg.get("auto_clear_screenshots", False)
-        self._show_confidence: bool = dbg.get("show_confidence", False)
-        if dbg.get("log_mode", False):
-            _log.init_log(get_project_root() / "logs")       # 初始化日志文件
-            _log.set_scopes(set(dbg.get("log_scope",         # 设置记录范围
+        self._save_screenshots: bool = rcfg.get("save_screenshots", False)
+        self._auto_clear: bool = rcfg.get("auto_clear_screenshots", False)
+        syscfg = cfg.get("system", {})
+        self._show_confidence: bool = syscfg.get("show_confidence", False)
+        if syscfg.get("log_mode", False):
+            _log.init_log(get_project_root() / "logs")          # 初始化日志文件
+            _log.set_scopes(set(syscfg.get("log_scope",        # 设置记录范围
                 ["status", "screenshots", "errors"])))
 
         self._running = False        # True = 线程正在运行（由 start() 后的 run() 设置）

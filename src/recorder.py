@@ -105,7 +105,7 @@ def init_active_csv_from_config() -> None:
     应在程序启动和配置重载时调用。
     """
     cfg = load_config()
-    daily = cfg.get("recorder", {}).get("daily_files", False)
+    daily = cfg.get("data", {}).get("daily_files", False)
     if daily:
         today = datetime.now().strftime("%Y-%m-%d")
         filename = f"data-{today}.csv"
