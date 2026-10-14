@@ -106,7 +106,7 @@ class FailureSampleManager:
             config = load_config()
         dbg = config.get("debug", {})
         self._enabled: bool = dbg.get("save_failure_samples", False)
-        self._offset: float = dbg.get("failure_sample_offset", 0.10)
+        self._offset: float = dbg.get("failure_sample_offset", 0.2)
 
         # 内存缓存：{target: (confidence, file_stem)}
         # 生命周期 = 一轮对局，clear_cache() 清空

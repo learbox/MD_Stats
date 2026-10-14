@@ -79,14 +79,14 @@ class ThemeManager:
 
         调用流程：
             1. 传入主题名（如 "dark"、"macaron"）
-            2. theme_loader.load_theme() 读取 themes/{name}/ 下的文件
+            2. theme_loader.load_theme() 读取 resource/themes/{name}/ 下的文件
             3. 解析出 colors、pixmaps、titlebar 配置
             4. 缓存到 self 的属性中
 
         返回 Theme 对象，MainWindow 用它来设置全局 QSS 样式表。
 
         参数:
-            theme_name — themes/ 下的文件夹名
+            theme_name — resource/themes/ 下的文件夹名
         """
         theme = load_theme(theme_name)
         self.colors = theme.colors
@@ -345,7 +345,7 @@ class ThemeManager:
         # ---- 第 3 步：纯色主题 → 涂色 ----
         base = self.colors.get("widget_bg", "#ffffff")        # 表格主体背景色
         header_bg = self.colors.get("main_bg", "#f5f6fa")     # 表头背景色
-        theme = self._config.get("appearance", {}).get("theme", "dark")
+        theme = self._config.get("appearance", {}).get("theme", "macaron")
         if theme != "dark":
             # dark 主题的表头用 main_bg 就够暗了，不需要额外区分
             # 非 dark 主题用 statusbar_bg 让表头和表格主体有视觉层次

@@ -20,7 +20,7 @@
 依赖:
     - PySide6:     Qt 的 Python 绑定，提供 GUI 框架
     - opencv-python: 图像识别（模板匹配）
-    - mss:         高性能屏幕截图（DirectX）
+    - mss:         高性能屏幕截图（GDI BitBlt 抓屏）
     - numpy:       数组/图像数据处理
     - pywin32:     窗口定位与客户区获取
 """

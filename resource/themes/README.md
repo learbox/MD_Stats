@@ -4,7 +4,7 @@
 
 ## 快速开始
 
-1. 在 `themes/` 下新建一个文件夹（如 `themes/my-theme/`）
+1. 在 `resource/themes/` 下新建一个文件夹（如 `resource/themes/my-theme/`）
 2. 复制任一内置主题的 `theme.toml` 和 `style.qss` 到你的文件夹
 3. 在 `config.toml` 中设置 `theme = "my-theme"`
 4. 修改 `theme.toml` 中的颜色值 → 启动即可看到效果
@@ -12,7 +12,7 @@
 ## 文件夹结构
 
 ```
-themes/my-theme/
+resource/themes/my-theme/
 ├── theme.toml          # 主题配置（颜色、字体、图片、标题栏）
 ├── style.qss           # QSS 样式模板（无需修改，直接复制内置主题的）
 └── assets/             # 资源文件（可选）
@@ -288,7 +288,7 @@ OFL（SIL Open Font License）允许免费使用、嵌入、再分发，但字�
 
 拿到 AI 生成的配色后，让它直接写入文件：
 
-> 把以下颜色配置更新到 themes/my-theme/theme.toml 的 [colors] 部分，保留原有注释和分组结构，只替换颜色值：
+> 把以下颜色配置更新到 resource/themes/my-theme/theme.toml 的 [colors] 部分，保留原有注释和分组结构，只替换颜色值：
 >
 > 【粘贴 AI 生成的配色】
 
@@ -312,7 +312,7 @@ AI：以下是完整配色方案：
     widget_bg = "#150535"
     ...
 
-你：把这套配色更新到 themes/cyberpunk/theme.toml
+你：把这套配色更新到 resource/themes/cyberpunk/theme.toml
 
 AI：（直接修改文件，保留注释结构）
 ```

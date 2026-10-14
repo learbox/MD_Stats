@@ -5,18 +5,20 @@
 ================================================================================
 
     [detection]
-    interval = 0.3              # 截图间隔（秒），推荐 0.3 ~ 1.0
+    interval = 0.3              # 检测间隔（秒），推荐 0.3 ~ 1.0
     confidence_threshold = 0.8  # 模板匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90
+    capture_backend = "printwindow"  # 画面来源: "printwindow"=游戏窗口（默认）
+                                     #           "mss"=屏幕（兼容模式，旧行为）
 
     [window]
     width = 1300                # 主窗口宽度（像素）
     height = 700                # 主窗口高度（像素）
 
     [appearance]
-    theme = "macaron"           # 界面主题，填 themes/ 下的文件夹名
+    theme = "macaron"           # 界面主题，填 resource/themes/ 下的文件夹名
                                 # 内置: "dark"（暗色沉浸）、"light"（亮色清爽）、
                                 #       "macaron"（马卡龙水彩）
-                                # 自定义: 建 themes/my-theme/，填 "my-theme"
+                                # 自定义: 建 resource/themes/my-theme/，填 "my-theme"
 
     [opponent_decks]
     presets = ["炎兽", "闪刀姬"]  # 对方卡组预设（记录表格下拉菜单选项）
@@ -35,7 +37,7 @@
     show_status_compact = true    #   简洁模式：只显示"——"前面部分（需勾选 show_status）
     width = 250                   # 悬浮窗宽度（像素）
     height = 300                  # 悬浮窗高度（像素）
-    bg_color = "#BDEF0A"          # 悬浮窗背景色（十六进制 RGB）
+    bg_color = "#bdef0a"          # 悬浮窗背景色（十六进制 RGB）
     opacity = 50                  # 不透明度 0-100
     font_size = 20                # 悬浮窗文字字号（像素）
     text_color = "#000000"        # 悬浮窗文字颜色
@@ -61,7 +63,7 @@
     log_scope = ["status", "screenshots", "errors"]  # 日志记录范围
     show_confidence = false       # 状态栏显示匹配置信度
     save_failure_samples = false  # 识别失败时保存诊断截图+数据
-    failure_sample_offset = 0.2   #   诊断触发偏移量
+    failure_sample_offset = 0.2   #   记录下限偏移量（阈值−该值；0.01~0.5）
 
     [notification]
     enabled = true                # 对局结束时弹出系统气泡通知
@@ -70,7 +72,7 @@
 
     [rank_detection]
     enabled = true                # 是否启用段位图标检测
-    interval = 0.3                # 截图间隔（秒），0.3 ~ 1.0
+    interval = 0.3                # 检测间隔（秒），0.3 ~ 1.0
     confidence_threshold = 0.7    # 匹配置信度阈值 (0.0~1.0)
 
 """
@@ -97,30 +99,72 @@ def _get_config_path() -> Path:
     return get_project_root() / "config.toml"
 
 
-# 各段 interval 的合法范围（下限与设置界面的 QDoubleSpinBox 一致）。
-# 手改 config.toml 可能写入 0/负数（_sleep 不睡 → 忙循环烧 CPU）
-# 或非法类型（工作线程 TypeError 退出），这里在读取时统一规范化。
-_INTERVAL_LIMITS = {
-    "detection": (0.1, 10.0),
-    "rank_detection": (0.2, 10.0),
+# 全部数值配置项的合法范围（键 = (配置段, 项名)；范围与设置界面对应滑块完全一致）。
+#
+# 手改 config.toml 可能写入各种非法值，读取时统一规范化：
+#   - interval 类写 0/负数 → _sleep 不睡，忙循环烧 CPU
+#   - 置信度类超界 → 匹配永远达不到阈值（识别全失效）或全量误报
+#   - 尺寸/时长类超界 → UI 显示被静默夹紧、保存时配置被悄悄改写
+#   - 非数值类型 → 工作线程 TypeError 退出
+_RANGED_LIMITS: dict[tuple[str, str], tuple[float, float]] = {
+    # 三阶段检测
+    ("detection", "interval"): (0.1, 10.0),
+    ("detection", "confidence_threshold"): (0.0, 1.0),
+    # 段位检测
+    ("rank_detection", "interval"): (0.1, 2.0),
+    ("rank_detection", "confidence_threshold"): (0.5, 0.95),
+    # 调试
+    ("debug", "periodic_interval"): (0.1, 10.0),
+    ("debug", "failure_sample_offset"): (0.01, 0.50),
+    # 通知
+    ("notification", "duration"): (1, 30),
+    # 主窗口尺寸
+    ("window", "width"): (400, 5000),
+    ("window", "height"): (300, 5000),
+    # 悬浮窗
+    ("floating_window", "width"): (100, 1000),
+    ("floating_window", "height"): (100, 1000),
+    ("floating_window", "opacity"): (0, 100),
+    ("floating_window", "font_size"): (8, 72),
 }
 
 
-def _sanitize_intervals(cfg: dict) -> None:
-    """规范化各段的 interval 值（原地修改内存中的配置，不写回文件）。
+def _sanitize_ranged(cfg: dict) -> None:
+    """规范化表中各数值配置项（原地修改内存中的配置，不写回文件）。
 
     - 数值超界 → 夹到 [下限, 上限] 范围内
     - 非数值类型（字符串/布尔等）→ 删除该项，让读取方使用默认值
     """
-    for section, (lo, hi) in _INTERVAL_LIMITS.items():
+    for (section, key), (lo, hi) in _RANGED_LIMITS.items():
         sec = cfg.get(section)
-        if not isinstance(sec, dict) or "interval" not in sec:
+        if not isinstance(sec, dict) or key not in sec:
             continue
-        value = sec["interval"]
+        value = sec[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            del sec["interval"]
+            del sec[key]
         else:
-            sec["interval"] = max(lo, min(float(value), hi))
+            sec[key] = max(lo, min(value, hi))
+
+
+# 合法的画面来源（与 capture.capture_window 的 backend 参数、设置界面下拉框一致）
+_CAPTURE_BACKENDS = ("printwindow", "mss")
+
+
+def _sanitize_capture_backend(cfg: dict) -> None:
+    """规范化 detection.capture_backend 值（原地修改内存中的配置，不写回文件）。
+
+    手改 config.toml 可能写入非字符串或无法识别的值，
+    统一回退到默认 "printwindow"，避免下层截图函数拿到意外值。
+    大小写不敏感（写入统一小写形式）。
+    """
+    sec = cfg.get("detection")
+    if not isinstance(sec, dict) or "capture_backend" not in sec:
+        return
+    value = sec["capture_backend"]
+    if isinstance(value, str) and value.lower() in _CAPTURE_BACKENDS:
+        sec["capture_backend"] = value.lower()
+    else:
+        sec["capture_backend"] = "printwindow"
 
 
 def load_config() -> dict:
@@ -138,7 +182,8 @@ def load_config() -> dict:
     注意事项:
         - TOML 文件必须以二进制模式 ("rb") 打开，这是 tomllib 的要求。
         - 返回值中所有值都是 Python 原生类型 (dict/list/str/int/float/bool)。
-        - interval 值会经 _sanitize_intervals 规范化（见该函数说明）。
+        - 数值项（各 interval、匹配阈值、窗口尺寸等）会经 _sanitize_ranged
+          规范化（见该函数说明）。
     """
     path = _get_config_path()
     if not path.exists():
@@ -146,7 +191,8 @@ def load_config() -> dict:
 
     with open(path, "rb") as f:
         cfg = tomllib.load(f)
-    _sanitize_intervals(cfg)
+    _sanitize_ranged(cfg)
+    _sanitize_capture_backend(cfg)
     return cfg
 
 
@@ -163,10 +209,13 @@ def generate_default_config(path: Path) -> None:
 
 # 图像识别相关配置
 [detection]
-# 截图间隔（秒），推荐 0.3 ~ 1.0
+# 检测间隔（秒），推荐 0.3 ~ 1.0
 interval = 0.3
 # 匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90
 confidence_threshold = 0.8
+# 画面来源："printwindow" = 游戏窗口（默认，不受悬浮窗/其他窗口遮挡影响）
+#           "mss" = 屏幕（兼容模式，旧行为；被别的窗口盖住会截入遮挡物）
+capture_backend = "printwindow"
 
 [window]
 # 主窗口宽度（像素）
@@ -238,7 +287,7 @@ log_scope = ["status", "screenshots", "errors"]
 show_confidence = false
 # 识别失败时诊断截图（匹配度接近阈值但未达标时自动截图 + 诊断数据）
 save_failure_samples = false
-# 偏移量（值越大越容易触发，0 = 仅保存未达标帧的最高分）
+# 偏移量（0.01 ~ 0.5）：记录下限 = 匹配阈值 − 偏移量，值越大越容易触发
 failure_sample_offset = 0.2
 
 # 系统通知
@@ -279,7 +328,7 @@ rows = ["卡组", "对局数", "胜/负", "赢/输硬币", "赢硬币概率", "�
 [rank_detection]
 # 是否启用段位图标检测
 enabled = true
-# 截图间隔（秒），0.3 ~ 1.0
+# 检测间隔（秒），0.3 ~ 1.0
 interval = 0.3
 # 匹配置信度阈值 (0.0~1.0)
 confidence_threshold = 0.7

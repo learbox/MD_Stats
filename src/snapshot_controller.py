@@ -124,8 +124,9 @@ class SnapshotController(QObject):
                 周期截图复用本方法时保持 False，不播放。
         """
         ok = False
+        backend = self._config.get("detection", {}).get("capture_backend", "printwindow")
         try:
-            screenshot = _cap.capture_window("masterduel")
+            screenshot = _cap.capture_window("masterduel", backend=backend)
             ss_dir = get_project_root() / "screenshots"
             ss_dir.mkdir(parents=True, exist_ok=True)
             h, w = screenshot.shape[:2]
@@ -139,7 +140,13 @@ class SnapshotController(QObject):
             else:
                 self.status_message.emit("截图保存失败")
         except Exception as e:
-            self.status_message.emit(f"截图失败: {e}")
+            # 仅当失败可归因于画面来源方式本身时才提示切换（同 stats_worker 规则）；
+            # 保存失败（磁盘已满等 OSError）与来源无关，不会提示
+            msg = f"截图失败: {e}"
+            if getattr(e, "suggest_fallback", False):
+                other = "mss 兼容模式" if backend == "printwindow" else "游戏窗口"
+                msg += f"（可尝试在设置中切换为 {other}）"
+            self.status_message.emit(msg)
         if feedback:
             self._play_snapshot_feedback(ok)
 

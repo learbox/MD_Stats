@@ -1,40 +1,75 @@
-"""屏幕截图模块 — 基于 mss + pywin32 实现高性能屏幕/窗口捕获。
+"""屏幕截图模块 — 基于 PrintWindow / mss + pywin32 实现高性能窗口/屏幕捕获。
 
 ================================================================================
 技术选型
 ================================================================================
 
-mss (Multiple Screen Shots) — 屏幕像素采集：
-    Python 生态中最快的截图库之一，原因如下：
-    - Windows 上底层调用 DirectX Graphics Diagnostics API（非 GDI），比
-      PIL.ImageGrab / PyAutoGUI 快 3-5 倍，且 CPU 占用更低
-    - macOS 上底层调用 CoreGraphics，同样走硬件加速路径
+窗口捕获（默认，capture_backend="printwindow"）:
+    PrintWindow (user32) + PW_RENDERFULLCONTENT — 直接向窗口索取画面：
+    - 拿到的是窗口自己的渲染画面（DWM 为每个窗口维护独立画面），
+      不受悬浮窗/其他窗口遮挡影响，也不要求游戏处于前台
+    - 代价是耗时高于屏幕抓取：实测 1280x720 单帧约 49ms
+      （PrintWindow 调用约 44ms + 取像素约 5.5ms）
+    - pywin32 未封装 PrintWindow，用 ctypes 直接调 user32
+
+屏幕抓取（兼容模式，capture_backend="mss"）:
+    mss (Multiple Screen Shots) — 屏幕像素采集：
+    - Windows 上底层是 GDI BitBlt：截图直写 DIB 内存（无需 GetDIBits
+      二次拷贝），比 PIL.ImageGrab / PyAutoGUI 的截图路径更高效、CPU 占用更低
+    - macOS 上底层调用 CoreGraphics
     - 返回 BGRA 原始像素缓冲区，与 OpenCV 的 BGR 格式高度兼容，无需额外转码
     - 支持多显示器独立截取、任意坐标区域截取
+    - 注意：截取的是屏幕上目标区域当前显示的画面，被遮挡会截入遮挡物
 
-pywin32 (win32gui) — 窗口定位：
-    - 封装 Windows USER32.dll 的窗口管理 API
-    - 负责窗口查找、属性读取（标题、位置、可见性、最小化状态）
+pywin32 — 窗口定位与位图操作：
+    - win32gui 封装 USER32.dll 的窗口管理 API：窗口查找、属性读取
+      （标题、位置、可见性、最小化状态）
+    - win32ui 负责创建内存 DC / 位图（窗口捕获路径）
 
 ================================================================================
 图像格式转换链
 ================================================================================
 
-全屏/区域截取:
-    mss.grab() → BGRA 原始缓冲区 → numpy (H,W,4) → 丢弃 Alpha → BGR (H,W,3)
+窗口捕获（printwindow）:
+    PrintWindow 将客户区画入 32bpp 位图 → GetBitmapBits → numpy (H,W,4)
+    → 丢弃 Alpha → BGR (H,W,3)
+    （实测 GetBitmapBits 为 top-down 行序，与屏幕抓取路径方向一致，无需翻转）
 
-窗口截取（仅客户区）:
+屏幕抓取（mss）:
     win32gui 定位窗口 → GetClientRect 获取渲染区域 → ClientToScreen 转屏幕坐标
-    → 传给 mss 做区域截取 → 同上
+    → mss.grab() → BGRA 原始缓冲区 → numpy (H,W,4) → 丢弃 Alpha → BGR (H,W,3)
 
-    注意: 截取的是客户区（游戏实际渲染画面），不含标题栏和窗口边框。
-    这确保全屏模式和窗口模式下的截图内容一致。
+    注意: 两种方式截取的都是客户区（游戏实际渲染画面），
+    不含标题栏和窗口边框。这确保全屏模式和窗口模式下的截图内容一致。
 """
 
+
+import ctypes.wintypes  # 该写法同时绑定 ctypes 名（下方 WinDLL / wintypes 都会用到）
 
 import numpy as np
 import mss
 import win32gui
+import win32ui
+
+
+# ---------------------------------------------------------------------------
+# 异常
+# ---------------------------------------------------------------------------
+
+
+class CaptureError(RuntimeError):
+    """画面获取失败。
+
+    suggest_fallback 标记"换另一种画面来源是否可能有效"：
+      - True:  失败发生在来源方式本身（PrintWindow 被拒 / 屏幕抓取异常），
+               调用方可提示用户切换画面来源；
+      - False: 与来源方式无关（窗口不存在 / 已最小化 / 尺寸异常等），
+               换另一种来源同样会失败，不应给出误导性提示。
+    """
+
+    def __init__(self, message: str, suggest_fallback: bool = False) -> None:
+        super().__init__(message)
+        self.suggest_fallback = suggest_fallback
 
 
 # ---------------------------------------------------------------------------
@@ -222,44 +257,154 @@ def _get_client_rect_screen(hwnd: int) -> list[int]:
 
 
 # ---------------------------------------------------------------------------
+# 窗口捕获（PrintWindow）
+# ---------------------------------------------------------------------------
+#
+# PrintWindow 向窗口请求"把你自己画到这块画布上"。配合 PW_RENDERFULLCONTENT
+# 标志（Windows 8.1+），内容来自 DWM 为窗口维护的独立渲染画面 —— 不经过屏幕：
+#   - 不受悬浮窗/其他窗口遮挡影响
+#   - 不要求窗口处于前台
+# 代价是耗时高于屏幕抓取（DWM 画面需要转换成 GDI 可读格式）。
+#
+# 标志选择（2026-10 实测于 Master Duel）：
+#   flag 3 = PW_CLIENTONLY | PW_RENDERFULLCONTENT —— 只取客户区，内容完整
+#   flag 2 会把标题栏画入画面，导致内容偏移、底部被裁，不可用
+#   flag 0（传统 WM_PRINT）游戏不响应，返回白图
+
+# pywin32 没有封装 PrintWindow，用 ctypes 直接调 user32
+_user32 = ctypes.WinDLL("user32", use_last_error=True)
+_user32.PrintWindow.argtypes = [ctypes.wintypes.HWND, ctypes.wintypes.HDC,
+                                ctypes.wintypes.UINT]
+_user32.PrintWindow.restype = ctypes.wintypes.BOOL
+
+_PW_CLIENTONLY = 0x00000001         # 只绘制客户区
+_PW_RENDERFULLCONTENT = 0x00000002  # 包含 DirectComposition 内容（Win8.1+）
+
+
+def _capture_window_pw(hwnd: int, w: int, h: int) -> np.ndarray:
+    """用 PrintWindow 抓取窗口客户区（默认画面来源）。
+
+    直接向窗口索取它自己的画面，不经过屏幕：
+    不受悬浮窗/其他窗口遮挡影响，也不要求窗口处于前台。
+
+    Args:
+        hwnd: 目标窗口句柄。
+        w: 客户区宽度（像素，与 GetClientRect 读到的尺寸一致）。
+        h: 客户区高度（像素）。
+
+    Returns:
+        BGR 格式的 numpy 数组 (H, W, 3)，dtype=uint8。
+
+    Raises:
+        CaptureError: PrintWindow 调用失败（窗口已关闭、被系统拒绝等），
+            带 suggest_fallback=True（换屏幕来源可能有效）。
+    """
+    hwnd_dc = win32gui.GetWindowDC(hwnd)
+    src_dc = None
+    mem_dc = None
+    bmp = None
+    old_bmp = None
+    try:
+        src_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+        mem_dc = src_dc.CreateCompatibleDC()
+        bmp = win32ui.CreateBitmap()
+        bmp.CreateCompatibleBitmap(src_dc, w, h)
+        old_bmp = mem_dc.SelectObject(bmp)
+
+        ok = _user32.PrintWindow(
+            hwnd, mem_dc.GetSafeHdc(),
+            _PW_CLIENTONLY | _PW_RENDERFULLCONTENT)
+        if not ok:
+            raise CaptureError("PrintWindow 调用失败（窗口可能已关闭）",
+                               suggest_fallback=True)
+
+        # True → 返回 bytes；数据为 32bpp BGRA，行序 bottom-up（Windows 位图惯例）
+        bits = bmp.GetBitmapBits(True)
+    finally:
+        # GDI 资源显式释放（每帧创建/销毁，确保长时间运行不累积 GDI 对象）。
+        # 顺序：位图先从 DC 反选 → 删位图 → 删 DC → 释放窗口 DC
+        if mem_dc is not None and old_bmp is not None:
+            mem_dc.SelectObject(old_bmp)
+        if bmp is not None:
+            # PyCBitmap 没有 DeleteObject 方法（pywin32 312 实测），经 GetHandle 删除
+            win32gui.DeleteObject(bmp.GetHandle())
+        if mem_dc is not None:
+            mem_dc.DeleteDC()
+        if src_dc is not None:
+            src_dc.DeleteDC()
+        win32gui.ReleaseDC(hwnd, hwnd_dc)
+
+    # 丢弃 Alpha，得到连续 BGR 数组。
+    # 注意：GetBitmapBits 实测返回的就是 top-down 行序（CreateCompatibleBitmap
+    # 的 DDB 在该路径下按从上到下排列），不要再翻转——翻转会导致画面颠倒。
+    arr = np.frombuffer(bits, dtype=np.uint8).reshape(h, w, 4)
+    return np.ascontiguousarray(arr[:, :, :3])
+
+
+# ---------------------------------------------------------------------------
 # 公开 API
 # ---------------------------------------------------------------------------
 
 
-def capture_window(title_substring: str = "masterduel") -> np.ndarray:
+def capture_window(title_substring: str = "masterduel",
+                   backend: str = "printwindow") -> np.ndarray:
     """根据窗口标题关键词截取指定窗口的画面。
 
     典型用法::
 
         from capture import capture_window
 
-        # 截取 Master Duel 游戏窗口
+        # 截取 Master Duel 游戏窗口（默认窗口捕获，不受遮挡影响）
         img = capture_window("masterduel")
 
-        # 截取其他程序窗口
-        img = capture_window("记事本")
+        # 强制用屏幕抓取（兼容模式，旧行为）
+        img = capture_window("masterduel", backend="mss")
 
     内部流程:
         1. 枚举所有顶层窗口，匹配标题
-        2. 获取窗口屏幕坐标
-        3. 调用 capture_screen() 对该区域截图
+        2. 窗口最小化 → 直接报错（两种方式都拿不到有效画面）
+        3. 按 backend 分发：
+           - "printwindow": PrintWindow 直接取窗口画面（默认）
+           - "mss":         屏幕抓取客户区所在区域（兼容模式）
 
     Args:
         title_substring: 窗口标题关键词，大小写不敏感。默认 "masterduel"。
+        backend: 画面来源，"printwindow"（默认）或 "mss"；其他值按默认处理。
 
     Returns:
         BGR 格式的 numpy 数组 (H, W, 3)，dtype=uint8，可直接用于 OpenCV。
 
     Raises:
-        RuntimeError: 未找到标题包含指定关键词的可见窗口。
+        CaptureError（RuntimeError 子类）: 未找到窗口 / 窗口已最小化 /
+            画面来源抓取失败。异常的 suggest_fallback 属性标记换一种
+            画面来源是否可能有效（调用方据此决定是否提示切换）。
     """
     result = _find_window_by_title(title_substring)
     if result is None:
-        raise RuntimeError(f"未找到标题包含 '{title_substring}' 的可见窗口")
+        raise CaptureError(f"未找到标题包含 '{title_substring}' 的可见窗口")
     hwnd, title = result
-    # 截取客户区（游戏渲染画面），不含标题栏和窗口边框
-    region = _get_client_rect_screen(hwnd)
-    return capture_screen(region=region)
+
+    # 最小化时窗口停止渲染：屏幕抓取会截到任务栏缩略图位置的错误内容，
+    # 窗口捕获只能拿到旧帧 —— 两种方式都没有有效画面，直接报错跳过
+    # （与来源方式无关 → 不标记 suggest_fallback）
+    if win32gui.IsIconic(hwnd):
+        raise CaptureError(f"窗口 '{title}' 已最小化，无法截图")
+
+    if backend == "mss":
+        # 屏幕抓取（兼容模式）：截取客户区所在的屏幕区域
+        region = _get_client_rect_screen(hwnd)
+        try:
+            return capture_screen(region=region)
+        except Exception as e:
+            # mss 自身的抓取失败（ScreenShotError 等）→ 换来源可能有效
+            raise CaptureError(str(e), suggest_fallback=True) from e
+
+    # 窗口捕获（默认）：直接用 PrintWindow 取窗口客户区画面
+    left, top, right, bottom = win32gui.GetClientRect(hwnd)
+    w, h = right - left, bottom - top
+    if w <= 0 or h <= 0:
+        raise CaptureError("窗口客户区尺寸无效")
+    return _capture_window_pw(hwnd, w, h)
 
 
 def capture_screen(monitor_index: int = 0, region: list[int] | None = None) -> np.ndarray:
@@ -300,7 +445,7 @@ def capture_screen(monitor_index: int = 0, region: list[int] | None = None) -> n
 
     Raises:
         mss.ScreenShotError: 无法访问显示器时抛出（通常因权限不足，
-            以管理员权限运行或检查杀毒软件是否拦截了 DirectX 调用）。
+            以管理员权限运行或检查杀毒软件是否拦截了 GDI 抓屏调用）。
 
     Performance:
         - 全屏 1920x1080: ~5-15ms（取决于 GPU / 显示驱动）
@@ -326,7 +471,7 @@ def capture_screen(monitor_index: int = 0, region: list[int] | None = None) -> n
             monitor = monitors[monitor_index]
 
         # mss.grab() 是核心截图操作：
-        #   - Windows: 调用 IDXGIOutputDuplication::AcquireNextFrame (DirectX)
+        #   - Windows: BitBlt 从屏幕 DC 抓取（GDI），直写 DIB 内存
         #   - macOS:   调用 CGDisplayCreateImage (CoreGraphics)
         # 返回 mss.ScreenShot 对象，底层是 BGRA 格式的像素缓冲区
         img = sct.grab(monitor)

@@ -6,7 +6,7 @@
     ConfigDialog(QDialog)
       ├── 自定义标题栏（拖拽 + 关闭按钮）
       ├── QTabWidget（5 个标签页）
-      │   ├── 识别 — 截图间隔、匹配阈值
+      │   ├── 识别 — 检测间隔、匹配阈值
       │   ├── 外观 — 主题、窗口尺寸
       │   ├── 剪贴板 — 竖排、范围、列选择
       │   ├── 悬浮窗 — 尺寸/颜色/透明度/字体/行选择
@@ -37,7 +37,7 @@ from PySide6.QtCore import Qt, QEvent, QTranslator, QLibraryInfo, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
-    QDoubleSpinBox, QFontComboBox, QFrame, QGroupBox, QHBoxLayout, QLabel,
+    QDoubleSpinBox, QFontComboBox, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QMessageBox, QPushButton, QRadioButton,
     QScrollArea, QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
     QButtonGroup,
@@ -421,30 +421,57 @@ class ConfigDialog(_BaseFramelessDialog):
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
 
         # ═══════════════════════════════════════════════════════════
-        # 功能设置
+        # 画面来源（全局）
+        #
+        # 该设置影响全部获取游戏画面的功能：三阶段检测、段位检测、
+        # 识别成功/失败截图、截图热键与周期截图（tooltip 中有完整说明）
         # ═══════════════════════════════════════════════════════════
-        func_label = QLabel("功能设置")
-        func_label.setStyleSheet("font-weight: bold; font-size: 13px;")
-        lo.addWidget(func_label)
+        g_cap = QGroupBox("画面来源")
+        gl_cap = QVBoxLayout(g_cap)
 
-        # ---- 三阶段检测 ----
+        # 框标题已说明用途，控件行不再重复"来源:"标签
+        r_be = QHBoxLayout()
+        self._backend_combo = QComboBox()
+        self._backend_combo.addItem("游戏窗口（printwindow，推荐）", "printwindow")
+        self._backend_combo.addItem("屏幕（mss，兼容模式）", "mss")
+        self._backend_combo.setToolTip(
+            "画面来源决定程序从哪读取游戏画面，影响全部识别与截图功能：\n"
+            "三阶段检测、段位检测、识别成功/失败截图、截图热键与周期截图。\n"
+            "\n"
+            "游戏窗口（推荐）：直接读取游戏窗口画面，不受悬浮窗/其他窗口遮挡影响。\n"
+            "屏幕（兼容模式）：读取屏幕上游戏窗口所在的区域，\n"
+            "被别的窗口盖住时会截入遮挡物。建议仅在推荐方式异常时切换。"
+        )
+        r_be.addWidget(self._backend_combo)
+        r_be.addStretch()
+        gl_cap.addLayout(r_be)
+
+        lo.addWidget(g_cap)
+
+        # ═══════════════════════════════════════════════════════════
+        # 检测（三阶段 + 段位图标，两个同级小节共用一个框）
+        # ═══════════════════════════════════════════════════════════
+        g_detect = QGroupBox("检测")
+        gl_detect = QVBoxLayout(g_detect)
+
+        # ---- 小节：三阶段检测 ----
         stage_title = QLabel("三阶段检测（硬币 · 先后攻 · 胜负 · 升降段可选）")
         stage_title.setStyleSheet("color: #666; font-size: 12px;")
-        lo.addWidget(stage_title)
+        gl_detect.addWidget(stage_title)
 
         r = QHBoxLayout()
-        r.addWidget(QLabel("截图间隔:"))
+        r.addWidget(QLabel("检测间隔:"))
         self._interval = QDoubleSpinBox()
         self._interval.setRange(0.1, 10.0)
         self._interval.setSingleStep(0.1)
         self._interval.setSuffix(" 秒")
-        self._interval.setToolTip("每隔多久截取一次游戏画面进行识别。\n"
-                                   "0.3 秒 = 每秒约 3 次截图，灵敏但 CPU 占用高。\n"
-                                   "1.0 秒 = 每秒 1 次截图，省 CPU 但可能漏掉快速闪过的 UI。\n"
+        self._interval.setToolTip("每隔多久检测一次游戏画面。\n"
+                                   "0.3 秒 = 每秒约 3 次检测，灵敏但 CPU 占用高。\n"
+                                   "1.0 秒 = 每秒 1 次检测，省 CPU 但可能漏掉快速闪过的 UI。\n"
                                    "推荐 0.3 ~ 1.0 秒。")
         r.addWidget(self._interval)
         r.addStretch()
-        lo.addLayout(r)
+        gl_detect.addLayout(r)
 
         r2 = QHBoxLayout()
         r2.addWidget(QLabel("匹配置信度:"))
@@ -459,10 +486,10 @@ class ConfigDialog(_BaseFramelessDialog):
                                     "推荐 0.75 ~ 0.90。")
         r2.addWidget(self._threshold)
         r2.addStretch()
-        lo.addLayout(r2)
+        gl_detect.addLayout(r2)
 
         # ---- 识别提示音 ----
-        # 三阶段检测小节的最后一项：识别到硬币/先后攻/胜负时播放对应音效。
+        # 三阶段检测框内的最后一项：识别到硬币/先后攻/胜负时播放对应音效。
         # 总开关 + 三段独立开关；自动检测触发，与热键总开关无关
         # （不参与 _on_hk_enabled_toggled 联动）
         self._snd_master = QCheckBox("识别到事件时播放提示音")
@@ -471,7 +498,7 @@ class ConfigDialog(_BaseFramelessDialog):
             "总开关：关闭时三段音效全部静音。"
         )
         self._snd_master.toggled.connect(self._on_detection_sound_toggled)
-        lo.addWidget(self._snd_master)
+        gl_detect.addWidget(self._snd_master)
 
         snd_row = QHBoxLayout()
         snd_row.setContentsMargins(24, 0, 0, 0)
@@ -481,36 +508,34 @@ class ConfigDialog(_BaseFramelessDialog):
         for cb in (self._snd_coin, self._snd_turn, self._snd_result):
             snd_row.addWidget(cb)
         snd_row.addStretch()
-        lo.addLayout(snd_row)
+        gl_detect.addLayout(snd_row)
 
-        # ---- 段位图标检测 ----
-        # 分隔线 + 标题，视觉上从属于"功能设置"
-        sep_rank = QFrame()
-        sep_rank.setFrameShape(QFrame.Shape.HLine)
-        lo.addWidget(sep_rank)
+        # ---- 小节：段位图标检测 ----
+        gl_detect.addSpacing(12)
 
-        rank_title = QLabel("段位图标检测（独立线程）")
+        rank_title = QLabel("段位图标检测（新手 ~ 巅峰）")
         rank_title.setStyleSheet("color: #666; font-size: 12px;")
-        lo.addWidget(rank_title)
+        gl_detect.addWidget(rank_title)
 
         self._rank_enabled_cb = QCheckBox("启用段位图标检测")
         self._rank_enabled_cb.setToolTip(
-            "独立线程持续截图检测双方段位图标（新手~大师 + I~V），\n"
+            "独立线程持续读取画面检测双方段位图标（新手 ~ 巅峰）。\n"
+            "I~V 为段位内等级，巅峰段无等级细分。\n"
             "检测到后写入 CSV 己方段位/对方段位列。"
         )
         self._rank_enabled_cb.toggled.connect(self._on_rank_enabled_toggled)
-        lo.addWidget(self._rank_enabled_cb)
+        gl_detect.addWidget(self._rank_enabled_cb)
 
         rk_row1 = QHBoxLayout()
-        rk_row1.addWidget(QLabel("截图间隔:"))
+        rk_row1.addWidget(QLabel("检测间隔:"))
         self._rank_interval = QDoubleSpinBox()
-        self._rank_interval.setRange(0.2, 2.0)
+        self._rank_interval.setRange(0.1, 2.0)
         self._rank_interval.setSingleStep(0.1)
         self._rank_interval.setSuffix(" 秒")
         self._rank_interval.setToolTip("段位图标仅在硬币阶段显示约 2 秒，间隔越短越不容易错过。")
         rk_row1.addWidget(self._rank_interval)
         rk_row1.addStretch()
-        lo.addLayout(rk_row1)
+        gl_detect.addLayout(rk_row1)
 
         rk_row2 = QHBoxLayout()
         rk_row2.addWidget(QLabel("匹配置信度:"))
@@ -522,19 +547,15 @@ class ConfigDialog(_BaseFramelessDialog):
                                          "推荐 0.70。太高可能漏检，太低可能误检。")
         rk_row2.addWidget(self._rank_threshold)
         rk_row2.addStretch()
-        lo.addLayout(rk_row2)
+        gl_detect.addLayout(rk_row2)
+
+        lo.addWidget(g_detect)
 
         # ═══════════════════════════════════════════════════════════
         # 调试设置
         # ═══════════════════════════════════════════════════════════
-        sep_main = QFrame()
-        sep_main.setFrameShape(QFrame.Shape.HLine)
-        lo.addWidget(sep_main)
-        lo.addSpacing(4)
-
-        dbg_label = QLabel("调试设置")
-        dbg_label.setStyleSheet("font-weight: bold; font-size: 13px;")
-        lo.addWidget(dbg_label)
+        g_dbg = QGroupBox("调试设置")
+        gl_dbg = QVBoxLayout(g_dbg)
 
         # ---- 识别成功时保存截图 ----
         ss_row = QHBoxLayout()
@@ -550,7 +571,7 @@ class ConfigDialog(_BaseFramelessDialog):
         self._btn_view_screenshots.setToolTip("在文件资源管理器中打开截图文件夹。")
         ss_row.addWidget(self._btn_view_screenshots)
         ss_row.addStretch()
-        lo.addLayout(ss_row)
+        gl_dbg.addLayout(ss_row)
 
         self._auto_clear_cb = QCheckBox("下一局开始时自动清除截图")
         self._auto_clear_cb.setToolTip("勾选后截图只保留最近一局。取消后截图持续累积。")
@@ -558,7 +579,7 @@ class ConfigDialog(_BaseFramelessDialog):
         auto_row.setContentsMargins(24, 0, 0, 0)
         auto_row.addWidget(self._auto_clear_cb)
         auto_row.addStretch()
-        lo.addLayout(auto_row)
+        gl_dbg.addLayout(auto_row)
         self._save_screenshots_cb.toggled.connect(
             lambda on: self._set_sub_disabled(self._auto_clear_cb, not on))
 
@@ -576,7 +597,7 @@ class ConfigDialog(_BaseFramelessDialog):
         self._btn_view_debug.setToolTip("在文件资源管理器中打开诊断截图文件夹。")
         fail_row.addWidget(self._btn_view_debug)
         fail_row.addStretch()
-        lo.addLayout(fail_row)
+        gl_dbg.addLayout(fail_row)
 
         offset_row = QHBoxLayout()
         offset_row.setContentsMargins(24, 0, 0, 0)
@@ -591,7 +612,7 @@ class ConfigDialog(_BaseFramelessDialog):
         )
         offset_row.addWidget(self._failure_offset)
         offset_row.addStretch()
-        lo.addLayout(offset_row)
+        gl_dbg.addLayout(offset_row)
 
         # 未勾选时置信度偏移不可修改（与段位检测联动逻辑一致）
         self._failure_samples_cb.toggled.connect(
@@ -601,16 +622,19 @@ class ConfigDialog(_BaseFramelessDialog):
         self._hk_enabled = QCheckBox("启用截图热键（全局热键，游戏全屏时也可用）")
         self._hk_enabled.setToolTip("开启后热键生效，关闭后热键注销。独立于识别启停。")
         self._hk_enabled.toggled.connect(self._on_hk_enabled_toggled)
-        lo.addWidget(self._hk_enabled)
+        gl_dbg.addWidget(self._hk_enabled)
 
-        g_hk = QGroupBox("热键设置")
-        g_hk.setToolTip("全局热键，游戏全屏时也能触发。点击输入框后按目标快捷键绑定。")
-        gl_hk = QVBoxLayout(g_hk)
+        # 子选项：缩进样式（与"自动清除截图"等子项一致）。
+        # 原用 QGroupBox("热键设置") 包裹——边框会让它看起来像一个独立小节，
+        # 与"区 → 小节 → 选项"的层级体系不符，故改为纯缩进。
+        hk_tip = "全局热键，游戏全屏时也能触发。点击输入框后按目标快捷键绑定。"
         r1 = QHBoxLayout()
+        r1.setContentsMargins(24, 0, 0, 0)
         r1.addWidget(QLabel("单次截图:"))
         self._hk_snapshot = self._create_hotkey_input()
+        self._hk_snapshot.setToolTip(hk_tip)
         r1.addWidget(self._hk_snapshot)
-        gl_hk.addLayout(r1)
+        gl_dbg.addLayout(r1)
 
         # 单次截图结果音效：成功提示/失败警示（受热键总开关联动启用/禁用）
         self._hk_sound = QCheckBox("单次截图结果音效")
@@ -618,15 +642,22 @@ class ConfigDialog(_BaseFramelessDialog):
             "单次截图的结果音效：成功保存后播放提示音（resource/sounds/snapshot.wav），\n"
             "只要截图未成功（如窗口未找到、磁盘不可写）播放警示音（resource/sounds/error.wav）。"
         )
-        gl_hk.addWidget(self._hk_sound)
+        sound_row = QHBoxLayout()
+        sound_row.setContentsMargins(24, 0, 0, 0)
+        sound_row.addWidget(self._hk_sound)
+        sound_row.addStretch()
+        gl_dbg.addLayout(sound_row)
 
         r2 = QHBoxLayout()
+        r2.setContentsMargins(24, 0, 0, 0)
         r2.addWidget(QLabel("周期截图:"))
         self._hk_periodic = self._create_hotkey_input()
+        self._hk_periodic.setToolTip(hk_tip)
         r2.addWidget(self._hk_periodic)
-        gl_hk.addLayout(r2)
+        gl_dbg.addLayout(r2)
 
         r3 = QHBoxLayout()
+        r3.setContentsMargins(24, 0, 0, 0)
         r3.addWidget(QLabel("周期间隔:"))
         self._hk_interval = QDoubleSpinBox()
         self._hk_interval.setRange(0.1, 10.0)
@@ -634,9 +665,9 @@ class ConfigDialog(_BaseFramelessDialog):
         self._hk_interval.setSuffix(" 秒")
         r3.addWidget(self._hk_interval)
         r3.addStretch()
-        gl_hk.addLayout(r3)
+        gl_dbg.addLayout(r3)
 
-        lo.addWidget(g_hk)
+        lo.addWidget(g_dbg)
 
         lo.addStretch()
         return scroll
@@ -734,8 +765,8 @@ class ConfigDialog(_BaseFramelessDialog):
         r = QHBoxLayout()
         r.addWidget(QLabel("主题:"))
         self._theme_combo = QComboBox()
-        self._theme_combo.setToolTip("切换界面配色和字体。\n主题文件在 themes/ 文件夹下。")
-        themes_dir = get_project_root() / "themes"
+        self._theme_combo.setToolTip("切换界面配色和字体。\n主题文件在 resource/themes/ 文件夹下。")
+        themes_dir = get_project_root() / "resource" / "themes"
         names = []
         if themes_dir.is_dir():
             for d in themes_dir.iterdir():
@@ -840,7 +871,7 @@ class ConfigDialog(_BaseFramelessDialog):
             self._font_stack_label.setText("(内置主题，使用系统默认字体)")
             return
 
-        toml_path = get_project_root() / "themes" / theme_name / "theme.toml"
+        toml_path = get_project_root() / "resource" / "themes" / theme_name / "theme.toml"
         if not toml_path.exists():
             return
         try:
@@ -905,7 +936,7 @@ class ConfigDialog(_BaseFramelessDialog):
         if not theme_name or theme_name == _BUILTIN_THEME:
             return
 
-        toml_path = get_project_root() / "themes" / theme_name / "theme.toml"
+        toml_path = get_project_root() / "resource" / "themes" / theme_name / "theme.toml"
         if not toml_path.exists():
             return
 
@@ -1035,7 +1066,7 @@ class ConfigDialog(_BaseFramelessDialog):
         # ---- 背景色 + 透明度 ----
         br = QHBoxLayout()
         br.addWidget(QLabel("背景色:"))
-        self._fw_bg = ColorButton(QColor("#98d4bb"))  # 默认薄荷绿
+        self._fw_bg = ColorButton(QColor("#bdef0a"))  # 默认黄绿色（与模板 bg_color 一致）
         self._fw_bg.setToolTip("悬浮窗背景颜色，点击色块可更换。")
         br.addWidget(self._fw_bg)
         br.addWidget(QLabel("透明度:"))
@@ -1206,6 +1237,9 @@ class ConfigDialog(_BaseFramelessDialog):
         d = c.get("detection", {})
         self._interval.setValue(d.get("interval", 0.3))
         self._threshold.setValue(d.get("confidence_threshold", 0.8))
+        # 画面来源：按 data 值选中（未匹配到回退第一项 = printwindow）
+        backend_idx = self._backend_combo.findData(d.get("capture_backend", "printwindow"))
+        self._backend_combo.setCurrentIndex(backend_idx if backend_idx >= 0 else 0)
 
         # ---- debug 段：调试与实验功能 ----
         # 包含三个配置项：
@@ -1214,7 +1248,7 @@ class ConfigDialog(_BaseFramelessDialog):
         #   log_scope (list[str])    — 日志记录范围
         dbg = c.get("debug", {})
         self._save_screenshots_cb.setChecked(dbg.get("save_screenshots", False))
-        self._auto_clear_cb.setChecked(dbg.get("auto_clear_screenshots", True))
+        self._auto_clear_cb.setChecked(dbg.get("auto_clear_screenshots", False))
         # "自动清除"子复选框的启用状态跟随主开关
         self._set_sub_disabled(self._auto_clear_cb,
                                  not dbg.get("save_screenshots", False))
@@ -1241,23 +1275,23 @@ class ConfigDialog(_BaseFramelessDialog):
         self._on_log_mode_toggled(dbg.get("log_mode", False))
         self._show_confidence_cb.setChecked(dbg.get("show_confidence", False))
         self._failure_samples_cb.setChecked(dbg.get("save_failure_samples", False))
-        self._failure_offset.setValue(dbg.get("failure_sample_offset", 0.10))
+        self._failure_offset.setValue(dbg.get("failure_sample_offset", 0.2))
         self._failure_offset.setEnabled(dbg.get("save_failure_samples", False))
 
         # ---- 通知与托盘 ----
         n = c.get("notification", {})
-        self._notify_cb.setChecked(n.get("enabled", False))
-        self._notify_duration.setValue(n.get("duration", 5))
+        self._notify_cb.setChecked(n.get("enabled", True))
+        self._notify_duration.setValue(n.get("duration", 1))
         self._tray_minimize_cb.setChecked(n.get("minimize_to_tray", False))
 
         # ---- 段位检测 ----
         rk = c.get("rank_detection", {})
         self._rank_enabled_cb.setChecked(rk.get("enabled", True))
-        self._rank_interval.setValue(rk.get("interval", 0.5))
+        self._rank_interval.setValue(rk.get("interval", 0.3))
         self._rank_threshold.setValue(rk.get("confidence_threshold", 0.7))
 
         # ---- 外观 ----
-        theme = c.get("appearance", {}).get("theme", "")
+        theme = c.get("appearance", {}).get("theme", "macaron")
         idx = self._theme_combo.findText(theme)
         if idx >= 0:
             self._theme_combo.setCurrentIndex(idx)
@@ -1288,9 +1322,9 @@ class ConfigDialog(_BaseFramelessDialog):
         # ---- 悬浮窗 ----
         fw = c.get("floating_window", {})
         self._fw_w.setValue(fw.get("width", 250))
-        self._fw_h.setValue(fw.get("height", 300))
+        self._fw_h.setValue(fw.get("height", 330))
         # 背景色：#RRGGBB → 拆分 RGB 分量 → 构造 QColor
-        bg = fw.get("bg_color", "#98d4bb")
+        bg = fw.get("bg_color", "#bdef0a")
         r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
         self._fw_bg.set_color(QColor(r, g, b))
         # 透明度滑块
@@ -1304,7 +1338,7 @@ class ConfigDialog(_BaseFramelessDialog):
         # 字号
         self._fw_fs.setValue(fw.get("font_size", 20))
         # 字体：在下拉框中查找匹配项并选中
-        ff = fw.get("font_family", "")
+        ff = fw.get("font_family", "Microsoft YaHei UI")
         if ff:
             idx = self._fw_ff.findText(ff)
             if idx >= 0:
@@ -1318,13 +1352,14 @@ class ConfigDialog(_BaseFramelessDialog):
         # 开关类选项
         self._use_theme_bg.setChecked(fw.get("use_theme_bg", False))
         self._show_status_cb.setChecked(fw.get("show_status", False))
-        self._show_status_compact_cb.setChecked(fw.get("show_status_compact", False))
+        self._show_status_compact_cb.setChecked(fw.get("show_status_compact", True))
         self._set_sub_disabled(self._show_status_compact_cb,
                                not fw.get("show_status", False))
 
         # ---- 数据 ----
         # 对方卡组预设列表
-        presets = c.get("opponent_decks", {}).get("presets", [])
+        presets = c.get("opponent_decks", {}).get(
+            "presets", ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"])
         self._preset_list.clear()
         for p in presets:
             if p.strip():
@@ -1334,7 +1369,7 @@ class ConfigDialog(_BaseFramelessDialog):
             c.get("recorder", {}).get("daily_files", False)
         )
         self._remember_deck.setChecked(
-            c.get("recorder", {}).get("remember_last_deck", False)
+            c.get("recorder", {}).get("remember_last_deck", True)
         )
 
         # 统计表格列选择：如果用户自定义过列，替换默认的 DualListWidget
@@ -1391,7 +1426,7 @@ class ConfigDialog(_BaseFramelessDialog):
 
         为什么不能直接改 self._config（MainWindow 的引用）？
             MainWindow._on_reload_config 的第一步是读取旧主题名：
-                old_theme_name = self._config.get("appearance", {}).get("theme", "dark")
+                old_theme_name = self._config.get("appearance", {}).get("theme", "macaron")
             如果这里先把 self._config["appearance"]["theme"] 改成了新值，
             那 old_theme_name 就等于新值，新旧相同 → 主题切换检测失效。
 
@@ -1414,6 +1449,7 @@ class ConfigDialog(_BaseFramelessDialog):
             "detection": {
                 "interval": round(self._interval.value(), 1),
                 "confidence_threshold": round(self._threshold.value(), 2),
+                "capture_backend": self._backend_combo.currentData(),
             },
             "debug": {
                 "save_screenshots": self._save_screenshots_cb.isChecked(),
@@ -1528,14 +1564,17 @@ class ConfigDialog(_BaseFramelessDialog):
             "[detection]",
         ]
         _kv("interval", d.get("interval", 0.3),
-            "截图间隔（秒），推荐 0.3 ~ 1.0")
+            "检测间隔（秒），推荐 0.3 ~ 1.0")
         _kv("confidence_threshold", d.get("confidence_threshold", 0.8),
             "匹配置信度阈值 (0.0~1.0)，推荐 0.75~0.90")
+        _kv("capture_backend", d.get("capture_backend", "printwindow"),
+            "画面来源：\"printwindow\" = 游戏窗口（默认，不受悬浮窗/其他窗口遮挡影响）；"
+            "\"mss\" = 屏幕（兼容模式）")
 
         lines.extend(["", "# 调试与实验功能", "[debug]"])
         _kv("save_screenshots", dbg.get("save_screenshots", False),
             "检测到关键事件时保存截图到 screenshots/")
-        _kv("auto_clear_screenshots", dbg.get("auto_clear_screenshots", True),
+        _kv("auto_clear_screenshots", dbg.get("auto_clear_screenshots", False),
             "下一局开始时自动清除上一局的截图")
         _kv("hotkey_enabled", dbg.get("hotkey_enabled", False),
             "启用截图热键（全局热键，游戏全屏时也可用）")
@@ -1555,8 +1594,8 @@ class ConfigDialog(_BaseFramelessDialog):
             "状态栏显示检测置信度（段位图标 NCC、等级判读、三阶段检测分数）")
         _kv("save_failure_samples", dbg.get("save_failure_samples", False),
             "识别失败时诊断截图（匹配度接近阈值但未达标时自动截图 + 诊断数据）")
-        _kv("failure_sample_offset", dbg.get("failure_sample_offset", 0.10),
-            "偏移量（值越大越容易触发，0 = 仅保存未达标的最高分）")
+        _kv("failure_sample_offset", dbg.get("failure_sample_offset", 0.2),
+            "偏移量（0.01 ~ 0.5）：记录下限 = 匹配阈值 − 偏移量，值越大越容易触发")
         _kv("detection_sound", dbg.get("detection_sound", False),
             "检测事件提示音总开关（关闭时硬币/先后攻/胜负三段音效全部静音）")
         _kv("coin_sound", dbg.get("coin_sound", False),
@@ -1571,17 +1610,18 @@ class ConfigDialog(_BaseFramelessDialog):
         _kv("height", w.get("height", 700), "主窗口高度（像素）")
 
         lines.extend(["", "# 界面外观", "[appearance]"])
-        _kv("theme", a.get("theme", "dark"),
+        _kv("theme", a.get("theme", "macaron"),
             '主题文件夹名（内置: "dark" / "light" / "macaron"）')
 
         lines.extend(["", "# 对方卡组预设", "[opponent_decks]"])
-        _kv("presets", od.get("presets", []),
+        _kv("presets", od.get(
+            "presets", ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"]),
             "记录表格下拉菜单的预设选项")
 
         lines.extend(["", "# 数据存储", "[recorder]"])
         _kv("daily_files", r.get("daily_files", False),
             "是否按日期分文件存储 CSV")
-        _kv("remember_last_deck", r.get("remember_last_deck", False),
+        _kv("remember_last_deck", r.get("remember_last_deck", True),
             "启动时自动填入最近一次使用的卡组（从 CSV 读取）")
 
         lines.extend(["", "# 统计表格显示", "[stats]"])
@@ -1597,9 +1637,9 @@ class ConfigDialog(_BaseFramelessDialog):
             "要复制的列名列表（空 = 默认 8 项）")
 
         lines.extend(["", "# 系统通知", "[notification]"])
-        _kv("enabled", ntfy.get("enabled", False),
+        _kv("enabled", ntfy.get("enabled", True),
             "对局结束时弹出系统气泡通知")
-        _kv("duration", ntfy.get("duration", 5),
+        _kv("duration", ntfy.get("duration", 1),
             "通知显示持续时间（秒）")
         _kv("minimize_to_tray", ntfy.get("minimize_to_tray", False),
             "关闭时隐藏到系统托盘（点 × 按钮时隐藏）")
@@ -1607,8 +1647,8 @@ class ConfigDialog(_BaseFramelessDialog):
         lines.extend(["", "# 段位图标检测", "[rank_detection]"])
         _kv("enabled", rk.get("enabled", True),
             "是否启用段位图标检测")
-        _kv("interval", rk.get("interval", 0.5),
-            "截图间隔（秒），0.3 ~ 1.0")
+        _kv("interval", rk.get("interval", 0.3),
+            "检测间隔（秒），0.3 ~ 1.0")
         _kv("confidence_threshold", rk.get("confidence_threshold", 0.7),
             "匹配置信度阈值 (0.0~1.0)")
 
@@ -1617,15 +1657,15 @@ class ConfigDialog(_BaseFramelessDialog):
             "是否使用主题背景图（false = 纯色，方便 OBS 颜色键捕捉）")
         _kv("show_status", fw.get("show_status", False),
             "在悬浮窗底部显示当前的状态消息（程序运行状态、识别进度等）")
-        _kv("show_status_compact", fw.get("show_status_compact", False),
+        _kv("show_status_compact", fw.get("show_status_compact", True),
             "简洁模式：只显示\"——\"前面的部分（仅悬浮窗，不影响主窗口）")
         _kv("width", fw.get("width", 250), "悬浮窗宽度（像素）")
-        _kv("height", fw.get("height", 300), "悬浮窗高度（像素）")
-        _kv("bg_color", fw.get("bg_color", "#BDEF0A"), "背景色")
+        _kv("height", fw.get("height", 330), "悬浮窗高度（像素）")
+        _kv("bg_color", fw.get("bg_color", "#bdef0a"), "背景色")
         _kv("opacity", fw.get("opacity", 50), "不透明度 0-100")
         _kv("font_size", fw.get("font_size", 20), "文字字号（像素）")
         _kv("text_color", fw.get("text_color", "#000000"), "文字颜色")
-        _kv("font_family", fw.get("font_family", "Microsoft YaHei, -apple-system, sans-serif"),
+        _kv("font_family", fw.get("font_family", "Microsoft YaHei UI"),
             "字体（Qt 从前往后找第一个可用的，含 macOS/Windows 回退）")
         _kv("rows", fw.get("rows", []),
             "显示数据行（空 = 默认 8 项）")

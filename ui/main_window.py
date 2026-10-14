@@ -588,7 +588,7 @@ class MainWindow(QMainWindow):
         self._status_label.setText(msg)
         if self._float_window is not None:
             float_msg = msg
-            if self._config.get("floating_window", {}).get("show_status_compact", False):
+            if self._config.get("floating_window", {}).get("show_status_compact", True):
                 float_msg = msg.split(" — ")[0].strip()
             self._float_window.update_status(float_msg)
 
@@ -865,7 +865,7 @@ class MainWindow(QMainWindow):
         self._cols_restored: bool = False     # 列宽是否已从持久化文件恢复
 
         # ---- 5. 加载主题 ----
-        theme_name = self._config.get("appearance", {}).get("theme", "dark")
+        theme_name = self._config.get("appearance", {}).get("theme", "macaron")
         theme: Theme = load_theme(theme_name)
         self._tm.colors = theme.colors
         self._tm.titlebar_cfg = theme.titlebar
@@ -942,7 +942,7 @@ class MainWindow(QMainWindow):
 
         # ---- 11. 窗口基础设置 ----
         self.resize(
-            self._config.get("window", {}).get("width", 1100),
+            self._config.get("window", {}).get("width", 1300),
             self._config.get("window", {}).get("height", 700),
         )
         self._restore_main_window_pos()          # 恢复上次窗口位置
@@ -1019,7 +1019,8 @@ class MainWindow(QMainWindow):
         # 列10: 段位升降 (升段/降段/空白=普通局)
         self.record_table.setItemDelegateForColumn(10, ComboDelegate(["升段", "降段", ""], self.record_table))
         # 列6: 对方卡组 (可编辑下拉 — 预设值来自 config.toml)
-        opponent_presets: list[str] = self._config.get("opponent_decks", {}).get("presets", [])
+        opponent_presets: list[str] = self._config.get("opponent_decks", {}).get(
+            "presets", ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"])
         self.record_table.setItemDelegateForColumn(5, EditableComboDelegate(opponent_presets, self.record_table))
 
         # ---- 16. 记录表格编辑 → CSV 同步 ----
@@ -1059,7 +1060,7 @@ class MainWindow(QMainWindow):
         self._reload_tables()
 
         # ---- 23. 若开启"记住上次卡组"，自动填入 ----
-        if self._config.get("recorder", {}).get("remember_last_deck", False):
+        if self._config.get("recorder", {}).get("remember_last_deck", True):
             last_deck = self._last_record_deck()
             if last_deck:
                 self._deck_input.setText(last_deck)
@@ -1735,7 +1736,7 @@ class MainWindow(QMainWindow):
             result_text: 结果中文文案 ('胜'/'负')
             new_record:  add_record 返回值，None 表示写入失败
         """
-        if not self._config.get("notification", {}).get("enabled", False):
+        if not self._config.get("notification", {}).get("enabled", True):
             return
         if self._notifying:                         # 防重入：避免同一结果弹两次气泡
             return
@@ -1750,7 +1751,7 @@ class MainWindow(QMainWindow):
         msg = f"{coin_text}{rank_text} → {turn_text} → {result_text}"
         if new_record is None:
             msg += "\n⚠ CSV 文件被占用，记录已暂存"
-        duration = self._config.get("notification", {}).get("duration", 5) * 1000
+        duration = self._config.get("notification", {}).get("duration", 1) * 1000
         self._tray.showMessage("MD Stats", msg,
                                QSystemTrayIcon.MessageIcon.Warning if new_record is None
                                else QSystemTrayIcon.MessageIcon.Information,
@@ -2314,7 +2315,7 @@ class MainWindow(QMainWindow):
         self._snapshot_ctrl.sync_hotkeys()
         self._snapshot_ctrl.update_config(self._config)    # 同步新配置到截图控制器
         self._tm._config = self._config                    # 同步到 ThemeManager
-        new_theme_name = self._config.get("appearance", {}).get("theme", "dark")
+        new_theme_name = self._config.get("appearance", {}).get("theme", "macaron")
         init_active_csv_from_config()
         self._update_info_label()
 
@@ -2346,7 +2347,8 @@ class MainWindow(QMainWindow):
         self._rank_delegate_opponent._colors = new_colors
 
         # 对方卡组预设更新（列5 = 对方卡组）
-        new_presets = self._config.get("opponent_decks", {}).get("presets", [])
+        new_presets = self._config.get("opponent_decks", {}).get(
+            "presets", ["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"])
         self.record_table.setItemDelegateForColumn(5, EditableComboDelegate(new_presets, self.record_table))
 
         # Worker 正在运行 → 停止后用新配置重启
@@ -2373,7 +2375,7 @@ class MainWindow(QMainWindow):
     # =========================================================================
     # 右下角信息标签（定时刷新）
     #
-    # 显示: 活跃 CSV 文件名 | 截图间隔 | 匹配置信度阈值 | Master Duel 窗口状态
+    # 显示: 活跃 CSV 文件名 | 检测间隔 | 匹配置信度阈值 | Master Duel 窗口状态
     # 每 2 秒自动更新一次（由 _info_timer 驱动）
     # =========================================================================
 
@@ -2382,10 +2384,10 @@ class MainWindow(QMainWindow):
 
         包含四个信息:
             - 当前活跃的 CSV 文件名
-            - 截图间隔和匹配置信度（来自 config.toml）
+            - 检测间隔和匹配置信度（来自 config.toml）
             - Master Duel 窗口状态（未启动 / 已最小化 / 分辨率 W×H）
         """
-        interval = self._config.get("detection", {}).get("interval", 0.5)
+        interval = self._config.get("detection", {}).get("interval", 0.3)
         threshold = self._config.get("detection", {}).get("confidence_threshold", 0.8)
 
         size_info: str

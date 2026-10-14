@@ -1,4 +1,4 @@
-"""主题加载模块 — 从 themes/ 文件夹加载 QSS、颜色表、标题栏配置及图片资源。
+"""主题加载模块 — 从 resource/themes/ 文件夹加载 QSS、颜色表、标题栏配置及图片资源。
 
 ================================================================================
 加载优先级（三级回退）
@@ -7,10 +7,10 @@
 程序启动或切换主题时，调用 load_theme(theme_name) 加载主题。
 按以下顺序尝试，任意一步成功即返回：
 
-    第1级: themes/{name}/theme.toml + style.qss
+    第1级: resource/themes/{name}/theme.toml + style.qss
            ↓ 主题文件夹存在 → 读取 TOML 和 QSS 文件，替换占位符
     第2级: 内置硬编码亮色主题（_BUILTIN_COLORS + _BUILTIN_QSS）
-           ↓ 主题文件夹不存在 → 返回零依赖的亮色主题（即使 themes/ 被删除也能运行）
+           ↓ 主题文件夹不存在 → 返回零依赖的亮色主题（即使 resource/themes/ 被删除也能运行）
 
 在第1级内部还有子回退：
     第1a: theme.toml 中某个 section 缺失 → 用 _BUILTIN_xxx 兜底
@@ -23,7 +23,7 @@
 
 项目中存在两套不同的 QSS 模板，使用不同的占位符格式：
 
-    主题文件 QSS（themes/*/style.qss）: 使用 {{color.key}} 和 {{asset.key}}
+    主题文件 QSS（resource/themes/*/style.qss）: 使用 {{color.key}} 和 {{asset.key}}
         示例: background-color: {{color.main_bg}};
               border-image: url({{asset.main_bg}}) 0 0 0 0 stretch stretch;
         处理方式: Python 的 str.replace() 逐个替换
@@ -77,7 +77,7 @@ theme.toml 完整结构（以 macaron 主题为例）
     settings_bg  = { file = "", mode = "stretch" }   # 设置弹窗背景图（可选）
 
     [colors]                           # 颜色表（所有值都是 #RRGGBB 格式）
-    # ... 约 50 个颜色 key，详见 themes/dark/theme.toml 注释
+    # ... 约 50 个颜色 key，详见 resource/themes/dark/theme.toml 注释
 
 ================================================================================
 使用方式
@@ -102,8 +102,8 @@ import tomllib
 # 字体加载（Qt 提供的跨平台字体管理 API）
 from PySide6.QtGui import QFontDatabase
 
-# themes/ 文件夹路径（开发模式: 项目根/themes，打包模式: EXE所在目录/themes）
-_THEMES_DIR = get_project_root() / "themes"
+# themes 文件夹路径（开发模式: 项目根/resource/themes，打包模式: EXE所在目录/resource/themes）
+_THEMES_DIR = get_project_root() / "resource" / "themes"
 
 # 全局默认字体（当主题未指定字体时的兜底）
 _DEFAULT_FONT = "Microsoft YaHei"
@@ -137,9 +137,9 @@ class Theme:
 # =============================================================================
 # 最终兜底：硬编码亮色主题（零外部依赖）
 #
-# 这些常量的作用是：即使整个 themes/ 文件夹被删除或损坏，
+# 这些常量的作用是：即使整个 resource/themes/ 文件夹被删除或损坏，
 # 程序仍然能启动并显示一个可用的亮色界面，不会崩溃或白屏。
-# 颜色值与 themes/light/theme.toml 保持一致。
+# 颜色值与 resource/themes/light/theme.toml 保持一致。
 # =============================================================================
 
 _BUILTIN_COLORS: dict[str, str] = {
@@ -190,7 +190,7 @@ _BUILTIN_ASSETS: dict = {
 }
 
 # 内置 QSS 模板 — 使用 %(key)s 占位符格式
-# 内容与 themes/light/style.qss 保持一致，只是占位符格式不同
+# 内容与 resource/themes/light/style.qss 保持一致，只是占位符格式不同
 _BUILTIN_QSS = """\
 QMainWindow { background-color: %(main_bg)s; }
 QWidget { color: %(text_primary)s; font-family: "%(font_family)s"; font-size: %(font_size)spx; }
@@ -273,8 +273,8 @@ def load_theme(name: str) -> Theme:
 
     回退链:
         name 为空 → 当作 "light"
-        themes/{name}/ 存在 → _build_theme() 从文件夹构建
-        themes/{name}/ 不存在 → _fallback_theme() 返回硬编码亮色主题
+        resource/themes/{name}/ 存在 → _build_theme() 从文件夹构建
+        resource/themes/{name}/ 不存在 → _fallback_theme() 返回硬编码亮色主题
     """
     if not name:
         name = "light"
@@ -303,7 +303,7 @@ def _build_theme(theme_dir: Path) -> Theme:
         步骤6: 兜底清理（未替换的占位符用内置值补、% 格式化）
 
     参数:
-        theme_dir — 主题文件夹的 Path 对象（如 Path("themes/dark")）
+        theme_dir — 主题文件夹的 Path 对象（如 Path("resource/themes/dark")）
     """
     assets_dir = theme_dir / "assets"
 
@@ -451,7 +451,7 @@ def _build_theme(theme_dir: Path) -> Theme:
 def _fallback_theme() -> Theme:
     """最终兜底：返回硬编码亮色主题（零文件依赖）。
 
-    当 themes/ 文件夹不存在，或用户指定的主题文件夹不存在时调用。
+    当 resource/themes/ 文件夹不存在，或用户指定的主题文件夹不存在时调用。
     返回的 Theme 对象完全基于 _BUILTIN_xxx 常量构建，不需要读取任何文件。
 
     内置 QSS 使用 %(key)s 占位符，直接用 colors 字典做 % 格式化。

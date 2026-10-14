@@ -119,7 +119,6 @@ jobs:
           New-Item -ItemType Directory -Path $release -Force | Out-Null
           Copy-Item "dist/MD Stats/MD Stats.exe" $release
           Copy-Item -Recurse "dist/MD Stats/.runtime" $release
-          Copy-Item -Recurse themes $release
           Copy-Item -Recurse csv $release
           Copy-Item -Recurse resource $release
           # 默认配置由代码模板现场生成（仓库不再跟踪 config.toml，保证内容与代码一致）

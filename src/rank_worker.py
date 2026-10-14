@@ -4,7 +4,7 @@
 设计思路
 ================================================================================
 
-段位图标仅在 coin toss 阶段短暂显示（~2 秒），主管线的 0.3s 截图间隔
+段位图标仅在 coin toss 阶段短暂显示（~2 秒），主管线的 0.3s 检测间隔
 无法保证正好截到。因此使用独立线程，以可配置的间隔持续截图检测，
 检测到双方段位后立即暂存结果并暂停，等下一局再重新开始。
 
@@ -49,7 +49,7 @@ class RankWorker(QThread):
         4. 双方都识别到后暂停，等下一局再继续
 
     属性说明:
-        _interval  — 截图间隔（秒），从 config.toml 读取，默认 0.5
+        _interval  — 检测间隔（秒），从 config.toml 读取，默认 0.3
         _threshold — NCC 匹配置信度阈值，低于此值的结果丢弃
         _running   — 线程运行标志，设为 False 后下一次循环退出
         _paused    — 暂停标志，一局完成后暂停截图节省 CPU
@@ -77,8 +77,10 @@ class RankWorker(QThread):
         super().__init__(parent)
         cfg = load_config()
         rank_cfg = cfg.get("rank_detection", {})  # 读取 [rank_detection] 段
-        self._interval: float = rank_cfg.get("interval", 0.5)
+        self._interval: float = rank_cfg.get("interval", 0.3)
         self._threshold: float = rank_cfg.get("confidence_threshold", 0.7)
+        # 画面来源与主识别管线共用同一配置（detection.capture_backend）
+        self._backend: str = cfg.get("detection", {}).get("capture_backend", "printwindow")
         self._running = False               # 线程主循环开关
         self._paused = False                # 暂停标志（一局结束到下一局开始之间）
         self._result: dict | None = None    # 暂存当前这局的检测结果
@@ -189,8 +191,9 @@ class RankWorker(QThread):
 
             # ---- 截图 ----
             try:
-                screenshot = _cap.capture_window("masterduel")
-            except OSError:
+                screenshot = _cap.capture_window("masterduel", backend=self._backend)
+            except (OSError, RuntimeError):
+                # OSError: mss 屏幕抓取失败；RuntimeError: PrintWindow 失败/窗口最小化
                 self._sleep(int(self._interval * 1000))
                 continue
 

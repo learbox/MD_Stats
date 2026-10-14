@@ -2,6 +2,9 @@
 
 基于图像识别的 **Master Duel 对局自动统计工具**。
 
+> **纯读屏幕像素：不注入游戏、不修改游戏内存、不读取游戏进程、不模拟任何按键或点击。**
+> 除「关于」页中手动点击的版本检查（单向查询 GitHub）外，全程不联网，不收集、不上传任何信息。
+
 ## 快速开始
 
 1. 双击 `MD Stats.exe` 启动程序
@@ -11,7 +14,7 @@
 
 ## 使用说明
 
-- **自动识别** — 程序定时截图并匹配游戏界面，自动检测硬币输赢（含段位升降）、先后攻、对局胜负，状态栏显示匹配分数
+- **自动识别** — 程序定时读取游戏画面并匹配，自动检测硬币输赢（含段位升降）、先后攻、对局胜负，状态栏显示匹配分数
 - **手动补录** — 自动识别遗漏时，可点击手动按钮补录（按钮与自动识别状态联动）
 - **记录编辑** — 双击记录表格中的单元格可直接编辑，修改自动写回 CSV
 - **段位图标显示** — 段位列自动显示图标缩略图 + 段位名称（图标文件放入 `rankicons/` 目录即可，缺失时降级为纯文字）
@@ -22,7 +25,7 @@
 - **撤销 / 删除** — 手动录入支持逐级撤销，也可删除最后一条记录
 - **记住卡组** — 开启后启动时自动从 CSV 填入上次使用的卡组名
 - **调试工具** — 可选开启检测截图保存、接近成功的截图自动保留和日志模式，方便排查问题
-- **段位图标识别** — 独立线程持续截图 + NCC 模板匹配 + RGBA 背景合成 + 列投影数字识别，自动检测双方段位（新手~巅峰 + I~V），写入 CSV 己方/对方段位列，可在设置中关闭
+- **段位图标识别** — 独立线程持续读取游戏画面 + NCC 模板匹配 + RGBA 背景合成 + 列投影数字识别，自动检测双方段位（新手 ~ 巅峰，大师及以下区分 I~V），写入 CSV 己方/对方段位列，可在设置中关闭
 - **详细统计弹窗** — 按卡组 + 己方段位动态筛选，展示 17 项统计指标，支持一键复制。段位下拉从 CSV 数据动态生成，未知段位自动归入"无段位/其他"
 - **CSV 占用暂存** — CSV 被其他程序占用时记录自动暂存，状态栏持续提醒，关闭后自动补写，退出时弹窗确认
 - **系统通知** — 对局结束时弹出气泡通知，写入失败时气泡变 ⚠ 警告
@@ -36,7 +39,7 @@
 
 | 标签页 | 包含配置 |
 |--------|---------|
-| 识别 | 截图间隔、置信度阈值、检测事件提示音、段位检测开关及参数、调试选项（截图保存、失败诊断、截图热键及结果音效） |
+| 识别 | 画面来源、检测间隔、置信度阈值、检测事件提示音、段位检测开关及参数、调试选项（截图保存、失败诊断、截图热键及结果音效） |
 | 外观 | 主题选择、字体更换、窗口尺寸 |
 | 剪贴板 | 竖排/横排模式、复制范围、列选择 |
 | 悬浮窗 | 尺寸、背景色、透明度、文字颜色、字体、字号、背景图、显示数据行、状态行 |
@@ -80,7 +83,7 @@ resource/templates/
 
 内置三套主题：`dark`（暗色沉浸）、`light`（亮色清爽）、`macaron`（马卡龙水彩纹理）。
 
-在 `themes/` 下新建文件夹即可创建自定义主题，详见 `themes/README.md`。
+在 `resource/themes/` 下新建文件夹即可创建自定义主题，详见 `resource/themes/README.md`。
 
 ## 文件结构
 
@@ -106,63 +109,63 @@ MDStats/
 │   │   ├── snapshot.wav / error.wav   ← 单次截图成功/失败音效
 │   │   └── coin.wav / turn.wav / result.wav  ← 三段检测提示音
 │   │
-│   └── templates/           # 图像识别模板
-│       ├── README.md              # 模板制作指南
-│       │
-│       ├── rankicons/             # 段位图标（识别用 + 表格显示用 ⚠️）
-│       │   ├── img_rankicon_01_l.png  → 新手
-│       │   ├── img_rankicon_02_l.png  → 青铜
-│       │   ├── img_rankicon_03_l.png  → 白银
-│       │   ├── img_rankicon_04_l.png  → 黄金
-│       │   ├── img_rankicon_05_l.png  → 铂金
-│       │   ├── img_rankicon_06_l.png  → 钻石
-│       │   ├── img_rankicon_07_l.png  → 大师
-│       │   ├── img_rateicon_01_l.png  → 巅峰
-│       │   ├── img_rankicon_crown_l.png  （备用，未使用）
-│       │   └── rank_positions.toml    # 图标位置缓存（自动生成）
-│       │
-│       ├── 1600x900/        # 1600×900 分辨率
-│       │   ├── coin_win.png / coin_lose.png   ← 赢/输硬币（必选）
-│       │   ├── go_first.png / go_second.png   ← 先攻/后攻（必选）
-│       │   ├── victory.png / defeat.png / draw.png ← 胜/负/平界面（必选/可选）
-│       │   ├── rank_up.png / rank_down.png    ← 升段/降段（可选）
-│       │   └── roi.toml                       ← 搜索区域裁剪（可选）
-│       │
-│       ├── 1920x1080/       # 1920×1080（同上结构）
-│       ├── 2048x1152/       # 2048×1152（同上，无 rank_up/down）
-│       ├── 2560x1440/       # 2560×1440（同上，无 rank_up/down）
-│       ├── 3200x1800/       # 3200×1800（同上，无 rank_up/down）
-│       └── 3840x2160/       # 3840×2160（同上，无 rank_up/down）
+│   ├── templates/           # 图像识别模板
+│   │   ├── README.md              # 模板制作指南
+│   │   │
+│   │   ├── rankicons/             # 段位图标（识别用 + 表格显示用 ⚠️）
+│   │   │   ├── img_rankicon_01_l.png  → 新手
+│   │   │   ├── img_rankicon_02_l.png  → 青铜
+│   │   │   ├── img_rankicon_03_l.png  → 白银
+│   │   │   ├── img_rankicon_04_l.png  → 黄金
+│   │   │   ├── img_rankicon_05_l.png  → 铂金
+│   │   │   ├── img_rankicon_06_l.png  → 钻石
+│   │   │   ├── img_rankicon_07_l.png  → 大师
+│   │   │   ├── img_rateicon_01_l.png  → 巅峰
+│   │   │   ├── img_rankicon_crown_l.png  （备用，未使用）
+│   │   │   └── rank_positions.toml    # 图标位置缓存（自动生成）
+│   │   │
+│   │   ├── 1600x900/        # 1600×900 分辨率
+│   │   │   ├── coin_win.png / coin_lose.png   ← 赢/输硬币（必选）
+│   │   │   ├── go_first.png / go_second.png   ← 先攻/后攻（必选）
+│   │   │   ├── victory.png / defeat.png / draw.png ← 胜/负/平界面（必选/可选）
+│   │   │   ├── rank_up.png / rank_down.png    ← 升段/降段（可选）
+│   │   │   └── roi.toml                       ← 搜索区域裁剪（可选）
+│   │   │
+│   │   ├── 1920x1080/       # 1920×1080（同上结构）
+│   │   ├── 2048x1152/       # 2048×1152（同上，无 rank_up/down）
+│   │   ├── 2560x1440/       # 2560×1440（同上，无 rank_up/down）
+│   │   ├── 3200x1800/       # 3200×1800（同上，无 rank_up/down）
+│   │   └── 3840x2160/       # 3840×2160（同上，无 rank_up/down）
 │
-├── themes/                  # 主题目录
-│   ├── README.md            # 自定义主题制作指南
-│   │
-│   ├── dark/                # 暗色沉浸主题
-│   │   ├── theme.toml       #   颜色 / 字体 / 标题栏配置
-│   │   └── style.qss        #   Qt 样式表
-│   │
-│   ├── light/               # 亮色清爽主题
-│   │   ├── theme.toml
-│   │   └── style.qss
-│   │
-│   └── macaron/             # 马卡龙水彩纹理主题
-│       ├── theme.toml
-│       ├── style.qss
-│       └── assets/          #   主题图片 + 字体
-│           ├── main_bg.png        # 主窗口背景图
-│           ├── settings_bg.png    # 设置弹窗背景图
-│           ├── table_bg.png       # 表格背景纹理
-│           ├── header_bg.png      # 表头背景
-│           ├── row_header_bg.png  # 行号列背景
-│           ├── statusbar_bg.png   # 状态栏背景
-│           ├── panel_bg.png       # 面板背景
-│           ├── corner_bg.png      # 边角装饰
-│           ├── button_texture.png # 按钮纹理
-│           ├── float_bg.png       # 悬浮窗背景
-│           ├── title_close.png    # 关闭按钮图标
-│           ├── title_min.png      # 最小化按钮图标
-│           ├── *.ttf / *.otf      # 自定义字体
-│           └── OFL*.txt           # 字体开源许可证
+│   └── themes/                  # 主题目录
+│       ├── README.md            # 自定义主题制作指南
+│       │
+│       ├── dark/                # 暗色沉浸主题
+│       │   ├── theme.toml       #   颜色 / 字体 / 标题栏配置
+│       │   └── style.qss        #   Qt 样式表
+│       │
+│       ├── light/               # 亮色清爽主题
+│       │   ├── theme.toml
+│       │   └── style.qss
+│       │
+│       └── macaron/             # 马卡龙水彩纹理主题
+│           ├── theme.toml
+│           ├── style.qss
+│           └── assets/          #   主题图片 + 字体
+│               ├── main_bg.png        # 主窗口背景图
+│               ├── settings_bg.png    # 设置弹窗背景图
+│               ├── table_bg.png       # 表格背景纹理
+│               ├── header_bg.png      # 表头背景
+│               ├── row_header_bg.png  # 行号列背景
+│               ├── statusbar_bg.png   # 状态栏背景
+│               ├── panel_bg.png       # 面板背景
+│               ├── corner_bg.png      # 边角装饰
+│               ├── button_texture.png # 按钮纹理
+│               ├── float_bg.png       # 悬浮窗背景
+│               ├── title_close.png    # 关闭按钮图标
+│               ├── title_min.png      # 最小化按钮图标
+│               ├── *.ttf / *.otf      # 自定义字体
+│               └── OFL*.txt           # 字体开源许可证
 │
 └── .runtime/                # 运行时依赖（请勿修改）
 ```

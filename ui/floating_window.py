@@ -332,16 +332,17 @@ class FloatingWindow(QWidget):
         """
         w = cfg.get("width", self._DEFAULT_W)
         # 先更新 font_size，再计算内容高度（_content_height 依赖 _font_size）
-        self._font_size = cfg.get("font_size", 14)
+        self._font_size = cfg.get("font_size", 20)
         self._text_color = cfg.get("text_color", "#000000")
-        self._font_family = cfg.get("font_family", "")
+        self._font_family = cfg.get("font_family", "Microsoft YaHei UI")
         content_h = self._content_height()
-        h = cfg.get("height", content_h)
+        # 缺省时对齐模板默认高度（330），且不小于内容高度（保留自适应特性）
+        h = cfg.get("height", max(content_h, 330))
         # 确保配置高度不小于实际内容高度，避免 Windows setGeometry 警告
         self._update_size_constraints()
         self.resize(w, max(h, content_h))
 
-        bg = cfg.get("bg_color", "#98d4bb")
+        bg = cfg.get("bg_color", "#bdef0a")
         opacity_pct = cfg.get("opacity", 50)
 
         r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)

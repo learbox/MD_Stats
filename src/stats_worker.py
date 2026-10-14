@@ -164,7 +164,7 @@ class StatsWorker(QThread):
         """初始化工作线程。
 
         从 config.toml 读取以下参数：
-            detection.interval              — 截图间隔（秒），默认 0.5
+            detection.interval              — 检测间隔（秒），默认 0.3
             detection.confidence_threshold   — 匹配置信度阈值 (0.0~1.0)，默认 0.8
             debug.save_screenshots           — 是否保存检测截图，默认 false
             debug.log_mode                  — 是否开启日志模式，默认 false
@@ -189,8 +189,9 @@ class StatsWorker(QThread):
         self._failure_mgr = failure_mgr
         cfg = load_config()
         # ---- 识别参数 ----
-        self._interval: float = cfg.get("detection", {}).get("interval", 0.5)
+        self._interval: float = cfg.get("detection", {}).get("interval", 0.3)
         self._threshold: float = cfg.get("detection", {}).get("confidence_threshold", 0.8)
+        self._backend: str = cfg.get("detection", {}).get("capture_backend", "printwindow")
 
         # ---- 调试/实验功能 ----
         # 注意：save_screenshots 控制是否把截图写到磁盘（PNG 文件），
@@ -200,7 +201,7 @@ class StatsWorker(QThread):
         #       截图文件仍然会保存，只是不会在日志中写"已保存"消息。
         dbg = cfg.get("debug", {})
         self._save_screenshots: bool = dbg.get("save_screenshots", False)
-        self._auto_clear: bool = dbg.get("auto_clear_screenshots", True)
+        self._auto_clear: bool = dbg.get("auto_clear_screenshots", False)
         self._show_confidence: bool = dbg.get("show_confidence", False)
         if dbg.get("log_mode", False):
             _log.init_log(get_project_root() / "logs")       # 初始化日志文件
@@ -585,13 +586,20 @@ class StatsWorker(QThread):
             _last_resolution = size  # 更新分辨率记录
 
             # [2] 截取 Master Duel 窗口客户区
-            #     capture_window 内部用 mss 库做高性能截图（Windows 上走 DirectX）
+            #     capture_window 按配置分发：printwindow=直接取窗口画面（默认，不受遮挡影响）
+            #                                    mss=屏幕抓取（兼容模式，旧行为）
             try:
-                screenshot = _cap.capture_window("masterduel")
+                screenshot = _cap.capture_window("masterduel", backend=self._backend)
             except Exception as e:
-                # 截图失败的原因很多（窗口关闭/失去焦点/BitBlt拒绝访问等），
-                # 统一处理为跳过本帧，外层 run() 的 try/except 负责捕获真正的逻辑 bug
-                self.status_update.emit(f"截图失败: {e}")
+                # 截图失败的原因很多（窗口关闭/最小化/截屏调用被拒等），
+                # 统一处理为跳过本帧，外层 run() 的 try/except 负责捕获真正的逻辑 bug。
+                # 仅当失败可归因于画面来源方式本身（异常带 suggest_fallback）
+                # 才提示切换来源；最小化/窗口关闭等与来源无关，提示会是误导。
+                msg = f"截图失败: {e}"
+                if getattr(e, "suggest_fallback", False):
+                    other = "mss 兼容模式" if self._backend == "printwindow" else "游戏窗口"
+                    msg += f"（可尝试在设置中切换为 {other}）"
+                self.status_update.emit(msg)
                 self._skip()
                 continue
 

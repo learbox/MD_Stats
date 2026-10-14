@@ -2,10 +2,13 @@
 
 基于图像识别的 **Master Duel 对局自动统计工具**。通过 OpenCV 模板匹配自动检测硬币输赢（含段位升降）、先后攻、对局胜负平，记录到 CSV 并通过 GUI 展示统计数据。
 
+> **纯读屏幕像素：不注入游戏、不修改游戏内存、不读取游戏进程、不模拟任何按键或点击。**
+> 除「关于」页中手动点击的版本检查（单向查询 GitHub）外，全程不联网，不收集、不上传任何信息。
+
 ## 功能
 
-- **自动识别** — 定时截图 + OpenCV 模板匹配，自动检测对局三阶段（硬币→先后攻→胜负平），同步检测段位升降
-- **段位图标检测** — 独立线程持续截图，NCC 模板匹配 + RGBA 背景合成 + 列投影数字识别，自动识别双方段位（新手-巅峰 + I-V），写入 CSV `己方段位`/`对方段位` 列，可在设置中关闭
+- **自动识别** — 定时读取游戏画面 + OpenCV 模板匹配，自动检测对局三阶段（硬币→先后攻→胜负平），同步检测段位升降
+- **段位图标检测** — 独立线程持续读取游戏画面，NCC 模板匹配 + RGBA 背景合成 + 列投影数字识别，自动识别双方段位（新手 ~ 巅峰，大师及以下区分 I~V），写入 CSV `己方段位`/`对方段位` 列，可在设置中关闭
 - **段位图标显示** — 记录表格中段位列自动显示段位图标缩略图 + 段位名称（需将图标 PNG 放入 `rankicons/` 目录，缺失时降级为纯文字）
 - **段位快速编辑** — 双击段位单元格弹出按钮矩阵面板，两次点击即可选好段位，也支持输入自定义文字
 - **详细统计弹窗** — 按卡组 + 己方段位动态筛选，展示 17 项统计指标（对局数/胜率/硬币概率/先后攻胜率/段位升降率等），支持一键复制到剪贴板
@@ -121,10 +124,11 @@ python main.py
 
 | 配置项 | 说明 | 默认值 |
 | --- | --- | --- |
-| `detection.interval` | 截图间隔（秒） | `0.3` |
+| `detection.interval` | 检测间隔（秒） | `0.3` |
 | `detection.confidence_threshold` | 匹配置信度阈值 (0.0~1.0) | `0.8` |
+| `detection.capture_backend` | 画面来源：`"printwindow"` 游戏窗口（不受悬浮窗/其他窗口遮挡影响）/ `"mss"` 屏幕（兼容模式） | `"printwindow"` |
 | `window.width` / `height` | 主窗口尺寸（像素） | `1300` / `700` |
-| `appearance.theme` | 界面主题，填写 `themes/` 下的文件夹名 | `"macaron"` |
+| `appearance.theme` | 界面主题，填写 `resource/themes/` 下的文件夹名 | `"macaron"` |
 | `opponent_decks.presets` | 对方卡组预设列表 | `["闪刀姬", "烙印", "k9vs", "杀手旋律", "绚岚", "烙印星宿", "纠罪巧"]` |
 | `debug.save_screenshots` | 识别成功时保存截图（开启后写入 `screenshots/`） | `false` |
 | `debug.auto_clear_screenshots` | 下一局开始时自动清除上一局的截图 | `false` |
@@ -140,13 +144,13 @@ python main.py
 | `debug.log_mode` | 日志模式（开启后写入 `logs/`） | `false` |
 | `debug.log_scope` | 日志记录范围：`status`/`screenshots`/`errors` | `["status","screenshots","errors"]` |
 | `debug.show_confidence` | 状态栏显示检测置信度 | `false` |
-| `debug.save_failure_samples` | 识别失败时诊断截图（匹配度接近阈值时自动截图 + 诊断数据到 `screenshots/debug/`） | `false` |
-| `debug.failure_sample_offset` | 触发偏移（值越大越容易触发，0 = 仅保存未达标帧的最高分） | `0.2` |
+| `debug.save_failure_samples` | 识别失败时诊断截图（匹配度接近阈值时自动截图 + 诊断数据到 `screenshots/debug.bak`） | `false` |
+| `debug.failure_sample_offset` | 触发偏移（0.01~0.5，记录下限 = 匹配阈值 − 偏移量） | `0.2` |
 | `recorder.daily_files` | 是否按日期分 CSV 文件 | `false` |
 | `stats.columns` | 统计表格显示的列（空 = 全部） | 全部 16 列 |
 | `recorder.remember_last_deck` | 启动时自动填入上次使用的卡组 | `true` |
 | `rank_detection.enabled` | 启用段位图标检测 | `true` |
-| `rank_detection.interval` | 段位检测截图间隔（秒） | `0.3` |
+| `rank_detection.interval` | 段位检测间隔（秒） | `0.3` |
 | `rank_detection.confidence_threshold` | 段位匹配置信度阈值 | `0.7` |
 | `clipboard.vertical_layout` | 剪贴板竖排模式 | `false` |
 | `clipboard.scope` | 复制范围（`"all"` / `"current"`） | `"all"` |
@@ -154,7 +158,7 @@ python main.py
 | `notification.enabled` | 对局结束系统气泡通知 | `true` |
 | `notification.duration` | 通知显示时长（秒） | `1` |
 | `notification.minimize_to_tray` | 关闭时隐藏到系统托盘 | `false` |
-| `floating_window.bg_color` | 悬浮窗背景色 | `#BDEF0A` |
+| `floating_window.bg_color` | 悬浮窗背景色 | `#bdef0a` |
 | `floating_window.opacity` | 悬浮窗不透明度 (0-100) | `50` |
 | `floating_window.show_status` | 悬浮窗底部显示状态消息 | `false` |
 | `floating_window.show_status_compact` | 状态消息简洁模式 | `true` |
@@ -176,7 +180,7 @@ python main.py
 
 内置三套主题：`dark`（暗色沉浸）、`light`（亮色清爽）、`macaron`（马卡龙水彩纹理）。通过设置弹窗或 `config.toml` 切换。
 
-**制作自定义主题**：在 `themes/` 下新建文件夹 → 放入 `theme.toml`（修改颜色/字体/图片）+ `style.qss`（复制内置模板）+ `assets/`（图片和字体） → 在 `config.toml` 中填写文件夹名。详见 `themes/README.md`。
+**制作自定义主题**：在 `resource/themes/` 下新建文件夹 → 放入 `theme.toml`（修改颜色/字体/图片）+ `style.qss`（复制内置模板）+ `assets/`（图片和字体） → 在 `config.toml` 中填写文件夹名。详见 `resource/themes/README.md`。
 
 ## 项目结构
 
@@ -194,29 +198,29 @@ MD_Stats/
 │   └── TROUBLESHOOTING.md   # 常见问题排查
 ├── resource/                # 静态资源
 │   ├── sounds/              # 提示音效（可替换：snapshot / error / coin / turn / result.wav）
-│   └── templates/           # 模板图片（按分辨率分目录）
-│       ├── rankicons/            # 段位图标（源素材 + 位置缓存，需自行准备）
-│       ├── 1920x1080/            # 1080p 模板 + roi.toml
-│       ├── 2560x1440/            # 1440p 模板 + roi.toml
-│       └── ...                   # 其他分辨率子目录
+│   ├── templates/           # 模板图片（按分辨率分目录）
+│   │   ├── rankicons/            # 段位图标（源素材 + 位置缓存，需自行准备）
+│   │   ├── 1920x1080/            # 1080p 模板 + roi.toml
+│   │   ├── 2560x1440/            # 1440p 模板 + roi.toml
+│   │   └── ...                   # 其他分辨率子目录
+│   └── themes/                  # 主题目录
+│       ├── README.md            # 主题制作指南
+│       ├── dark/                # 暗色沉浸主题
+│       │   ├── theme.toml
+│       │   ├── style.qss
+│       │   └── assets/
+│       ├── light/               # 亮色清爽主题
+│       └── macaron/             # 马卡龙水彩纹理主题
+│           ├── theme.toml
+│           ├── style.qss
+│           └── assets/          # 背景图片 + 图标
 ├── csv/                     # 对战数据 CSV 文件
 ├── screenshots/             # 调试截图输出（开启 save_screenshots 后自动生成）
 ├── logs/                    # 日志文件输出（开启 log_mode 后自动生成）
-├── themes/                  # 主题目录
-│   ├── README.md            # 主题制作指南
-│   ├── dark/                # 暗色沉浸主题
-│   │   ├── theme.toml
-│   │   ├── style.qss
-│   │   └── assets/
-│   ├── light/               # 亮色清爽主题
-│   └── macaron/             # 马卡龙水彩纹理主题
-│       ├── theme.toml
-│       ├── style.qss
-│       └── assets/          # 背景图片 + 图标
 ├── src/
 │   ├── app_state.py         # 应用状态持久化（窗口位置 / 列宽）
 │   ├── theme_loader.py      # 主题加载（TOML 解析 + QSS 占位符替换）
-│   ├── capture.py           # 窗口定位与截图（mss + pywin32）
+│   ├── capture.py           # 窗口定位与画面获取（PrintWindow + mss）
 │   ├── config.py            # config.toml 配置加载
 │   ├── detector.py          # OpenCV 模板匹配识别
 │   ├── failure_sample_manager.py # 最佳失败样本管理器
