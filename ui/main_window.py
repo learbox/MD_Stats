@@ -39,7 +39,7 @@
 
     GUI 按钮                 →  直接调用对应方法（主线程中执行）
     [启动]                  →  _on_start()             → 创建检测线程并启动
-    [停止]                  →  _on_stop()              → 停止并销毁检测线程
+    [停止]                  →  _on_stop()              → 停止识别线程（后台优雅收尾）
     [赢硬币] [输硬币] [撤销]  →  _manual_step_clicked()  → 手动录入（与自动联动）
                                 _on_undo()              → 逐级回退阶段
     [锁定卡组]              →  _on_toggle_deck_lock()  → 锁定/解锁卡组输入框
@@ -613,6 +613,12 @@ def _config_warning_lines(warnings: list[dict]) -> list[str]:
         lines.append(f"• {title}")
         lines.append(f'    原值 {_fmt_cfg_value(w["raw"])} → {_cfg_warning_action(w)}')
     return lines
+
+
+# 「停止」看门狗延时（毫秒）：点停止后线程仍未退出时，超时强杀的等待上限。
+# 正常路径下线程会很快自行退出，看门狗只在卡死时兜底（见 _on_stop）。
+# 抽成模块常量便于测试缩短（offscreen 测试会临时改小它）。
+_STOP_WATCHDOG_MS = 3000
 
 
 # =============================================================================
@@ -1377,9 +1383,9 @@ class MainWindow(QMainWindow):
     #   4. 用户同意 → 启动游戏 + 轮询等待窗口出现
     #
     # 停止流程:
-    #   1. 设置 worker._running = False
-    #   2. 等待线程退出（最多 2 秒）
-    #   3. 恢复 UI 状态
+    #   1. 设置停止标志（两个线程并发退出）
+    #   2. 立即恢复 UI 状态（不等待线程退出）
+    #   3. 线程在后台沿检查点优雅收尾，超时由看门狗强杀兜底
     # =========================================================================
 
     def _on_start(self) -> None:
@@ -1494,38 +1500,29 @@ class MainWindow(QMainWindow):
             self._float_window.set_running(True)
 
     def _on_stop(self) -> None:
-        """点击"停止"按钮: 停止后台识别线程并恢复 UI。
+        """点击"停止"按钮: 发停止标志 → 立即恢复 UI，线程在后台优雅收尾。
 
-        先同时发停止信号（两个线程并发退出），再轮询等待。
-        _sleep 每 50ms 检查 _running，关键路径有额外检查点。
+        为什么不再阻塞等待线程退出？
+            等待时间 = 线程跑完"手里那一帧不可中断的截图/识别"的剩余时间，
+            不稳定（正常几十~几百 ms，偶发数百 ms+），期间界面白白冻结。
+            界面上没有哪一步需要等线程死透才能做，所以把等待挪到后台：
+            UI 立即恢复，线程沿检查点释放资源后自行退出——
+            "优雅退出"一个不省，只是不再让界面陪等。
+
+        卡死兜底：_STOP_WATCHDOG_MS 后由看门狗强杀（正常永不触发）。
+        看门狗只持有"停止这一刻"捕获的线程引用——停止后立即再启动时，
+        它只可能处理旧线程，不会误伤新线程。
         """
-        from PySide6.QtCore import QThread
+        # ① 捕获停止这一刻的两个线程引用（看门狗专用）
+        w, r = self._worker, self._rank_worker
 
-        if self._worker is not None:
-            self._worker.stop()
-        if self._rank_worker is not None:
-            self._rank_worker.stop()
+        # ② 发停止标志（纯标志位，不阻塞）
+        if w is not None:
+            w.stop()
+        if r is not None:
+            r.stop()
 
-        # 轮询等待
-        for _ in range(60):
-            w_alive = self._worker is not None and self._worker.isRunning()
-            r_alive = self._rank_worker is not None and self._rank_worker.isRunning()
-            if not w_alive and not r_alive:
-                break
-            QThread.msleep(50)
-
-        # 超时兜底：3 秒还没退出 → 强制终止
-        # 先保存引用，因为 terminate() 会触发 finished 信号，
-        # _on_worker_finished 回调会把 self._worker 清为 None
-        w = self._worker
-        if w is not None and w.isRunning():
-            w.terminate()
-            w.wait()
-        r = self._rank_worker
-        if r is not None and r.isRunning():
-            r.terminate()
-            r.wait()
-
+        # ③ 立即恢复 UI（不等待线程退出）
         self._snapshot_ctrl.unregister_hotkeys()
         self._reset_stage()                      # 重置状态机
         self.btn_start.setEnabled(True)
@@ -1534,6 +1531,23 @@ class MainWindow(QMainWindow):
         self._enable_bottom_buttons()
         if self._float_window is not None:
             self._float_window.set_running(False)
+
+        # ④ 后台看门狗：超时仍未退出的旧线程才强杀
+        if w is not None or r is not None:
+            QTimer.singleShot(_STOP_WATCHDOG_MS,
+                              lambda: self._force_kill_if_alive(w, r))
+
+    def _force_kill_if_alive(self, *workers) -> None:
+        """停止看门狗：超时后仍未退出的线程强制终止（仅卡死时触发）。
+
+        只处理传入的引用（停止那一刻捕获的旧线程），绝不碰期间新启动的线程。
+        terminate() 不执行 finally（GDI 资源会泄漏、锁可能不释放），
+        所以它只是最后手段——正常路径下线程早已自行退出，本方法什么都不做。
+        """
+        for wk in workers:
+            if wk is not None and wk.isRunning():
+                wk.terminate()
+                wk.wait()
 
     # =========================================================================
     # 自动识别回调（由 StatsWorker 的信号触发，在主线程中执行）
@@ -1551,6 +1565,9 @@ class MainWindow(QMainWindow):
         _log.write("STATUS", msg)
         self._show_status(msg)
         if msg.startswith("程序已关闭"):
+            # 旧线程的迟到消息（停止后重启的窗口期）：只显示，不碰按钮状态
+            if self.sender() is not self._worker:
+                return
             self.btn_start.setEnabled(True)
             self.btn_stop.setEnabled(False)
             self._unlock_deck()
@@ -1573,6 +1590,9 @@ class MainWindow(QMainWindow):
         仅当手动尚未抢先选择时生效（stage == 0 才处理）。
         状态栏消息由 worker 统一发送（含段位升降信息），此处不再重复。
         """
+        # 旧线程的迟到事件（停止瞬间在飞行的那帧）：丢弃，防止误推状态机
+        if self.sender() is not self._worker:
+            return
         if not self._match.advance_coin(coin_win):
             return
         self._play_event_sound("coin")
@@ -1584,6 +1604,9 @@ class MainWindow(QMainWindow):
         rank 可能的值: 'up'（升段）、'down'（降段）、''（普通局）。
         结果在 _on_result_detected 中随记录一起写入 CSV。
         """
+        # 旧线程的迟到事件：丢弃，防止上一局的段位升降残留进下一局
+        if self.sender() is not self._worker:
+            return
         self._match.set_rank(rank)
 
     def _on_rank_icon_detected(self, rank_info: dict) -> None:
@@ -1599,6 +1622,9 @@ class MainWindow(QMainWindow):
             {"player_rank": "铂金", "player_tier": 2, "player_score": 0.92,
              "opponent_rank": "钻石", "opponent_tier": 1, "opponent_score": 0.88}
         """
+        # 旧线程的迟到事件：丢弃，防止上一局的段位残留进下一局
+        if self.sender() is not self._rank_worker:
+            return
         self._rank_icon_result = rank_info
 
         # 格式化段位字符串用于状态栏显示
@@ -1632,6 +1658,9 @@ class MainWindow(QMainWindow):
         - 此槽仅更新状态栏显示，不存储结果（_rank_icon_result 不变）
         - 等双方齐备后 rank_icon_detected 发射时才正式存储
         """
+        # 旧线程的迟到事件：丢弃
+        if self.sender() is not self._rank_worker:
+            return
         show_conf = self._config.get("system", {}).get("show_confidence", False)
 
         def _partial_fmt(key: str) -> str:
@@ -1688,6 +1717,9 @@ class MainWindow(QMainWindow):
         注意: 此时卡组名直接从输入框读取（不缓存），因为用户可能在识别期间
                修改了卡组名，放在写入 CSV 时再读可以拿到最新值。
         """
+        # 旧线程的迟到事件：丢弃，防止误推状态机
+        if self.sender() is not self._worker:
+            return
         if not self._match.advance_turn(turn):
             return
         self._play_event_sound("turn")
@@ -1707,6 +1739,9 @@ class MainWindow(QMainWindow):
         如果 CSV 文件被其他程序占用（如 WPS/Excel），记录会暂存到内存，
         等下次文件可用时自动补写，状态机正常前进不会卡住。
         """
+        # 旧线程的迟到事件：丢弃，防止在旧会话状态上误写 CSV
+        if self.sender() is not self._worker:
+            return
         if self._match.stage != 2:
             return
         self._play_event_sound("result")
@@ -1794,14 +1829,25 @@ class MainWindow(QMainWindow):
             self._manual_step_clicked(action)
 
     def _on_worker_finished(self) -> None:
-        """StatsWorker 线程退出（游戏关闭或意外终止）。"""
+        """StatsWorker 线程退出（游戏关闭、点停止、或意外终止）。
+
+        身份校验：停止后立即再启动时，旧线程会补发一条"迟到的 finished"——
+        它绝不能清空刚创建的新 worker 引用（否则 isRunning 判据的调用方
+        会误判"未运行"），也不应把悬浮窗误置为已停止。
+        """
+        if self.sender() is not self._worker:
+            return
         self._worker = None
         if self._float_window is not None:
             self._float_window.set_running(False)
 
     def _on_float_toggle_start_stop(self) -> None:
-        """悬浮窗右键菜单：启动/停止识别。"""
-        if self._worker is not None:
+        """悬浮窗右键菜单：启动/停止识别。
+
+        判据用 isRunning 而非"引用是否为 None"：异步停止后旧线程仍在
+        收尾的窗口期内，引用非 None 但已停止——此时的菜单点击应视为"启动"。
+        """
+        if self._worker is not None and self._worker.isRunning():
             self._on_stop()
         else:
             self._on_start()
@@ -2500,6 +2546,15 @@ class MainWindow(QMainWindow):
         self.record_table.setItemDelegateForColumn(5, EditableComboDelegate(new_presets, self.record_table))
 
         # Worker 正在运行 → 停止后用新配置重启
+        #
+        # 【防御性分支，按入口分析实际不可达，保留勿删】
+        # 设置按钮在运行期被禁用，唯一会重新启用它的路径（_on_status 收到
+        # "程序已关闭"）与线程退出是同一批事件，人手来不及插进去——所以
+        # worker_was_running 恒为 False，下面的停/等/重启都不会执行。
+        # 保留作防御：将来若新增"运行期可打开设置"的入口（如托盘菜单），
+        # 这段会自动正确工作（先停旧的 → 等死透 → 再起新的，避免双线程并存）。
+        # 注意三条退出路径的等待语义各不相同：点停止是异步的（_on_stop），
+        # 关窗退出的等待是必要的（保证线程死透再退进程），此处只是防御。
         worker_was_running = self._worker is not None
         if worker_was_running:
             self._worker.stop()
@@ -2507,7 +2562,7 @@ class MainWindow(QMainWindow):
             self._rank_worker.stop()
 
         from PySide6.QtCore import QThread
-        for _ in range(60):  # 轮询等待，最多 3s
+        for _ in range(60):  # 轮询等待，最多 3s（防御分支的一部分，正常瞬间即完成）
             w_alive = self._worker is not None and self._worker.isRunning()
             r_alive = self._rank_worker is not None and self._rank_worker.isRunning()
             if not w_alive and not r_alive:
