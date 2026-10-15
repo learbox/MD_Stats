@@ -96,15 +96,15 @@ QFrame#topPanel, QFrame#bottomPanel {
     border-bottom-left-radius: 10px;
     border-bottom-right-radius: 10px;
 }
-/* 状态栏左侧的消息文字，用 secondary 色比正文柔和 */
+/* 状态栏文字（左侧消息 + 右侧信息）—— 与正文同色 */
 #statusMessage {
-    color: {{color.text_secondary}};
+    color: {{color.text_primary}};
     background: transparent;
     border: none;
     font-size: 12px;
 }
 #infoLabel {
-    color: {{color.text_secondary}};
+    color: {{color.text_primary}};
     background: transparent;
     border: none;
     font-size: 12px;

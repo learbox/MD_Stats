@@ -26,11 +26,12 @@
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QFrame, QGridLayout, QHBoxLayout,
+    QApplication, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QPushButton, QVBoxLayout,
 )
 
 from ui._base_dialog import _BaseFramelessDialog
+from ui.widgets import ThemedComboBox
 from src.recorder import (
     compute_filtered_stats, get_available_rank_tiers, load_records,
 )
@@ -103,11 +104,11 @@ class RankStatsDialog(_BaseFramelessDialog):
         filter_row = QHBoxLayout()
         filter_row.setSpacing(8)
         filter_row.addWidget(QLabel("卡组:"))
-        self._deck_combo = QComboBox()     # 卡组选择（全部 / 具体卡组名）
+        self._deck_combo = ThemedComboBox()     # 卡组选择（全部 / 具体卡组名）
         self._deck_combo.setMinimumWidth(120)
         filter_row.addWidget(self._deck_combo)
         filter_row.addWidget(QLabel("己方段位:"))
-        self._rank_combo = QComboBox()     # 己方段位选择（全部 / 黄金 / … / 无段位/其他）
+        self._rank_combo = ThemedComboBox()     # 己方段位选择（全部 / 黄金 / … / 无段位/其他）
         self._rank_combo.setMinimumWidth(80)
         filter_row.addWidget(self._rank_combo)
         filter_row.addStretch()             # 把筛选控件推到左侧

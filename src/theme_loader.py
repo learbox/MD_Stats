@@ -207,8 +207,8 @@ QFrame#topPanel, QFrame#bottomPanel { background: transparent; border: none; bor
 #titleMinBtn, #titleCloseBtn { background: transparent; border: none; border-radius: 4px; }
 /* ---------- 状态栏 ---------- */
 #customStatusBar { background-color: %(statusbar_bg)s; border: none; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
-#statusMessage { color: %(text_secondary)s; background: transparent; border: none; font-size: 12px; }
-#infoLabel { color: %(text_secondary)s; background: transparent; border: none; font-size: 12px; }
+#statusMessage { color: %(text_primary)s; background: transparent; border: none; font-size: 12px; }
+#infoLabel { color: %(text_primary)s; background: transparent; border: none; font-size: 12px; }
 #label_deck { color: %(text_primary)s; background: transparent; border: none; font-size: 13px; }
 /* ---------- 按钮 ---------- */
 QPushButton { background-color: %(button_bg)s; color: %(text_primary)s; border: 1px solid %(button_border)s; border-radius: 12px; padding: 5px 14px; }

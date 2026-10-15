@@ -36,8 +36,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QEvent, QTranslator, QLibraryInfo, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
-    QDoubleSpinBox, QFontComboBox, QGroupBox, QHBoxLayout, QLabel,
+    QApplication, QCheckBox, QColorDialog, QDialog,
+    QDoubleSpinBox, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QMessageBox, QPushButton, QRadioButton,
     QScrollArea, QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
     QButtonGroup,
@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 from ui._base_dialog import _BaseFramelessDialog
 from src.config import get_project_root, render_config_toml
 from ui.floating_window import _ROW_KEY_MAP, _DEFAULT_ROWS
+from ui.widgets import ThemedComboBox, ThemedFontComboBox
 
 # 加载 Qt 内置中文翻译（让取色器等系统弹窗显示中文，翻译文件缺失时静默跳过）
 _qt_translator = QTranslator()
@@ -434,7 +435,7 @@ class ConfigDialog(_BaseFramelessDialog):
 
         # 框标题已说明用途，控件行不再重复"来源:"标签
         r_be = QHBoxLayout()
-        self._backend_combo = QComboBox()
+        self._backend_combo = ThemedComboBox()
         self._backend_combo.addItem("游戏窗口（printwindow，推荐）", "printwindow")
         self._backend_combo.addItem("屏幕（mss，兼容模式）", "mss")
         self._backend_combo.setToolTip(
@@ -767,7 +768,7 @@ class ConfigDialog(_BaseFramelessDialog):
         # ---- 主题 ----
         r = QHBoxLayout()
         r.addWidget(QLabel("主题:"))
-        self._theme_combo = QComboBox()
+        self._theme_combo = ThemedComboBox()
         self._theme_combo.setToolTip("切换界面配色和字体。\n主题文件在 resource/themes/ 文件夹下。")
         themes_dir = get_project_root() / "resource" / "themes"
         names = []
@@ -815,7 +816,7 @@ class ConfigDialog(_BaseFramelessDialog):
         # ---- 字体选择器 ----
         fr = QHBoxLayout()
         fr.addWidget(QLabel("更换字体:"))
-        self._font_picker = QComboBox()
+        self._font_picker = ThemedComboBox()
         self._font_picker.setMinimumWidth(180)
         self._font_picker.setToolTip(
             "当前主题字体栈中已安装的字体。\n"
@@ -1097,7 +1098,7 @@ class ConfigDialog(_BaseFramelessDialog):
         self._fw_fs.setToolTip("文字大小（像素）。")
         tr.addWidget(self._fw_fs)
         tr.addWidget(QLabel("字体:"))
-        self._fw_ff = QFontComboBox()  # 列出系统已安装的所有字体
+        self._fw_ff = ThemedFontComboBox()  # 列出系统已安装的所有字体（自绘下拉箭头）
         self._fw_ff.setMinimumWidth(160)
         self._fw_ff.setToolTip("悬浮窗内文字使用的字体。")
         tr.addWidget(self._fw_ff)

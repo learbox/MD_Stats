@@ -147,6 +147,7 @@ from ui.floating_window import FloatingWindow, _ROW_KEY_MAP
 from ui.message_dialog import ask_yes_no, show_message
 from ui.theme_manager import ThemeManager
 from ui.titlebar import TitleBar
+from ui.widgets import ThemedComboBox
 
 _RESOURCE_DIR = get_project_root() / "resource"
 
@@ -174,6 +175,38 @@ def _setup_combo_editor(combo: QComboBox) -> None:
     combo.view().setPalette(pal)                         # 弹出列表也继承全局调色板
     bg = pal.color(QPalette.ColorRole.Base).name()       # 取 Base 色（widget_bg，不透明白色）
     combo.setStyleSheet(f"QComboBox {{ background-color: {bg}; }}")  # 覆盖半透明背景
+
+
+# =============================================================================
+# _OpaqueEditorDelegate — 默认单元格编辑器的不透明背景修正（记录表格默认委托）
+# =============================================================================
+
+class _OpaqueEditorDelegate(QStyledItemDelegate):
+    """给默认编辑器（QLineEdit）设不透明背景，修掉文字重影。
+
+    为什么需要？
+        macaron 主题的全局 QLineEdit 规则是半透明背景（rgba 白 ~78%），
+        表格编辑器下会让单元格自身的文字透出来——看起来像"两个文字"
+        （light/dark 主题的输入框背景本来就不透明，不受影响）。
+
+    为什么不用主题 QSS 的作用域规则修？
+        实测（2026-10-16）对视图动态创建的子编辑器不生效：主题 QSS 里
+        加 `QTableWidget QLineEdit` 甚至末尾追加全局 `QLineEdit` 规则，
+        编辑器背景都不变；而给编辑器设**局部样式表**立竿见影。
+        这与 _setup_combo_editor 处理组合编辑器的方式一致（同样的坑）。
+
+    背景色取应用调色板 Base（= 各主题的 widget_bg）：
+        - 半透明主题（macaron）→ 修正为不透明
+        - 本就不透明的主题 → 取到与原色相同的值，无副作用
+        - 编辑器每次创建时现取，切换主题后新开的编辑器自动跟新主题
+    """
+
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        if isinstance(editor, QLineEdit):
+            bg = QApplication.palette().color(QPalette.ColorRole.Base).name()
+            editor.setStyleSheet(f"background-color: {bg};")
+        return editor
 
 
 # =============================================================================
@@ -214,7 +247,7 @@ class ComboDelegate(QStyledItemDelegate):
         activated 信号 — 仅在用户从弹出列表中选择时触发，不会在 setEditorData 中误触发。
         commitData + closeEditor — 选择后立即提交数据并关闭编辑器（无需额外点击）。
         """
-        combo = QComboBox(parent_widget)
+        combo = ThemedComboBox(parent_widget)             # 自绘下拉箭头，见 ui/widgets.py
         combo.addItems(self._items)
         combo.setEditable(self._editable)                # 可编辑模式：允许清空文本
         combo.setMaxVisibleItems(len(self._items))      # 弹出列表紧凑，不留白
@@ -509,7 +542,7 @@ class EditableComboDelegate(QStyledItemDelegate):
         setMaxVisibleItems(min(...), 8) — 预设列表可能很长，限制最多显示 8 项
         setCurrentText("") — 初始为空，让用户看到提示文字（placeholderText 不可用）
         """
-        combo = QComboBox(parent_widget)
+        combo = ThemedComboBox(parent_widget)             # 自绘下拉箭头，见 ui/widgets.py
         combo.setEditable(True)                           # 关键：允许自由输入
         combo.addItems(self._items)
         combo.setMaxVisibleItems(min(len(self._items), 8)) # 限制弹出列表高度
@@ -1122,6 +1155,9 @@ class MainWindow(QMainWindow):
         self.stats_table.setHorizontalHeaderLabels(STATS_COLUMNS)
         self.stats_table.horizontalHeader().setStretchLastSection(True)  # 最后一列自动填充
         self.stats_table.verticalHeader().setDefaultSectionSize(28)      # 行高 28px
+        # 行号 → 卡组名（双击切换卡组用；由 refresh_stats_table 维护）
+        self._stats_row_decks: list[str] = []
+        self.stats_table.doubleClicked.connect(self._on_stats_row_double_clicked)
 
         # 记录表格: 可编辑，整行选中
         self.record_table.setColumnCount(len(RECORD_COLUMNS))
@@ -1136,6 +1172,8 @@ class MainWindow(QMainWindow):
             table.verticalHeader().setObjectName("verticalHeader")
 
         # ---- 15. 记录表格列委托（下拉菜单） ----
+        # 默认委托：修掉编辑器背景透明（macaron 下表格编辑时文字重影）
+        self.record_table.setItemDelegate(_OpaqueEditorDelegate(self.record_table))
         # 段位图标初始化（预加载 + 缩放缓存，需在 QApplication 之后调用）
         init_rank_icons(22)
         rank_colors = self._tm.colors
@@ -2024,6 +2062,8 @@ class MainWindow(QMainWindow):
         """
         records = load_records()
         stats = compute_stats(records)
+        # 行号 → 卡组名 映射：双击该行时切换"使用卡组"用
+        self._stats_row_decks = [str(row.get("卡组", "")) for row in stats]
 
         # 读取用户选择的统计列（空列表 = 显示全部）
         selected = self._config.get("data", {}).get("stats_columns")
@@ -2050,6 +2090,35 @@ class MainWindow(QMainWindow):
 
         self.stats_table.setUpdatesEnabled(True)   # 恢复重绘
         self._refresh_float_window()         # 悬浮窗也更新
+
+    def _on_stats_row_double_clicked(self, index) -> None:
+        """双击统计表格的行 → 把「使用卡组」切换到该行的卡组。
+
+        行为:
+            - 非真实卡组的行（「合计」末行 / 空卡组的 "(未指定)" 归并行 /
+              无数据时的「暂无数据」占位行）双击不动作
+            - 与当前卡组相同 → 静默
+            - 输入框未锁定 → 直接切换
+            - 输入框已锁定（运行中自动锁定 / 手动锁定）→ 弹「是/否」确认，
+              确认后切换；锁定状态保持不变（切名字不改锁定的意图）
+
+        卡组名取自 refresh_stats_table 维护的行号映射，
+        不依赖「卡组」列是否被用户在配置里隐藏。
+        """
+        row = index.row()
+        if not (0 <= row < len(self._stats_row_decks)):
+            return
+        deck = self._stats_row_decks[row]
+        if not deck or deck in ("合计", "(未指定)", "暂无数据"):
+            return
+        if deck == self._deck_input.text():
+            return                                  # 已是当前卡组，静默
+        if not self._deck_input.isEnabled():
+            if not ask_yes_no(self, "切换卡组",
+                              f"卡组当前已锁定。确定切换到「{deck}」吗？"):
+                return
+        self._deck_input.setText(deck)
+        self._show_status(f"已切换到卡组: {deck}")
 
     def refresh_record_table(self) -> None:
         """刷新记录表格（下方表格），最新记录显示在最前面。
