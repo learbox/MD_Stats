@@ -31,6 +31,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 from src import logger as _log
 from ui.main_window import MainWindow
+from ui.widgets import ComboDropdownStyle
 
 
 # =============================================================================
@@ -71,12 +72,14 @@ def main() -> None:
     执行流程:
         1. 创建 QApplication 实例（Qt 应用核心，管理事件循环）
         2. 设置 "Fusion" 风格，使 UI 在不同平台上外观一致
+           （外面套一层 ComboDropdownStyle：让下拉列表向下展开而不是像菜单那样
+             对齐当前项，详见 ui/widgets.py）
         3. 创建 MainWindow 主窗口并显示
         4. 进入 Qt 事件循环（app.exec()），等待用户操作
         5. 窗口关闭后事件循环退出，程序结束
     """
     app = QApplication(sys.argv)
-    app.setStyle("Fusion")
+    app.setStyle(ComboDropdownStyle("Fusion"))
     _window = MainWindow()  # 必须存引用以防 GC 回收（窗口在 app.exec() 期间存活）
     sys.exit(app.exec())
 

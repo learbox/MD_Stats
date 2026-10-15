@@ -107,8 +107,8 @@ family = "My Custom Font"      # 加载后的字体族名（填到 font_family �
 
 | 颜色 key | 说明 |
 |----------|------|
-| text_primary | 正文、标签、按钮、输入框、下拉框文字 |
-| text_secondary | 辅助说明、状态栏消息（QSS 中用 color.text_secondary 的控件） |
+| text_primary | 正文、标签、按钮、输入框、下拉框、状态栏文字 |
+| text_secondary | 辅助说明文字（段位编辑面板的「自定义:」标签、预览标签，由程序取色） |
 | text_disabled | 禁用状态文字 |
 | table_text | 表格内文字颜色 |
 
@@ -324,3 +324,4 @@ AI：（直接修改文件，保留注释结构）
 - 颜色值必须带引号，如 `main_bg = "#f5f6fa"`
 - 图片放在 `assets/` 下，建议 PNG 格式
 - 标题栏图标命名固定为 `title_min.png`、`title_close.png`，缺失时会自动用矢量绘制
+- 下拉框的三角箭头由程序自绘（矢量三角，颜色取主题的 `text_primary`，随主题自动变化），主题**不需要**也**不要**准备箭头图片。注意：如果 `style.qss` 里另写了 `QComboBox::down-arrow` 规则，会和自绘箭头叠在一起
