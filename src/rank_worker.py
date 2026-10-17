@@ -27,13 +27,24 @@
 """
 
 
+import traceback
+
 import cv2
 from PySide6.QtCore import QThread, Signal
 
 from src import capture as _cap
 from src import detector as _det
+from src import logger as _log
 from src.config import load_config
 from src.failure_sample_manager import FailureSampleManager
+
+# 连续截图失败多少次后停止线程。按 0.3 秒间隔约 10 秒，足够跨过游戏切换分辨率、
+# 窗口重建这类瞬时状态；再久就说明不是瞬时问题，停线程并告知用户比反复空转好。
+_MAX_CAPTURE_FAILURES = 30
+
+# 连续失败时的退避档位（秒）：越失败等得越久，最后一档封顶。
+# 只在连续失败时生效——成功一次 fail_streak 就清零，正常运行不受影响。
+_BACKOFF_SECONDS = (0.5, 1.0, 2.0, 3.0, 5.0)
 
 
 class RankWorker(QThread):
@@ -60,6 +71,7 @@ class RankWorker(QThread):
     # Qt 会在后台建立线程安全的通信通道
     rank_icon_detected = Signal(dict)  # 双方都检测到时发射（完整结果）
     partial_update = Signal(dict)      # 首次检测到单方时发射（增量进度）
+    status_update = Signal(str)        # 需要让用户看到的消息（如截图连续失败后停止）
 
     def __init__(self, failure_mgr: FailureSampleManager | None = None,
                  parent=None):
@@ -131,6 +143,12 @@ class RankWorker(QThread):
         if self._failure_mgr is not None:
             self._failure_mgr.clear_cache()
 
+    @staticmethod
+    def _backoff_ms(fail_streak: int) -> int:
+        """连续失败第 n 次对应的退避时长（毫秒），按 _BACKOFF_SECONDS 分档。"""
+        idx = min(max(fail_streak, 1), len(_BACKOFF_SECONDS)) - 1
+        return int(_BACKOFF_SECONDS[idx] * 1000)
+
     def _sleep(self, ms: int) -> None:
         """可中断休眠：每 50ms 醒一次检查 _running，stop() 后最多 50ms 退出。"""
         remaining = ms
@@ -157,7 +175,30 @@ class RankWorker(QThread):
     # =========================================================================
 
     def run(self) -> None:
-        """QThread 的主入口，运行在独立线程中。
+        """QThread 主入口：包一层异常兜底，然后进入主循环。
+
+        为什么需要这层兜底？
+            QThread.run() 里未捕获的异常，Qt 只会把 traceback 打到 stderr，
+            不触发 sys.excepthook——界面上完全看不出来，段位检测会**无声停止**
+            （2026-10-17 实际发生过：一次偶发截图异常让线程死了几小时无人察觉）。
+
+            循环内的截图失败已按预期异常分类处理（有限重试 + 退避 + 上报）；
+            这里兜的是**其它**非预期异常（检测段崩溃、代码 bug 等）：
+            记完整 traceback + 通知界面 + 停线程，**不重试**——
+            未知异常重试只会掩盖问题、拖慢暴露时间。
+        """
+        try:
+            self._run_impl()
+        except Exception as e:
+            tb = traceback.format_exc()
+            _log.write("ERROR",
+                       f"段位检测线程异常退出: {type(e).__name__}: {e}"
+                       f"｜GDI 对象 {_cap.get_gdi_object_count()}\n{tb}")
+            self.status_update.emit(f"段位检测异常退出：{type(e).__name__}: {e}")
+            self._running = False
+
+    def _run_impl(self) -> None:
+        """主循环实现（在独立线程中运行）。
 
         生命周期:
             1. 循环截图 Master Duel 窗口
@@ -170,8 +211,10 @@ class RankWorker(QThread):
         退出条件:
             - _running 被设为 False（stop() 被调用）
             - Master Duel 窗口关闭
+            - 截图连续失败达到 _MAX_CAPTURE_FAILURES
         """
         self._running = True
+        fail_streak = 0                 # 连续截图失败次数（成功一次即清零）
 
         while self._running:
             # ---- 暂停检查 ----
@@ -192,10 +235,34 @@ class RankWorker(QThread):
             # ---- 截图 ----
             try:
                 screenshot = _cap.capture_window("masterduel", backend=self._backend)
-            except (OSError, RuntimeError):
-                # OSError: mss 屏幕抓取失败；RuntimeError: PrintWindow 失败/窗口最小化
-                self._sleep(int(self._interval * 1000))
+            except _cap.CAPTURE_ERRORS as e:
+                # 只捕获**预期的截图失败**（窗口关闭/最小化、GDI 调用失败等，
+                # 类型清单见 capture.CAPTURE_ERRORS）。非预期异常（真正的程序 bug）
+                # 故意不在这里吞掉——交给 run() 的外层兜底记 traceback 并停线程，
+                # 否则 bug 会被当成"截图失败"重试 30 次、还看不到堆栈。
+                fail_streak += 1
+                # 日志限流：首次、每 10 次、最后一次各记一条，避免连续失败刷屏
+                if fail_streak == 1 or fail_streak % 10 == 0 \
+                        or fail_streak >= _MAX_CAPTURE_FAILURES:
+                    _log.write("ERROR",
+                               f"段位检测截图失败（连续第 {fail_streak} 次）: "
+                               f"{type(e).__name__}: {e}"
+                               f"｜{getattr(e, 'capture_context', '—')}")
+                if fail_streak >= _MAX_CAPTURE_FAILURES:
+                    # 连续失败说明不是瞬时问题：停线程并让用户看见，
+                    # 好过无声无息地空转（此前的行为是线程直接死掉、界面无提示）
+                    _log.write("ERROR",
+                               f"段位检测已停止：连续 {_MAX_CAPTURE_FAILURES} 次截图失败")
+                    self.status_update.emit(
+                        f"段位检测已停止：连续 {_MAX_CAPTURE_FAILURES} 次截图失败（{e}）")
+                    self._running = False
+                    break
+                # 退避：失败越久等得越久（0.5/1/2/3/5 秒封顶），
+                # 避免在资源紧张时火上浇油；_sleep 可被 stop() 打断（最多 50ms）
+                self._sleep(self._backoff_ms(fail_streak))
                 continue
+
+            fail_streak = 0         # 成功一次即清零（正常运行时永不退避）
 
             if screenshot is None:  # 截图失败（如窗口被遮挡）
                 self._sleep(int(self._interval * 1000))

@@ -51,6 +51,8 @@ import mss
 import win32gui
 import win32ui
 
+from src import logger as _log
+
 
 # ---------------------------------------------------------------------------
 # 异常
@@ -70,6 +72,43 @@ class CaptureError(RuntimeError):
     def __init__(self, message: str, suggest_fallback: bool = False) -> None:
         super().__init__(message)
         self.suggest_fallback = suggest_fallback
+
+
+# 截图调用可能抛出的"预期异常"。调用方（识别线程等）按这个元组捕获，
+# 而不是笼统的 except Exception——否则真正的程序 bug 会被当成"截图失败"重试，
+# 拖很久才暴露（且日志里看不到 traceback）。
+#
+#   CaptureError    — 本模块主动抛的（窗口关闭 / 已最小化 / 尺寸异常 / PrintWindow 失败）
+#   win32ui.error   — pywin32 的 GDI 对象操作失败（如 CreateCompatibleBitmap 分配失败）
+#   win32gui.error  — 即 pywintypes.error（实测 `win32gui.error is pywintypes.error`），
+#                     覆盖 GetWindowDC / DeleteObject / ReleaseDC 等 Win32 API 失败
+#
+# 注意：后两者**直接继承 Exception**，既不是 OSError 也不是 RuntimeError（实测确认），
+# 所以 `except (OSError, RuntimeError)` 接不住它们。
+CAPTURE_ERRORS = (CaptureError, win32ui.error, win32gui.error)
+
+
+def get_gdi_object_count() -> int:
+    """当前进程的 GDI 对象数（诊断用；取不到时返回 -1）。
+
+    抓图失败时把这个数字记进日志，便于区分"偶发单次失败"和"资源接近耗尽"
+    （GDI 对象每进程上限 1 万）。
+    """
+    try:
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.restype = ctypes.wintypes.HANDLE
+        k32.GetCurrentProcessId.restype = ctypes.wintypes.DWORD
+        u32 = ctypes.WinDLL("user32", use_last_error=True)
+        u32.GetGuiResources.restype = ctypes.wintypes.DWORD
+        handle = k32.OpenProcess(0x1000, False, k32.GetCurrentProcessId())  # QUERY_LIMITED
+        if not handle:
+            return -1
+        try:
+            return int(u32.GetGuiResources(handle, 0))   # 0 = GR_GDIOBJECTS
+        finally:
+            k32.CloseHandle(handle)
+    except Exception:
+        return -1
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +319,44 @@ _user32.PrintWindow.restype = ctypes.wintypes.BOOL
 _PW_CLIENTONLY = 0x00000001         # 只绘制客户区
 _PW_RENDERFULLCONTENT = 0x00000002  # 包含 DirectComposition 内容（Win8.1+）
 
+# 客户区单边像素上限。位图按 32bpp 分配（8192×8192 ≈ 268MB），再大就可能分配失败，
+# 而 pywin32 那时报出的是误导性的 "CreateCompatibleDC failed"（实测确认）。
+# 8K 分辨率也才 7680 宽，超过这个数说明 GetClientRect 拿到了异常值。
+_MAX_CLIENT_EDGE = 8192
+
+
+# 各类资源"释放失败"的累计次数与日志限流。
+# 某类释放若在特定环境下每帧都失败（截图频率可达 3~10 次/秒），逐次记日志会把
+# 日志文件写爆，所以只记「首次 + 每 _RELEASE_LOG_EVERY 次」，计数继续累计。
+_release_fail_counts: dict[str, int] = {}
+_RELEASE_LOG_EVERY = 100
+
+
+def _release_gdi(what: str, fn, *args) -> None:
+    """释放一个 GDI 资源；失败只写日志，绝不向外抛。
+
+    为什么单独包一层？
+        清理发生在 finally 里，此时往往已经有异常在传播（例如位图根本没建成）。
+        如果清理本身再抛，会同时造成两件坏事：
+
+            1. 原始异常被顶掉——真正的原因（创建位图失败）再也看不到，
+               只剩下 DeleteObject 的报错
+            2. finally 里后面的释放语句被跳过 → 一次失败反而漏掉多个 GDI 对象。
+               GDI 对象每进程上限 1 万，越失败越漏会加速恶化
+
+    Args:
+        what: 资源名称，用于日志定位（如 "删除位图"）。
+        fn: 执行释放的可调用对象（如 win32gui.DeleteObject、mem_dc.DeleteDC）。
+        *args: 传给 fn 的参数。
+    """
+    try:
+        fn(*args)
+    except Exception as e:      # 清理路径必须吞掉所有异常，不能影响主流程
+        n = _release_fail_counts.get(what, 0) + 1
+        _release_fail_counts[what] = n
+        if n == 1 or n % _RELEASE_LOG_EVERY == 0:
+            _log.write("ERROR", f"GDI 资源释放失败（{what}，累计 {n} 次）: {e}")
+
 
 def _capture_window_pw(hwnd: int, w: int, h: int) -> np.ndarray:
     """用 PrintWindow 抓取窗口客户区（默认画面来源）。
@@ -300,7 +377,6 @@ def _capture_window_pw(hwnd: int, w: int, h: int) -> np.ndarray:
             带 suggest_fallback=True（换屏幕来源可能有效）。
     """
     hwnd_dc = win32gui.GetWindowDC(hwnd)
-    src_dc = None
     mem_dc = None
     bmp = None
     old_bmp = None
@@ -322,17 +398,26 @@ def _capture_window_pw(hwnd: int, w: int, h: int) -> np.ndarray:
         bits = bmp.GetBitmapBits(True)
     finally:
         # GDI 资源显式释放（每帧创建/销毁，确保长时间运行不累积 GDI 对象）。
-        # 顺序：位图先从 DC 反选 → 删位图 → 删 DC → 释放窗口 DC
+        # 顺序：位图先从 DC 反选 → 删位图 → 删 DC → 释放窗口 DC。
+        # 每一步各自兜底（见 _release_gdi）：某一步失败不影响后面几步。
         if mem_dc is not None and old_bmp is not None:
-            mem_dc.SelectObject(old_bmp)
+            _release_gdi("反选原位图", mem_dc.SelectObject, old_bmp)
         if bmp is not None:
-            # PyCBitmap 没有 DeleteObject 方法（pywin32 312 实测），经 GetHandle 删除
-            win32gui.DeleteObject(bmp.GetHandle())
+            # PyCBitmap 没有 DeleteObject 方法（pywin32 312 实测），经 GetHandle 删除。
+            # CreateCompatibleBitmap 失败时内部句柄仍是 0（NULL），DeleteObject(0)
+            # 会抛 pywintypes.error 并盖掉真正的异常 → 先判空。
+            hbitmap = bmp.GetHandle()
+            if hbitmap:
+                _release_gdi("删除位图", win32gui.DeleteObject, hbitmap)
         if mem_dc is not None:
-            mem_dc.DeleteDC()
-        if src_dc is not None:
-            src_dc.DeleteDC()
-        win32gui.ReleaseDC(hwnd, hwnd_dc)
+            _release_gdi("释放内存 DC", mem_dc.DeleteDC)
+        # 注意：这里**不**对 src_dc 调 DeleteDC。
+        # src_dc 是 GetWindowDC 句柄的包装，而按 Win32 语义，GetDC/GetWindowDC
+        # 得到的 DC 必须用 ReleaseDC 释放、不能用 DeleteDC。
+        # 真实环境日志（2026-10-17）显示这个调用会偶发抛 "DeleteDC failed"——
+        # 在旧的清理代码里，它抛错会顶掉原始异常并跳过后面的 ReleaseDC，
+        # 是段位检测线程静默死掉的一条隐藏路径。真正的释放靠下面这句 ReleaseDC。
+        _release_gdi("释放窗口 DC", win32gui.ReleaseDC, hwnd, hwnd_dc)
 
     # 丢弃 Alpha，得到连续 BGR 数组。
     # 注意：GetBitmapBits 实测返回的就是 top-down 行序（CreateCompatibleBitmap
@@ -404,7 +489,22 @@ def capture_window(title_substring: str = "masterduel",
     w, h = right - left, bottom - top
     if w <= 0 or h <= 0:
         raise CaptureError("窗口客户区尺寸无效")
-    return _capture_window_pw(hwnd, w, h)
+    # 上限保护：窗口处于异常状态（正在切换分辨率/全屏、窗口重建等）时
+    # GetClientRect 可能返回离谱的尺寸，拿去分配位图会失败并报出误导性的
+    # "CreateCompatibleDC failed"。这里提前挡掉，并给出可读的原因。
+    if w > _MAX_CLIENT_EDGE or h > _MAX_CLIENT_EDGE:
+        raise CaptureError(f"窗口客户区尺寸异常（{w}×{h}），已跳过本帧")
+    try:
+        return _capture_window_pw(hwnd, w, h)
+    except CAPTURE_ERRORS as e:
+        # 把诊断信息（客户区尺寸 / 当前 GDI 对象数）挂到异常上，调用方记日志时
+        # 一并输出——失败原因不明的偶发故障，靠这两项才能区分"尺寸异常 / 资源耗尽"。
+        # 挂属性失败（异常对象不允许时）忽略，不能因此改变原有异常。
+        try:
+            e.capture_context = f"客户区 {w}×{h}｜GDI 对象 {get_gdi_object_count()}"
+        except Exception:
+            pass
+        raise
 
 
 def capture_screen(monitor_index: int = 0, region: list[int] | None = None) -> np.ndarray:
