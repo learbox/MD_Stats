@@ -1525,6 +1525,8 @@ class MainWindow(QMainWindow):
             self._rank_worker = RankWorker(failure_mgr=failure_mgr)
             self._rank_worker.rank_icon_detected.connect(self._on_rank_icon_detected)
             self._rank_worker.partial_update.connect(self._on_rank_partial)
+            # 截图连续失败等异常情况要能在状态栏看见（否则线程静默停止，用户无感）
+            self._rank_worker.status_update.connect(self._show_status)
             self._rank_worker.start()  # QThread.start() → 后台独立线程执行 run()
         self._snapshot_ctrl.sync_hotkeys()
 
