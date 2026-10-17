@@ -38,8 +38,10 @@ from src import logger as _log
 from src.config import load_config
 from src.failure_sample_manager import FailureSampleManager
 
-# 连续截图失败多少次后停止线程。按 0.3 秒间隔约 10 秒，足够跨过游戏切换分辨率、
-# 窗口重建这类瞬时状态；再久就说明不是瞬时问题，停线程并告知用户比反复空转好。
+# 连续截图失败多少次后停止线程。失败期间按 _BACKOFF_SECONDS 逐级退避，
+# 30 次合计约 2 分钟（0.5+1+2+3+5 秒起，之后每次 5 秒封顶）——足够跨过游戏
+# 切换分辨率、窗口重建这类瞬时状态；再久就说明不是瞬时问题，停线程并告知
+# 用户比反复空转好。
 _MAX_CAPTURE_FAILURES = 30
 
 # 连续失败时的退避档位（秒）：越失败等得越久，最后一档封顶。
