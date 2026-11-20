@@ -209,6 +209,6 @@
 
 ## 性能
 
-### 打包的 ZIP 有 87 MB 左右，为什么这么大
+### 打包的 ZIP 有 100 MB 左右，为什么这么大
 
-程序依赖 PySide6（Qt 框架，约 52 MB）+ OpenCV（约 88 MB）+ NumPy（27 MB），再加上 Python 运行时；发布包压缩后约 87 MB。构建时已排除未使用的 Qt 模块和 OpenCV 自带的 FFmpeg 视频编解码 DLL（约 39 MB，本程序不做视频读写），当前体积已是裁剪后的结果。
+程序依赖 PySide6（Qt 框架，约 52 MB）+ OpenCV（约 86 MB）+ NumPy（约 26 MB）+ 模板与主题资源（约 39 MB），再加上 Python 运行时；发布包压缩后约 105 MB。构建时已剔除未使用的 Qt 模块与插件、OpenCV 自带的 FFmpeg 视频编解码 DLL、numpy 重复的 OpenBLAS 副本和 WebEngine 专用的 ICU 数据，当前体积已是裁剪后的结果。
