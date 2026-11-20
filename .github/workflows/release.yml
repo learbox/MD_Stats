@@ -29,7 +29,7 @@ jobs:
       - name: 编译 .ui 文件
         run: uv run pyside6-uic ui/main_window.ui -o ui/main_window_ui.py
 
-      - name: PyInstaller 打包（内联 spec，自动排除未用 Qt 模块和多语翻译）
+      - name: PyInstaller 打包（内联 spec，自动排除未用 Qt 模块、多语翻译和 OpenCV FFmpeg）
         shell: pwsh
         run: |
           @'
@@ -46,6 +46,11 @@ jobs:
               'qt6concurrent', 'qt6dbus',
               'qt6designer', 'qt6axcontainer',
           ]
+
+          # 程序只用 OpenCV 做图像解码/编码与模板匹配，不涉及视频读写。
+          # PyInstaller 的 hook-cv2 会无条件收集 cv2 包内的 ffmpeg 解码器 DLL（约 39 MB），
+          # 对未使用 cv2.VideoCapture / cv2.VideoWriter 的本程序而言纯属冗余。
+          _UNUSED_OPENCV_DLLS = ['opencv_videoio_ffmpeg']
 
           import os as _os, glob as _glob, shutil as _sh
           import PySide6
@@ -72,7 +77,7 @@ jobs:
           )
           a.binaries = [
               (name, path, typ) for name, path, typ in a.binaries
-              if not any(kw in name.lower() for kw in _UNUSED_QT_DLLS)
+              if not any(kw in name.lower() for kw in _UNUSED_QT_DLLS + _UNUSED_OPENCV_DLLS)
           ]
           pyz = PYZ(a.pure)
 

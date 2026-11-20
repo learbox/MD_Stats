@@ -209,6 +209,6 @@
 
 ## 性能
 
-### 打包的 ZIP 有 130+ MB，为什么这么大
+### 打包的 ZIP 有 87 MB 左右，为什么这么大
 
-程序依赖 PySide6（Qt 框架，52 MB）+ OpenCV（101 MB）+ NumPy（27 MB）。这些都是必需的图像识别和 GUI 基础库，无法进一步瘦身。
+程序依赖 PySide6（Qt 框架，约 52 MB）+ OpenCV（约 88 MB）+ NumPy（27 MB），再加上 Python 运行时；发布包压缩后约 87 MB。构建时已排除未使用的 Qt 模块和 OpenCV 自带的 FFmpeg 视频编解码 DLL（约 39 MB，本程序不做视频读写），当前体积已是裁剪后的结果。
