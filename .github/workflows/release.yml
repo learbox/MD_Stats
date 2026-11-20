@@ -52,21 +52,55 @@ jobs:
           # 对未使用 cv2.VideoCapture / cv2.VideoWriter 的本程序而言纯属冗余。
           _UNUSED_OPENCV_DLLS = ['opencv_videoio_ffmpeg']
 
+          # 未使用的 PySide6 插件目录（相对 PySide6/plugins/）。
+          # 程序不用 Qt 网络（更新检查走 Python urllib）、虚拟键盘、触摸输入和原生样式。
+          _UNUSED_QT_PLUGIN_DIRS = (
+              'tls/', 'networkinformation/', 'platforminputcontexts/',
+              'iconengines/', 'generic/', 'styles/',
+          )
+
+          # QtNetwork 绑定：项目不用 Qt 网络功能。
+          # libcrypto-3-x64.dll / libssl-3-x64.dll：PyInstaller 从 Git for Windows 的
+          # PATH 目录误收集的 OpenSSL；Python 自带的 libcrypto-3.dll / libssl-3.dll 保留。
+          _UNUSED_RUNTIME_DLLS = (
+              'pyside6/qtnetwork.pyd',
+              'libcrypto-3-x64.dll',
+              'libssl-3-x64.dll',
+          )
+
           import os as _os, glob as _glob, shutil as _sh
           import PySide6
           _pydir = _os.path.dirname(PySide6.__file__)
-          _icu_src = _os.path.join(_pydir, 'resources', 'icudtl.dat')
           # 只收集中文翻译（qt_zh_CN.qm 是聚合文件，需要子模块 *_zh_CN.qm 才能加载）
           _tl_tmp = '_tmp_translations'
           _os.makedirs(_tl_tmp, exist_ok=True)
           for _f in _glob.glob(_os.path.join(_pydir, 'translations/*zh_CN*')):
               _sh.copy(_f, _tl_tmp)
+
+
+          def _drop_binary(name):
+              """判断 PyInstaller 收集的二进制/插件是否属于可剔除项。"""
+              low = name.lower().replace('\\', '/')
+              if any(kw in low for kw in _UNUSED_QT_DLLS + _UNUSED_OPENCV_DLLS):
+                  return True
+              if any(kw in low for kw in _UNUSED_RUNTIME_DLLS):
+                  return True
+              # OpenBLAS 在根目录和 numpy.libs 各有一份，只保留 numpy.libs 内的
+              if 'libscipy_openblas' in low and 'numpy.libs/' not in low:
+                  return True
+              # 平台插件只留 qwindows；图片格式插件只留 qico（PNG 为 QtGui 内置）
+              if '/plugins/platforms/' in low and not low.endswith('/qwindows.dll'):
+                  return True
+              if '/plugins/imageformats/' in low and not low.endswith('/qico.dll'):
+                  return True
+              if any('/plugins/' + d in low for d in _UNUSED_QT_PLUGIN_DIRS):
+                  return True
+              return False
           a = Analysis(
               ['main.py'],
               pathex=[],
               binaries=[],
-              datas=[(_tl_tmp, 'PySide6/translations')] +
-                  ([(_icu_src, 'resources')] if _os.path.exists(_icu_src) else []),
+              datas=[(_tl_tmp, 'PySide6/translations')],
               hiddenimports=['PySide6.QtXml'],  # Qt 翻译解析 .qm 文件需要
               hookspath=[],
               hooksconfig={},
@@ -77,7 +111,12 @@ jobs:
           )
           a.binaries = [
               (name, path, typ) for name, path, typ in a.binaries
-              if not any(kw in name.lower() for kw in _UNUSED_QT_DLLS + _UNUSED_OPENCV_DLLS)
+              if not _drop_binary(name)
+          ]
+          # PySide6 的 hook 可能自动带上 WebEngine 用的 ICU 数据（约 10 MB），项目已排除 WebEngine
+          a.datas = [
+              (name, path, typ) for name, path, typ in a.datas
+              if not name.lower().replace('\\', '/').endswith('resources/icudtl.dat')
           ]
           pyz = PYZ(a.pure)
 
