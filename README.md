@@ -64,7 +64,7 @@ uv sync
 ### 使用 pip
 
 ```bash
-pip install "mss>=10.2.0" "numpy>=2.5.3" "opencv-python>=5.0.0.93" "pyside6>=6.12.0" "pywin32>=312"
+pip install "mss>=10.2.0" "numpy>=2.5.5" "opencv-python>=5.1.0.95" "pyside6>=6.12.0" "pywin32>=312"
 ```
 
 ## 准备模板图片
